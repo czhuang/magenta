@@ -14,7 +14,10 @@
 
 """Tests to ensure correct extraction of music21 score objects."""
 
-from music21 import stream, note, meter, key
+from music21 import stream
+from music21 import note as music21_note
+from music21 import meter
+from music21 import key
 import pretty_music21
 import tensorflow as tf
 
@@ -36,7 +39,7 @@ class SimplifyMusic21Test(tf.test.TestCase):
       pickup = stream.Measure()
       pickup.append(time_sig)
       pickup.append(key_sig)
-      n1 = note.Note(pitches[i])
+      n1 = music21_note.Note(pitches[i])
       n1.duration.quarterLength = 1
       pickup.append(n1)
       part.append(pickup)
@@ -69,7 +72,7 @@ class SimplifyMusic21Test(tf.test.TestCase):
     self.assertEqual(len(self.source.parts), len(self.score.parts))
 
     # Check the notes.
-    # TODO: have not included pretty_music21.convert_time to convert time yet
+    # TODO(annahuang): don't rely on assuming note lengths are in quarter units
     for part_num in range(len(self.source.parts)):
       part_flat = self.source.parts[part_num].flat
       for note, simple_note in zip(part_flat.getElementsByClass('Note'),
@@ -79,7 +82,7 @@ class SimplifyMusic21Test(tf.test.TestCase):
         self.assertEqual(note_start, simple_note.start)
         self.assertEqual(note_start + note.duration.quarterLength,
                          simple_note.end)
-        # TODO: compare other note attributes
+        # TODO(annahuang): Compare other note attributes.
 
     # Check the time signature.
     self.assertEqual(len(self.score.time_signature_changes), 2)
@@ -106,6 +109,6 @@ class SimplifyMusic21Test(tf.test.TestCase):
     assert all(notes[i].start <= notes[i+1].start for i in range(len(notes)-1))
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
   tf.test.main()
 

@@ -11,13 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""Test of ensure correct import of Music21 scores to NoteSequence proto."""
 
-"""Test of ensure correct import of Music21 scores"""
-
-import tensorflow as tf
 from music21 import corpus
-import pretty_music21
 from music21_to_note_sequence_io import music21_to_sequence_proto
+import pretty_music21
+import tensorflow as tf
 
 
 class Music21ScoretoNoteSequenceTest(tf.test.TestCase):

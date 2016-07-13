@@ -11,12 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-"""A read_only pretty_midi like wrapper for Music21 score objects for ease of
-conversion to NoteSequence proto."""
+"""A read_only pretty_midi like wrapper for Music21 score objects."""
 
 from collections import namedtuple
-
 import music21
 
 
@@ -26,13 +23,13 @@ _DEFAULT_BPM = 60
 
 # Music21 to NoteSequence proto conversions on key and mode
 
-_MAJOR_KEY_MUSIC21_TO_NOTE_SEQUENCE = \
-  {-6: 6, -5: 1, -4: 8, -3: 3, -2: 10, -1: 5,
-   0: 0, 1: 7, 2: 2, 3: 9, 4: 4, 5: 11, 6: 6}
+_MAJOR_KEY_MUSIC21_TO_NOTE_SEQUENCE = {
+  -6: 6, -5: 1, -4: 8, -3: 3, -2: 10, -1: 5,
+  0: 0, 1: 7, 2: 2, 3: 9, 4: 4, 5: 11, 6: 6}
 
-_MINOR_KEY_MUSIC21_TO_NOTE_SEQUENCE = \
-  {-6: 3, -5: -2, -4: 5, -3: 0, -2: 7, -1: 2,
-   0: -3, 1: 4, 2: -1, 3: 6, 4: 1, 5: 8, 6: 3}
+_MINOR_KEY_MUSIC21_TO_NOTE_SEQUENCE = {
+  -6: 3, -5: -2, -4: 5, -3: 0, -2: 7, -1: 2,
+  0: -3, 1: 4, 2: -1, 3: 6, 4: 1, 5: 8, 6: 3}
 
 _MUSIC21_TO_NOTE_SEQUENCE_MODE = {'major': 0, 'minor': 1}
 
@@ -46,12 +43,12 @@ _MUSESCORE_PITCH_CLASS_ENUM = {
     'F#': 20, 'C#': 21, 'G#': 22, 'D#': 23, 'A#': 24, 'E#': 25, 'B#': 26,
     'F##': 27, 'C##': 28, 'G##': 29, 'D##': 30, 'A##': 31, 'E##': 32, 'B##': 33}
 
-TimeSignature = namedtuple("TimeSignature",
+TimeSignature = namedtuple('TimeSignature',
                            ['time', 'numerator', 'denominator'])
-Tempo = namedtuple("Tempo", ["time", "bpm"])
-KeySignature = namedtuple("KeySignature", ["time", "key_number", "mode"])
-PartInfo = namedtuple("PartInfo", ["index", "name"])
-Note = namedtuple("Note", ["pitch", "pitch_class", "start", "end", "part"])
+Tempo = namedtuple('Tempo', ['time', 'bpm'])
+KeySignature = namedtuple('KeySignature', ['time', 'key_number', 'mode'])
+PartInfo = namedtuple('PartInfo', ['index', 'name'])
+Note = namedtuple('Note', ['pitch', 'pitch_class', 'start', 'end', 'part'])
 
 
 def convert_time(time):
@@ -61,7 +58,7 @@ def convert_time(time):
 
 
 class PrettyMusic21(object):
-  """A read_only pretty_midi like wrapper for music21 _score objects"""
+  """A read_only pretty_midi like wrapper for music21 _score objects."""
 
   # TODO(annahuang): Should assert when parts do not share the same markings
   # (time sig, key sig, tempo, etc),
@@ -103,22 +100,22 @@ class PrettyMusic21(object):
 
   @property
   def time_signature_changes(self):
-    """Collect unique time signature changes in score, and add
-    pick-up time signatures as necessary."""
+    """Collect unique time signature changes, and add pick-up when necessary."""
     # TODO(annahuang): don't assume all voices have the same time signature
     # TODO(annahuang): don't assume time signature is always embedded in measure
     time_sig_changes = []
     for part_num, part in enumerate(self._parts):
       for time_sig in part.getElementsByClass('TimeSignature'):
-        measure = time_sig.getContextByClass("Measure")
-        # TODO: raise exception?
+        measure = time_sig.getContextByClass('Measure')
+        # TODO(annahuang): raise exception instead of asserting?
         assert measure is not None, 'Time sig needs to be in a measure'
         global_time = convert_time(part.elementOffset(time_sig))
         if measure.duration.quarterLength < time_sig.barDuration.quarterLength:
           # First, add the pick-up time sig
           pickup_time_sig = music21.meter.bestTimeSignature(measure)
-          pickup_time_sig_change = TimeSignature(
-            global_time, pickup_time_sig.numerator, pickup_time_sig.denominator)
+          pickup_time_sig_change = TimeSignature(global_time,
+                                                 pickup_time_sig.numerator,
+                                                 pickup_time_sig.denominator)
           if pickup_time_sig_change not in time_sig_changes:
             time_sig_changes.append(pickup_time_sig_change)
 
@@ -145,7 +142,7 @@ class PrettyMusic21(object):
   def tempo_changes(self):
     """Collect unique tempo changes. If no tempo, defaults to DEFAULT_BPM."""
     tempo_changes = []
-    for part_num, part in enumerate(self._parts):
+    for part in self._parts:
       for metronome_mark in part.getElementsByClass('MetronomeMark'):
         global_time = convert_time(part.elementOffset(metronome_mark))
         tempo_change = Tempo(global_time, metronome_mark.number)
@@ -159,7 +156,7 @@ class PrettyMusic21(object):
   def key_signature_changes(self):
     """Collect unique key signature changes."""
     key_sig_changes = []
-    for part_num, part in enumerate(self._parts):
+    for part in self._parts:
       for ks in part.getElementsByClass('KeySignature'):
         global_time = convert_time(part.elementOffset(ks))
 

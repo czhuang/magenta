@@ -11,10 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """ Music 21 ops.
 
-Input and output wrappers for converting between Music21 score objects and NoteSequence proto.
+Input and output wrappers for converting between Pretty_Music21 score objects
+and NoteSequence proto.
 """
 
 import sys
@@ -25,7 +25,7 @@ import tensorflow as tf
 from magenta.protobuf import music_pb2
 
 # Settings from MuseScore.
-# Using the MuseScore tick-length-values convention where quarter note equals 480.
+# Adopting MuseScore tick-length-values convention where quarter note equal 480.
 # https://musescore.org/plugin-development/tick-length-values.
 _TICKS_PER_QUARTER_NOTE = 480
 
@@ -40,7 +40,7 @@ class Music21ConversionError(Exception):
 
 def music21_to_sequence_proto(
     score_data, default_collection_name='N/A', default_filename='N/A',
-    continue_on_exception=False, verbose=False):
+    continue_on_exception=False):
   """Converts a pretty_music21 score object to note sequence proto."""
   # TODO(annahuang): Time in score-based quarter notes,
   # which does not take tempo markings into account.
@@ -49,7 +49,7 @@ def music21_to_sequence_proto(
   else:
     try:
       score = pretty_music21.PrettyMusic21(score_data)
-    except:
+    except Music21ConversionError:
       if continue_on_exception:
         tf.logging.error('Music21 score decoding error %s: %s',
                          sys.exc_info()[0], sys.exc_info()[1])
@@ -110,13 +110,13 @@ def music21_to_sequence_proto(
 
   # Populate notes.
   for score_note in score.sorted_notes:
-      note = sequence.notes.add()
-      note.part = score_note.part
-      note.start_time = score_note.start
-      note.end_time = score_note.end
-      note.pitch = score_note.pitch
-      # TODO(annahuang): pitch_class not in proto yet.
-      # if score_note.pitch_class is not None:
-      #    note.pitch_class = score_note.pitch_class
+    note = sequence.notes.add()
+    note.part = score_note.part
+    note.start_time = score_note.start
+    note.end_time = score_note.end
+    note.pitch = score_note.pitch
+    # TODO(annahuang): pitch_class not in proto yet.
+    # if score_note.pitch_class is not None:
+    #    note.pitch_class = score_note.pitch_class
 
   return sequence
