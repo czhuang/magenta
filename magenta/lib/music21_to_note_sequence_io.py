@@ -11,12 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-""" Music 21 ops.
-
-Input and output wrappers for converting between Pretty_Music21 score objects
-and NoteSequence proto.
-"""
+"""Conversion between Pretty_Music21 score objects and NoteSequence proto."""
 
 import sys
 
