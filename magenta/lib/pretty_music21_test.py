@@ -14,10 +14,10 @@
 
 """Tests to ensure correct extraction of music21 score objects."""
 
-from music21 import stream
-from music21 import note as music21_note
-from music21 import meter
 from music21 import key
+from music21 import meter
+from music21 import note as music21_note
+from music21 import stream
 import pretty_music21
 import tensorflow as tf
 
@@ -60,19 +60,18 @@ class SimplifyMusic21Test(tf.test.TestCase):
     self.source = sc
     self.score = pretty_music21.PrettyMusic21(sc)
 
-
   def testCompareScores(self):
     """Test pretty_music21 score by comparing to music21 score."""
 
     # Check overall length.
     self.assertAlmostEqual(self.source.duration.quarterLength,
                            self.score.total_time)
-    
+
     # Check number of parts.
     self.assertEqual(len(self.source.parts), len(self.score.parts))
 
     # Check the notes.
-    # TODO(annahuang): don't rely on assuming note lengths are in quarter units
+    # TODO(annahuang): don't rely on assuming note lengths are in quarter units.
     for part_num in range(len(self.source.parts)):
       part_flat = self.source.parts[part_num].flat
       for note, simple_note in zip(part_flat.getElementsByClass('Note'),
@@ -100,8 +99,7 @@ class SimplifyMusic21Test(tf.test.TestCase):
     self.assertEqual(retrieved_key_sigs[0].key_number, 0)  # 0 for c
     self.assertEqual(retrieved_key_sigs[0].mode, 1)  # 1 for minor
 
-    # TODO: Check tempo
-
+    # TODO(annahuang): Check tempo
 
   def testSortedNotes(self):
     """Test if notes are sorted by start time."""

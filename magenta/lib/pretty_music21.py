@@ -16,7 +16,6 @@
 from collections import namedtuple
 import music21
 
-
 # Default bpm if tempo mark not available.
 # Chosen to so that quarterLength equals 1s.
 _DEFAULT_BPM = 60
@@ -24,12 +23,12 @@ _DEFAULT_BPM = 60
 # Music21 to NoteSequence proto conversions on key and mode
 
 _MAJOR_KEY_MUSIC21_TO_NOTE_SEQUENCE = {
-  -6: 6, -5: 1, -4: 8, -3: 3, -2: 10, -1: 5,
-  0: 0, 1: 7, 2: 2, 3: 9, 4: 4, 5: 11, 6: 6}
+    -6: 6, -5: 1, -4: 8, -3: 3, -2: 10, -1: 5,
+    0: 0, 1: 7, 2: 2, 3: 9, 4: 4, 5: 11, 6: 6}
 
 _MINOR_KEY_MUSIC21_TO_NOTE_SEQUENCE = {
-  -6: 3, -5: -2, -4: 5, -3: 0, -2: 7, -1: 2,
-  0: -3, 1: 4, 2: -1, 3: 6, 4: 1, 5: 8, 6: 3}
+    -6: 3, -5: -2, -4: 5, -3: 0, -2: 7, -1: 2,
+    0: -3, 1: 4, 2: -1, 3: 6, 4: 1, 5: 8, 6: 3}
 
 _MUSIC21_TO_NOTE_SEQUENCE_MODE = {'major': 0, 'minor': 1}
 
@@ -104,7 +103,7 @@ class PrettyMusic21(object):
     # TODO(annahuang): don't assume all voices have the same time signature
     # TODO(annahuang): don't assume time signature is always embedded in measure
     time_sig_changes = []
-    for part_num, part in enumerate(self._parts):
+    for part in self._parts:
       for time_sig in part.getElementsByClass('TimeSignature'):
         measure = time_sig.getContextByClass('Measure')
         # TODO(annahuang): raise exception instead of asserting?
@@ -148,7 +147,7 @@ class PrettyMusic21(object):
         tempo_change = Tempo(global_time, metronome_mark.number)
         if tempo_change not in tempo_changes:
           tempo_changes.append(tempo_change)
-    if not len(tempo_changes):
+    if not tempo_changes:
       tempo_changes.append(Tempo(0, _DEFAULT_BPM))
     return tempo_changes
 
