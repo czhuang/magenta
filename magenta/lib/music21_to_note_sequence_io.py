@@ -29,12 +29,6 @@ from magenta.protobuf import music_pb2
 # https://musescore.org/plugin-development/tick-length-values.
 _TICKS_PER_QUARTER_NOTE = 480
 
-# https://musescore.org/en/plugin-development/tonal-pitch-class-enum
-_MUSESCORE_PITCH_CLASS_ENUM = {'Fbb': -1, 'Cbb': 0, 'Gbb': 1, 'Dbb': 2, 'Abb': 3, 'Ebb': 4, 'Bbb': 5,
-                               'Fb': 6, 'Cb': 7, 'Gb': 8, 'Db': 9, 'Ab': 10, 'Eb': 11, 'Bb': 12,
-                               'F': 13, 'C': 14, 'G': 15, 'D': 16, 'A': 17, 'E': 18, 'B': 19,
-                               'F#': 20, 'C#': 21, 'G#': 22, 'D#': 23, 'A#': 24, 'E#': 25, 'B#': 26,
-                               'F##': 27, 'C##': 28, 'G##': 29, 'D##': 30, 'A##': 31, 'E##': 32, 'B##': 33}
 _MUSIC21_TO_NOTE_SEQUENCE_KEY = {-6: 6, -5: 1, -4: 8, -3: 3, -2: 10, -1: 5,
                                  0: 0, 1: 7, 2: 2, 3: 9, 4: 4, 5: 11, 6: 6}
 _MUSIC21_TO_NOTE_SEQUENCE_MODE = {'major': 0, 'minor': 1}
@@ -44,9 +38,12 @@ class Music21ConversionError(Exception):
   pass
 
 
-def music21_to_sequence_proto(score_data, default_collection_name='N/A',
-                              default_filename='N/A', continue_on_exception=False, verbose=False):
-  # TODO: Time in score-based quarter notes, which does not take tempo markings into account.
+def music21_to_sequence_proto(
+    score_data, default_collection_name='N/A', default_filename='N/A',
+    continue_on_exception=False, verbose=False):
+  """Converts a pretty_music21 score object to note sequence proto."""
+  # TODO(annahuang): Time in score-based quarter notes,
+  # which does not take tempo markings into account.
   if isinstance(score_data, pretty_music21.PrettyMusic21):
     score = score_data
   else:
@@ -54,8 +51,8 @@ def music21_to_sequence_proto(score_data, default_collection_name='N/A',
       score = pretty_music21.PrettyMusic21(score_data)
     except:
       if continue_on_exception:
-        tf.logging.error('Music21 score decoding error %s: %s', sys.exc_info()[0],
-                         sys.exc_info()[1])
+        tf.logging.error('Music21 score decoding error %s: %s',
+                         sys.exc_info()[0], sys.exc_info()[1])
         return None
       else:
         raise Music21ConversionError('Music21 score decoding error %s: %s',
@@ -63,7 +60,7 @@ def music21_to_sequence_proto(score_data, default_collection_name='N/A',
 
   sequence = music_pb2.NoteSequence()
   # Populate header.
-  # TODO: ID not necessarily unique if put into other database
+  # TODO(annahuang): ID not necessarily unique if put into other database
   sequence.id = score.id
 
   sequence.filename = default_filename
@@ -76,7 +73,7 @@ def music21_to_sequence_proto(score_data, default_collection_name='N/A',
 
   sequence.ticks_per_beat = _TICKS_PER_QUARTER_NOTE
 
-  # TODO: total_time in quarter note length
+  # TODO(annahuang): All time in quarter note length, include performance time.
   sequence.total_time = score.total_time
 
   # Populate time signatures.
@@ -118,7 +115,7 @@ def music21_to_sequence_proto(score_data, default_collection_name='N/A',
       note.start_time = score_note.start
       note.end_time = score_note.end
       note.pitch = score_note.pitch
-      # TODO: pitch_class not in proto yet, could create a pull request
+      # TODO(annahuang): pitch_class not in proto yet.
       # if score_note.pitch_class is not None:
       #    note.pitch_class = score_note.pitch_class
 

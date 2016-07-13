@@ -21,6 +21,7 @@ from music21_to_note_sequence_io import music21_to_sequence_proto
 
 
 class Music21ScoretoNoteSequenceTest(tf.test.TestCase):
+
   def testMusic21ToSequence1(self):
     simple_score = pretty_music21.PrettyMusic21(corpus.parse('bwv66.6'))
     sequence_proto = music21_to_sequence_proto(simple_score)
@@ -32,7 +33,7 @@ class Music21ScoretoNoteSequenceTest(tf.test.TestCase):
     self.CompareNoteSequenceAndMusic21Score(sequence_proto, simple_score)
 
   def CompareNoteSequenceAndMusic21Score(self, sequence_proto, score):
-    """Compares a sequence proto to a Music21 Score object
+    """Compares a sequence proto to a Music21 Score object.
 
     Args:
       sequence_proto: A tensorflow.magenta.Sequence proto.
@@ -72,7 +73,8 @@ class Music21ScoretoNoteSequenceTest(tf.test.TestCase):
       self.assertEqual(score_part_info.name, sequence_part_info.name)
 
     # Test parts and notes.
-    for score_note, sequence_note in zip(score.sorted_notes, sequence_proto.notes):
+    for score_note, sequence_note in zip(score.sorted_notes,
+                                         sequence_proto.notes):
       self.assertAlmostEqual(score_note.pitch, sequence_note.pitch)
       self.assertAlmostEqual(score_note.start, sequence_note.start_time)
       self.assertAlmostEqual(score_note.end, sequence_note.end_time)

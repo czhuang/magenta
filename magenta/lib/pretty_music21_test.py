@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests to ensure correct extraction of music21 score objects"""
+"""Tests to ensure correct extraction of music21 score objects."""
 
 from music21 import stream, note, meter, key
 import pretty_music21
@@ -22,7 +22,7 @@ import tensorflow as tf
 class SimplifyMusic21Test(tf.test.TestCase):
 
   def setUp(self):
-    """Make a simple score with pick up and two voices"""
+    """Make a simple score with pick up and two voices."""
     sc = stream.Score()
     num_voices = 2
     pitches = ['C', 'A-']
@@ -52,17 +52,18 @@ class SimplifyMusic21Test(tf.test.TestCase):
       sc.insert(0, part)
 
     # Shows the full score and all score elements in indented text
-    #sc.show('text')
+    # sc.show('text')
 
     self.source = sc
     self.score = pretty_music21.PrettyMusic21(sc)
 
 
   def testCompareScores(self):
-    """Test pretty_music21 score by comparing to music21 score"""
+    """Test pretty_music21 score by comparing to music21 score."""
 
     # Check overall length.
-    self.assertAlmostEqual(self.source.duration.quarterLength, self.score.total_time)
+    self.assertAlmostEqual(self.source.duration.quarterLength,
+                           self.score.total_time)
     
     # Check number of parts.
     self.assertEqual(len(self.source.parts), len(self.score.parts))
@@ -71,11 +72,13 @@ class SimplifyMusic21Test(tf.test.TestCase):
     # TODO: have not included pretty_music21.convert_time to convert time yet
     for part_num in range(len(self.source.parts)):
       part_flat = self.source.parts[part_num].flat
-      for note, simple_note in zip(part_flat.getElementsByClass('Note'), self.score.parts[part_num]):
+      for note, simple_note in zip(part_flat.getElementsByClass('Note'),
+                                   self.score.parts[part_num]):
         self.assertEqual(note.pitch.midi, simple_note.pitch)
         note_start = note.getOffsetBySite(part_flat)
         self.assertEqual(note_start, simple_note.start)
-        self.assertEqual(note_start + note.duration.quarterLength, simple_note.end)
+        self.assertEqual(note_start + note.duration.quarterLength,
+                         simple_note.end)
         # TODO: compare other note attributes
 
     # Check the time signature.
@@ -98,7 +101,7 @@ class SimplifyMusic21Test(tf.test.TestCase):
 
 
   def testSortedNotes(self):
-    """Test if notes are sorted by start time"""
+    """Test if notes are sorted by start time."""
     notes = self.score.sorted_notes
     assert all(notes[i].start <= notes[i+1].start for i in range(len(notes)-1))
 
