@@ -7,10 +7,8 @@ import os
 import numpy as np
 import tensorflow as tf
 
-from  tensorflow.core.framework import tensor_pb2
-from  tensorflow.python.framework.tensor_util import MakeNdarray
-from  magenta.protobuf import music_pb2
-from  magenta.lib.note_sequence_io import note_sequence_record_iterator
+from magenta.lib.note_sequence_io import note_sequence_record_iterator
+from magenta.protobuf import music_pb2
 
 from magenta.models.basic_autofill_cnn import mask_tools
 from magenta.models.basic_autofill_cnn.mask_tools import MaskUseError
@@ -18,7 +16,7 @@ from magenta.models.basic_autofill_cnn.pianorolls_lib import PianorollEncoderDec
 
 
 # Enumerations for data augmentation for durations.
-KEEP_ORIGINAL_DURATIONS, HALF_TIME, DOUBLE_TIME ange(3)
+KEEP_ORIGINAL_DURATIONS, HALF_TIME, DOUBLE_TIME = range(3)
 
 
 class DataProcessingError(Exception):
@@ -27,85 +25,87 @@ class DataProcessingError(Exception):
 
 
 def random_double_or_halftime_pianoroll_from_note_sequence(
- sequence, augment_by_halfing_doubling_durations, encoder):
+    sequence, augment_by_halfing_doubling_durations, encoder):
   if not augment_by_halfing_doubling_durations:
- return encoder.encode(sequence)
+    return encoder.encode(sequence)
 
-  durations et(note.end_time ote.start_time for note in sequence.notes)
-  longest_to_double 
-  shortest_to_half .5
-  duration_augmentation_type p.random.randint(3)
+  durations = set(note.end_time - note.start_time for note in sequence.notes)
+  longest_to_double = 4
+  shortest_to_half = 0.5
+  duration_augmentation_type = np.random.randint(3)
   if duration_augmentation_type == KEEP_ORIGINAL_DURATIONS:
- return encoder.encode(sequence)
+    return encoder.encode(sequence)
   elif duration_augmentation_type == HALF_TIME:
- # Half time.
- for duration in list(durations):
-   if duration hortest_to_half:
-  return encoder.encode(sequence)
- #print sequence.filename, sequence.id, sequence.collection_name
- return encoder.encode(sequence, duration_ratio=0.5)
+    # Half time.
+    for duration in list(durations):
+      if duration < shortest_to_half:
+        return encoder.encode(sequence)
+    #print sequence.filename, sequence.id, sequence.collection_name
+    return encoder.encode(sequence, duration_ratio=0.5)
   else:
- for duration in list(durations):
-   if duration ongest_to_double:
-  return encoder.encode(sequence)
- return encoder.encode(sequence, duration_ratio=2)
+    for duration in list(durations):
+      if duration > longest_to_double:
+        return encoder.encode(sequence)
+    return encoder.encode(sequence, duration_ratio=2)
 
 
-def random_crop_pianoroll(pianoroll, crop_len, start_crop_index=None,
-        augment_by_transposing=False):
-  """Return andom crop in time of ianoroll.
+def random_crop_pianoroll(pianoroll,
+                          crop_len,
+                          start_crop_index=None,
+                          augment_by_transposing=False):
+  """Return a random crop in time of a pianoroll.
 
   Args:
- pianoroll: D matrix, with time as the first axis.
- crop_len: The number of rows.
+    pianoroll: A 3D matrix, with time as the first axis.
+    crop_len: The number of rows.
 
   Returns:
- A 3D matrix with the first axis cropped to the length of crop_len.
+    A 3D matrix with the first axis cropped to the length of crop_len.
 
   Raises:
- DataProcessingError: If the pianoroll shorter than the desired crop_len.
+    DataProcessingError: If the pianoroll shorter than the desired crop_len.
   """
   #print '\ncrop_len', crop_len
   #print pianoroll.shape
-  if len(pianoroll) rop_len:
- # TODO(annahuang): Pad pianoroll when too short, and add mask to loss.
- raise DataProcessingError(
-  'Piece needs to be at least %d steps, currently %d steps.' %
-  (crop_len, len(pianoroll)))
+  if len(pianoroll) < crop_len:
+    # TODO(annahuang): Pad pianoroll when too short, and add mask to loss.
+    raise DataProcessingError(
+        'Piece needs to be at least %d steps, currently %d steps.' %
+        (crop_len, len(pianoroll)))
   if len(pianoroll) == crop_len:
- start_time_idx 
+    start_time_idx = 0
   elif start_crop_index is not None:
- start_time_idx tart_crop_index
+    start_time_idx = start_crop_index
   else:
- start_time_idx p.random.randint(len(pianoroll) rop_len)
+    start_time_idx = np.random.randint(len(pianoroll) - crop_len)
 
-  cropped_pianoroll ianoroll[start_time_idx:start_time_idx rop_len]
+  cropped_pianoroll = pianoroll[start_time_idx:start_time_idx + crop_len]
   if not augment_by_transposing:
- return cropped_pianoroll
+    return cropped_pianoroll
 
-  igh exclusive, also it's asymmetic.
-  random_shift p.random.randint(-5, 7)
+  # High exclusive, also it's asymmetic.
+  random_shift = np.random.randint(-5, 7)
   #print 'cropped_pianoroll', cropped_pianoroll.shape
   #print 'sum of crop', np.sum(cropped_pianoroll)
   #print 'random_shift', random_shift
   if random_shift == 0:
- return cropped_pianoroll
+    return cropped_pianoroll
 
-  pitch_sum p.sum(cropped_pianoroll, axis=(0, 2))
+  pitch_sum = np.sum(cropped_pianoroll, axis=(0, 2))
   #print np.max(np.where(pitch_sum)), np.min(np.where(pitch_sum))
 
-  shifted_pianoroll p.roll(cropped_pianoroll, random_shift, axis=2)
-  heck that there's actually no roll over.
-  if random_shift :
- # Even though high range here is exclusive, since checking if high rolled into low.
- num_events p.sum(shifted_pianoroll[:, :random_shift-1, :])
- #print 'num_events', num_events
- assert num_events == 0
+  shifted_pianoroll = np.roll(cropped_pianoroll, random_shift, axis=2)
+  # Check that there's actually no roll over.
+  if random_shift > 0:
+    # Even though high range here is exclusive, since checking if high rolled into low.
+    num_events = np.sum(shifted_pianoroll[:, :random_shift - 1, :])
+    #print 'num_events', num_events
+    assert num_events == 0
   else:
- # random_shift is negative, hence don't need to add negative sign to random_shift.
- num_events p.sum(shifted_pianoroll[:, random_shift-1:, :])
- #print 'num_events', num_events
- assert num_events == 0
+    # random_shift is negative, hence don't need to add negative sign to random_shift.
+    num_events = np.sum(shifted_pianoroll[:, random_shift - 1:, :])
+    #print 'num_events', num_events
+    assert num_events == 0
   return shifted_pianoroll
 
 
@@ -113,114 +113,113 @@ def make_data_feature_maps(sequences, config, encoder, start_crop_index=None):
   """Return input and output pairs of masked out and full pianorolls.
 
   Args:
- sequences: ist of NoteSequences.
- config: ipelineConfig object that stores which mask out method to use
-  and its enumerations. It also stores hyperparameters such as
-  crop_piece_length which determines the width of the feature maps.
+    sequences: A list of NoteSequences.
+    config: A PipelineConfig object that stores which mask out method to use
+        and its enumerations. It also stores hyperparameters such as
+        crop_piece_length which determines the width of the feature maps.
 
   Returns:
- input_data: D matrix with dimensions named
-  (batch, time, pitch, masked_or_mask), interleaved with maskout
-  pianorolls and masks.
- target: D matrix of the original pianorolls with dimensions named
-  (batch, time, pitch).
+    input_data: A 4D matrix with dimensions named
+        (batch, time, pitch, masked_or_mask), interleaved with maskout
+        pianorolls and masks.
+    target: A 4D matrix of the original pianorolls with dimensions named
+        (batch, time, pitch).
 
   Raises:
- DataProcessingError: If pianoroll is shorter than the desired crop_len, or
-  if the inputs and targets have the wrong number of dimensions.
+    DataProcessingError: If pianoroll is shorter than the desired crop_len, or
+        if the inputs and targets have the wrong number of dimensions.
   """
-  maskout_method onfig.maskout_method
-  input_data ]
-  targets ]
-  maskout_border onfig.maskout_border
+  maskout_method = config.maskout_method
+  input_data = []
+  targets = []
+  maskout_border = config.maskout_border
   for sequence in sequences:
- pianoroll andom_double_or_halftime_pianoroll_from_note_sequence(
-  sequence, config.hparams.augment_by_halfing_doubling_durations, encoder)
- try:
-   cropped_pianoroll andom_crop_pianoroll(
-    pianoroll, config.hparams.crop_piece_len, start_crop_index,
-    config.hparams.augment_by_transposing)
- except DataProcessingError:
-   tf.logging.warning('Piece shorter than requested crop length.')
-   continue
- if maskout_method == config.RANDOM_INSTRUMENT:
-   mask ask_tools.get_random_instrument_mask(
-    cropped_pianoroll.shape)
- elif maskout_method == config.RANDOM_PATCHES:
-   mask ask_tools.get_multiple_random_patch_mask(
-    cropped_pianoroll.shape, maskout_border, config.initial_maskout_factor)
- elif maskout_method == config.RANDOM_PITCH_RANGE:
-   nly use when all instruments are collapsed in one pianoroll.
-   if pianoroll.shape[-1] :
-  raise MaskUseError(
-   'Only use when all instruments are represented in one pianoroll.')
- elif maskout_method == config.RANDOM_TIME_RANGE:
-   mask ask_tools.get_random_time_range_mask(
-    cropped_pianoroll.shape, maskout_border)
- elif maskout_method == config.RANDOM_MULTIPLE_INSTRUMENT_TIME:
-   mask ask_tools.get_multiple_random_instrument_time_mask(
-    cropped_pianoroll.shape, maskout_border, config.num_maskout)
+    pianoroll = random_double_or_halftime_pianoroll_from_note_sequence(
+        sequence, config.hparams.augment_by_halfing_doubling_durations, encoder)
+    try:
+      cropped_pianoroll = random_crop_pianoroll(
+          pianoroll, config.hparams.crop_piece_len, start_crop_index,
+          config.hparams.augment_by_transposing)
+    except DataProcessingError:
+      tf.logging.warning('Piece shorter than requested crop length.')
+      continue
+    if maskout_method == config.RANDOM_INSTRUMENT:
+      mask = mask_tools.get_random_instrument_mask(cropped_pianoroll.shape)
+    elif maskout_method == config.RANDOM_PATCHES:
+      mask = mask_tools.get_multiple_random_patch_mask(
+          cropped_pianoroll.shape, maskout_border,
+          config.initial_maskout_factor)
+    elif maskout_method == config.RANDOM_PITCH_RANGE:
+      # Only use when all instruments are collapsed in one pianoroll.
+      if pianoroll.shape[-1] > 1:
+        raise MaskUseError(
+            'Only use when all instruments are represented in one pianoroll.')
+    elif maskout_method == config.RANDOM_TIME_RANGE:
+      mask = mask_tools.get_random_time_range_mask(cropped_pianoroll.shape,
+                                                   maskout_border)
+    elif maskout_method == config.RANDOM_MULTIPLE_INSTRUMENT_TIME:
+      mask = mask_tools.get_multiple_random_instrument_time_mask(
+          cropped_pianoroll.shape, maskout_border, config.num_maskout)
 
- masked_pianoroll ask_tools.apply_mask_and_stack(
-  cropped_pianoroll, mask)
- input_data.append(masked_pianoroll)
- targets.append(cropped_pianoroll)
+    masked_pianoroll = mask_tools.apply_mask_and_stack(cropped_pianoroll, mask)
+    input_data.append(masked_pianoroll)
+    targets.append(cropped_pianoroll)
 
-  input_data p.asarray(input_data)
-  targets p.asarray(targets)
+  input_data = np.asarray(input_data)
+  targets = np.asarray(targets)
   print input_data.ndim, targets.ndim
-  if not (input_data.ndim == nd targets.ndim == 4):
- raise DataProcessingError('Input data or target dimensions incorrect.')
+  if not (input_data.ndim == 4 and targets.ndim == 4):
+    raise DataProcessingError('Input data or target dimensions incorrect.')
   return input_data, targets
 
 
 
 def get_pianoroll_from_note_sequence_data(path, type_):
-  """Retrieves NoteSequences from FRecord and returns piano rolls.
+  """Retrieves NoteSequences from a TFRecord and returns piano rolls.
 
   Args:
- path: The absolute path to the TFRecord file.
- type_: The name of the TFRecord file which also specifies the type of data.
+    path: The absolute path to the TFRecord file.
+    type_: The name of the TFRecord file which also specifies the type of data.
 
   Yields:
- 3D binary numpy arrays.
+    3D binary numpy arrays.
 
   Raises:
- DataProcessingError: If the type_ specified is not one of train, test or
-  valid.
+    DataProcessingError: If the type_ specified is not one of train, test or
+        valid.
   """
   if type_ not in ['train', 'test', 'valid']:
- raise DataProcessingError(
-  'Data is grouped by train, test or valid. Please specify one.')
-  fpath s.path.join(path, '%s.tfrecord' ype_)
-  encoder ianorollEncoderDecoder()
-  seq_reader ote_sequence_record_iterator(fpath)
+    raise DataProcessingError(
+        'Data is grouped by train, test or valid. Please specify one.')
+  fpath = os.path.join(path, '%s.tfrecord' % type_)
+  encoder = PianorollEncoderDecoder()
+  seq_reader = note_sequence_record_iterator(fpath)
   for seq in seq_reader:
- yield encoder.encode(seq)
+    yield encoder.encode(seq)
 
 
 def get_note_sequence_data(path, type_):
-  """Retrieves NoteSequences from FRecord.
+  """Retrieves NoteSequences from a TFRecord.
 
   Args:
- path: The absolute path to the TFRecord file.
- type_: The name of the TFRecord file which also specifies the type of data.
+    path: The absolute path to the TFRecord file.
+    type_: The name of the TFRecord file which also specifies the type of data.
 
   Yields:
- NoteSequences.
+    NoteSequences.
 
   Raises:
- DataProcessingError: If the type_ specified is not one of train, test or
-  valid.
+    DataProcessingError: If the type_ specified is not one of train, test or
+        valid.
   """
   if type_ not in ['train', 'test', 'valid']:
- raise DataProcessingError(
-  'Data is grouped by train, test or valid. Please specify one.')
-  fpath s.path.join(path, '%s.tfrecord' ype_)
+    raise DataProcessingError(
+        'Data is grouped by train, test or valid. Please specify one.')
+  fpath = os.path.join(path, '%s.tfrecord' % type_)
   print 'fpath', fpath
-  #seq_reader ote_sequence_record_iterator(fpath)
+  #seq_reader = note_sequence_record_iterator(fpath)
   #for seq in seq_reader:
-  yield seq
-  reader f.python_io.tf_record_iterator(fpath)
+  #  yield seq
+  reader = tf.python_io.tf_record_iterator(fpath)
   for serialized_sequence in reader:
- yield music_pb2.NoteSequence.FromString(serialized_sequence)
+    yield music_pb2.NoteSequence.FromString(serialized_sequence)

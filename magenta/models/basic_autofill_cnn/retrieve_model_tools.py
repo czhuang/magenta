@@ -14,42 +14,42 @@ from magenta.models.basic_autofill_cnn import config_tools
 def retrieve_model(wrapped_model=None, model_name='DeepResidual'):
   """Builds graph, retrieves checkpoint, and returns wrapped model.
 
-  This function either takes asic_autofill_cnn_graph.TFModelWrapper object
+  This function either takes a basic_autofill_cnn_graph.TFModelWrapper object
   that already has the model graph or calls
   basic_autofill_cnn_graph.build_graph to return one. It then retrieves its
   weights from the checkpoint file specified in the
   hparams_tools.CHECKPOINT_HPARAMS dictionary.
 
   Args:
- model_name: tring. The available models are in the dictionary
-   hparams_tools.CHECKPOINT_HPARAMS, which are 'DeepResidualDataAug',
-   'DeepResidual', 'PitchFullyConnectedWithResidual', etc.
+    model_name: A string. The available models are in the dictionary
+      hparams_tools.CHECKPOINT_HPARAMS, which are 'DeepResidualDataAug',
+      'DeepResidual', 'PitchFullyConnectedWithResidual', etc.
 
   Returns:
- wrapped_model: asic_autofill_cnn_graph.TFModelWrapper object that
-  consists of the model, graph, session and config.
+    wrapped_model: A basic_autofill_cnn_graph.TFModelWrapper object that
+        consists of the model, graph, session and config.
   """
   if wrapped_model is None:
- config onfig_tools.get_checkpoint_config(model_name=model_name)
- wrapped_model asic_autofill_cnn_graph.build_graph(
-  is_training=False, config=config)
+    config = config_tools.get_checkpoint_config(model_name=model_name)
+    wrapped_model = basic_autofill_cnn_graph.build_graph(
+        is_training=False, config=config)
   else:
- config rapped_model.config
+    config = wrapped_model.config
 
-  wrapped_model asic_autofill_cnn_graph.build_graph(
- is_training=False, config=config)
+  wrapped_model = basic_autofill_cnn_graph.build_graph(
+      is_training=False, config=config)
   with wrapped_model.graph.as_default():
- saver f.train.Saver()
- sess f.Session()
- checkpoint_fpath s.path.join(tf.resource_loader.get_data_files_path(),
-         'checkpoints',
-          config.hparams.checkpoint_name)
- print 'checkpoint_fpath', checkpoint_fpath
- tf.logging.info('Checkpoint used: %s', checkpoint_fpath)
- try:
-   saver.restore(sess, checkpoint_fpath)
- except IOError:
-   tf.logging.fatal('No such file or directory: %s' heckpoint_fpath)
+    saver = tf.train.Saver()
+    sess = tf.Session()
+    checkpoint_fpath = os.path.join(tf.resource_loader.get_data_files_path(),
+                                    'checkpoints',
+                                    config.hparams.checkpoint_name)
+    print 'checkpoint_fpath', checkpoint_fpath
+    tf.logging.info('Checkpoint used: %s', checkpoint_fpath)
+    try:
+      saver.restore(sess, checkpoint_fpath)
+    except IOError:
+      tf.logging.fatal('No such file or directory: %s' % checkpoint_fpath)
 
-  wrapped_model.sess ess
+  wrapped_model.sess = sess
   return wrapped_model
