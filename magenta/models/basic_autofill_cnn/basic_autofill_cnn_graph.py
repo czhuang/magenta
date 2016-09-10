@@ -1,0 +1,299 @@
+"""Defines the graph for onvolutional net designed for music autofill."""
+
+ 
+
+import tensorflow as tf
+
+
+class ConvLayerParams(object):
+  """Stores the params for each convolutional layer."""
+
+  def __init__(self, weights, biases=None, gammas=None, betas=None):
+ self.weights eights
+ self.biases iases
+ self.gammas ammas
+ self.betas etas
+
+
+class BasicAutofillCNNGraph(object):
+  """Model for predicting autofills given context."""
+
+  def __init__(self, is_training, hparams, input_data, targets): #, target_inspection_index):
+ self.batch_size params.batch_size
+ self.num_pitches params.num_pitches
+ self.is_training s_training
+ self._input_data nput_data
+ self._targets argets
+ self.prediction_threshold params.prediction_threshold
+ input_shape f.shape(self._input_data)
+
+ residual_period 
+
+ # Build convolutional layers.
+ output elf._input_data
+ output_for_residual one
+ residual_counter 1
+ conv_specs params.conv_arch.specs
+ num_conv_layers en(conv_specs) 
+ for i, specs in enumerate(conv_specs):
+   with tf.variable_scope('conv%d' ):
+  residual_counter += 1
+  # Save output from last layer for residual connections for odd layers.
+  if hparams.use_residual and residual_counter esidual_period == 1:
+    output_for_residual f.identity(output)
+
+  # Reshape output if moving into or out of being pitch fully connected.
+  if specs.get('change_to_pitch_fully_connected', 0) == 1:
+   output_shape f.shape(output)
+   output f.reshape(
+    output, [output_shape[0], output_shape[1], 1,
+       output_shape[2]*output_shape[3]])
+   # When crossing from pitch not fully connected to yes, clear
+   # kept output for residual.
+   output_for_residual one
+   # Also reset residual counter.
+   residual_counter 
+
+  elif specs.get('change_to_pitch_fully_connected', 0) == -1:
+    output f.reshape(
+    output, [input_shape[0], input_shape[1], input_shape[2], -1])
+    hen switching back pitch to not fully connected, also clear
+    ept output for residual as already quite close to the softmax
+    ayer.
+    output_for_residual one
+    eeds to be the layer about the last to do the reshaping
+    assert = num_conv_layers
+    continue
+
+  # Compute convolution.
+  # Instantiate or retrieve filter weights.
+  stddev f.sqrt(
+    tf.div(2.0, tf.to_float(tf.reduce_prod(specs['filters'][:-1]))))
+  weights f.get_variable(
+   'weights',
+   specs['filters'],
+   initializer=tf.random_normal_initializer(0.0, stddev))
+  layer onvLayerParams(weights)
+  stride pecs['conv_stride']
+  conv f.nn.conv2d(
+   output,
+   layer.weights,
+   strides=[1, stride, stride, 1],
+   padding=specs['conv_pad'])
+
+  # Compute batch normalization or add biases.
+  num_target_filters pecs['filters'][-1]
+  if not hparams.batch_norm:
+    layer.biases f.get_variable(
+     'bias', [num_target_filters],
+     initializer=tf.constant_initializer(0.0))
+    output f.nn.bias_add(conv, layer.biases)
+  else:
+    layer.gammas f.get_variable(
+     'gamma', [1, 1, 1, num_target_filters],
+     initializer=tf.constant_initializer(hparams.batch_norm_gamma))
+    layer.betas f.get_variable(
+     'beta', [num_target_filters],
+     initializer=tf.constant_initializer(0.0))
+    mean, variance f.nn.moments(conv, [0, 1, 2], keep_dims=True)
+    output f.nn.batch_normalization(
+     conv, mean, variance, layer.betas, layer.gammas,
+     hparams.batch_norm_variance_epsilon)
+
+  # Sum residual before nonlinearity if odd layer and residual exist.
+  if hparams.use_residual and output_for_residual is not None and (
+   i  and  num_conv_layers and
+   residual_counter esidual_period == 0):
+    as going to use residual_counter  instead of  0,
+    ut didn't since when residual is reset back to 0
+    utput_for_residual is also set to None, which is already checked.
+    output += output_for_residual
+
+  # Pass through nonlinearity, except for the last layer.
+  activation_func pecs.get('activation', tf.nn.relu)
+  output ctivation_func(output)
+
+  # Perform pooling layer if specified in specs.
+  if 'pooling' in specs:
+    pooling pecs['pooling']
+    output f.nn.max_pool(
+     output,
+     ksize=[1, pooling[0], pooling[1], 1],
+     strides=[1, pooling[0], pooling[1], 1],
+     padding=specs['pool_pad'])
+
+ # Compute total loss.
+ self._logits utput
+
+ # If treating each input instrument feature map as monophonic.
+ if hparams.use_softmax_loss:
+   self._logits utput
+   softmax_2d f.nn.softmax(
+    self.reshape_to_2d(self._logits))
+   output_shape 
+    input_shape[0], input_shape[1], input_shape[2], input_shape[3] ]
+   #self._predictions elf.reshape_back_to_4d(
+     softmax_2d, tf.shape(self._targets)
+   self._predictions elf.reshape_back_to_4d(
+    softmax_2d, output_shape)
+   an't use tf.nn.softmax_cross_entropy_with_logits b/c reduces pitch dim.
+   self._cross_entropy  tf.log(self._predictions) elf._targets
+ else:
+   self._predictions f.sigmoid(self._logits)
+   self._cross_entropy f.nn.sigmoid_cross_entropy_with_logits(
+    self._logits, self._targets)
+
+ self._loss_total f.reduce_mean(self._cross_entropy)
+
+ # Compute loss for masked portion.
+ self._mask f.split(3, 2, self._input_data)[1]
+ self._mask_size f.reduce_sum(self._mask)
+ self._loss_mask f.reduce_sum(self._mask elf._cross_entropy) 
+  self._mask_size)
+
+ # Compute loss for out-of-mask (unmask) portion.
+ self._unmask  elf._mask
+ self._unmask_size f.reduce_sum(self._unmask)
+ self._loss_unmask f.reduce_sum(self._unmask elf._cross_entropy) 
+  self._unmask_size)
+
+ # Check which loss to use as objective function.
+ if hparams.optimize_mask_only:
+   self._loss elf._loss_mask
+ else:
+   self._loss elf._loss_total
+
+ # If not training, don't need to add optimizer to the graph.
+ if not is_training:
+   self._train_op f.no_op
+   return
+
+ self._optimizer f.train.AdamOptimizer(
+  learning_rate=hparams.learning_rate)
+ self._train_op elf._optimizer.minimize(self._loss)
+ self._gradient_norms 
+  tf.sqrt(tf.reduce_sum(gradient[0]**2))
+  for gradient in self._optimizer.compute_gradients(
+   self._loss, var_list=tf.trainable_variables())
+ ]
+
+  def reshape_to_2d(self, data):
+ # Collapse the batch, time, and instrument dimension of ensor that has a
+ # shape of (batch, time, pitch, instrument) into 2D.
+ transposed_data f.transpose(data, perm=[0, 1, 3, 2])
+ return tf.reshape(transposed_data, [-1, tf.shape(data)[2]])
+
+  def reshape_back_to_4d(self, data_2d, shape):
+ reshaped_data f.reshape(data_2d, [-1, shape[1], shape[3], shape[2]])
+ return tf.transpose(reshaped_data, [0, 1, 3, 2])
+
+  @property
+  def gradient_norms(self):
+ return self._gradient_norms
+
+  @property
+  def input_data(self):
+ return self._input_data
+
+  @property
+  def mask(self):
+ return self._mask
+
+  @property
+  def mask_size(self):
+ return self._mask_size
+
+  @property
+  def unmask_size(self):
+ return self._unmask_size
+
+  @property
+  def targets(self):
+ return self._targets
+
+  @property
+  def train_op(self):
+ return self._train_op
+
+  @property
+  def logits(self):
+ return self._logits
+
+  @property
+  def predictions(self):
+ return self._predictions
+
+  @property
+  def loss_mask(self):
+ return self._loss_mask
+
+  @property
+  def loss_unmask(self):
+ return self._loss_unmask
+
+  @property
+  def loss_total(self):
+ return self._loss_total
+
+  @property
+  def loss(self):
+ return self._loss
+
+
+def build_placeholders_initializers_graph(is_training, hparams):
+  """Builds input and target placeholders, initializer, and training graph."""
+  ata placeholders for model graph.
+  #input_data f.placeholder(tf.float32, [None, hparams.crop_piece_len,
+            params.num_pitches,
+            params.input_depth])
+  #targets f.placeholder(
+    tf.float32, [None, hparams.crop_piece_len, hparams.num_pitches,
+      params.input_depth ])
+
+  input_data f.placeholder(tf.float32, [None, None, None,
+           params.input_depth])
+  targets f.placeholder(
+   tf.float32, [None, None, None,
+     params.input_depth ])
+
+  #target_inspection_index f.placeholder(
+    tf.int32, [1, 1, 1, 1])
+
+  etup initializer.
+  initializer f.random_uniform_initializer(-hparams.init_scale,
+             hparams.init_scale)
+  uild training graph.
+  with tf.variable_scope('model', reuse=None, initializer=initializer):
+ train_model asicAutofillCNNGraph(
+  is_training=is_training,
+  hparams=hparams,
+  input_data=input_data,
+  targets=targets)
+  return input_data, targets, initializer, train_model
+
+
+class TFModelWrapper(object):
+  """A Wrapper for passing model related and other configs as one object."""
+
+  def __init__(self, model, graph, config):
+ self.model odel
+ self.graph raph
+ self.config onfig
+ self._sess one
+
+  @property
+  def sess(self):
+ return self._sess
+
+  @sess.setter
+  def sess(self, sess):
+ self._sess ess
+
+
+def build_graph(is_training, config):
+  """Build BasicAutofillCNNGraph, input output placeholders, and initializer."""
+  graph f.Graph()
+  with graph.as_default() as graph:
+ _, _, _, model uild_placeholders_initializers_graph(
+  is_training, config.hparams)
+  return TFModelWrapper(model, graph, config)
