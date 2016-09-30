@@ -9,8 +9,6 @@ Example usage:
 import os
 import time
 
- 
-
 import numpy as np
 import tensorflow as tf
 
@@ -26,9 +24,9 @@ FLAGS = tf.app.flags.FLAGS
 # TODO(annahuang): Set the default input and output_dir to None for opensource.
 tf.app.flags.DEFINE_string(
     'input_dir',
-    'None',
+    '/u/huangche/data/bach/instrs=4_duration=0.250_sep=True',
     'Path to the directory that holds the train, valid, test TFRecords.')
-tf.app.flags.DEFINE_string('run_dir', '/tmp/cnn_logs',
+tf.app.flags.DEFINE_string('run_dir', '/u/huangche/tf_logss',
                            'Path to the directory where checkpoints and '
                            'summary events will be saved during training and '
                            'evaluation. Multiple runs can be stored within the '
@@ -45,13 +43,13 @@ tf.app.flags.DEFINE_string('model_name', 'DeepStraightConvSpecs',
                            '"DeepStraightConvSpecsWithEmbedding".')
 tf.app.flags.DEFINE_integer('num_layers', 28,
                             'The number of convolutional layers.')
-tf.app.flags.DEFINE_integer('num_filters', 256,
+tf.app.flags.DEFINE_integer('num_filters', 256, 
                             'The number of filters for each convolutional '
                             'layer.')
 tf.app.flags.DEFINE_integer('batch_size', 20,
                             'The batch size training and validation the model.')
 # TODO(annahuang): Some are meant to be booleans.
-tf.app.flags.DEFINE_integer('use_residual', 0,
+tf.app.flags.DEFINE_integer('use_residual', 1,
                             '1 specifies use residual, while 0 specifies not '
                             'to.')
 tf.app.flags.DEFINE_integer('num_epochs', 0,
@@ -69,10 +67,10 @@ tf.app.flags.DEFINE_string('maskout_method', 'random_multiple_instrument_time',
 tf.app.flags.DEFINE_bool('separate_instruments', True,
                          'Separate instruments into different input feature'
                          'maps or not.')
-tf.app.flags.DEFINE_integer('augment_by_transposing', 1, 'If true during '
+tf.app.flags.DEFINE_integer('augment_by_transposing', 0, 'If true during '
                             'training shifts each data point by a random '
                             'interval between -5 and 6 ')
-tf.app.flags.DEFINE_integer('augment_by_halfing_doubling_durations', 1, 'If '
+tf.app.flags.DEFINE_integer('augment_by_halfing_doubling_durations', 0, 'If '
                             'true during training randomly chooses to double '
                             'or halve durations or stay the same.  The former '
                             'two options are only available if they do not '
@@ -270,7 +268,8 @@ def main(unused_argv):
         saver=saver,
         summary_op=None,
         save_model_secs=FLAGS.save_model_secs)
-    with sv.managed_session('local') as sess:
+    #with sv.managed_session('local') as sess:
+    with sv.PrepareSession() as sess:
       epoch_count = 0
       while epoch_count < FLAGS.num_epochs or not FLAGS.num_epochs:
         if sv.should_stop():

@@ -2,8 +2,6 @@
 from collections import namedtuple
 import os
 
- 
-
 import numpy as np
 import matplotlib.pylab as plt
 from matplotlib.patches import Rectangle
@@ -60,12 +58,9 @@ def get_validation_batch():
   return seeder.get_random_batch()
 
 
-def get_seeder(model_name=None):
-  #path = '/usr/local/ /home/annahuang/magenta_tmp/note_sequences/instrs=4_wo_16th/instrs=4_sep=True'
-  # New path for 4 voice wo 16th note instrument separated.
-  path = '/usr/local/ /home/annahuang/magenta_tmp/note_sequence_data/instrs=4_duration=0.250_sep=True'
+def get_seeder(validation_path, model_name=None):
   config = config_tools.get_checkpoint_config(model_name=model_name)
-  seeder = SeedPianoroll(config, path)
+  seeder = SeedPianoroll(config, validation_path)
   return seeder
 
 
@@ -111,8 +106,9 @@ class SeedPianoroll(object):
         return_name=return_name)
 
   def get_sequence_name(self, seq):
-    return '%s-%s-%s' % (seq.id, seq.filename, seq.collection_name)
-
+    #return '%s-%s-%s' % (seq.id, seq.filename, seq.collection_name)
+    return seq.filename
+	
   def get_crop_from_sequence(self,
                              sequence,
                              start_crop_index=None,
@@ -186,26 +182,32 @@ class SeedPianoroll(object):
                                                batch_size]
     return self._get_batch(ordering, return_names=return_names)
 
-  def get_random_batch(self, return_names=False):
+  def get_random_batch(self, requested_index, return_names=False):
+    '''Returns batch of random crops, except requested_index is cropped from beginning.'''
     ordering = np.random.permutation(len(self._sequences))
-    return self._get_batch(ordering, return_names=return_names)
+    print 'get_random_batch', hash(tuple(ordering)), ordering
+    return self._get_batch(ordering, requested_index, return_names=return_names)
 
-  def _get_batch(self, ordering, return_names=False):
+  def _get_batch(self, ordering, requested_index, return_names=False):
     batch_size = self._config.hparams.batch_size
     sequences = [self._sequences[i] for i in ordering[:batch_size]]
-    input_data, targets = data_tools.make_data_feature_maps(sequences,
-                                                            self._config,
-                                                            self.encoder)
+    input_data, _ = data_tools.make_data_feature_maps(
+        sequences, self._config, self.encoder)
     pianorolls_without_mask, _ = np.split(input_data, 2, 3)
+    # Crop requested piece separate so that it's cropped from beginning
+    pianoroll = self.encoder.encode(sequences[requested_index])
+    if pianoroll.shape[0] < self.crop_piece_len:
+      raise ValueError('Prime piece too short.')
+    pianorolls_without_mask[requested_index] = pianoroll[:self.crop_piece_len]
     if not return_names:
       return pianorolls_without_mask
-    piece_names = [self.get_sequence_name(seq) for seq in self._sequences]
+    piece_names = [self.get_sequence_name(seq) for seq in sequences]
     return pianorolls_without_mask, piece_names
 
   def get_crop_by_name(self, piece_name, start_crop_index):
     for seq in self._sequences:
       retrieved_piece_name = self.get_sequence_name(seq)
-      #print retrieved_piece_name
+      print retrieved_piece_name
       if retrieved_piece_name == piece_name:
         return self.get_crop_from_sequence(seq, start_crop_index)
     raise ValueError('Did not find a NoteSequence that matched the name %s' %

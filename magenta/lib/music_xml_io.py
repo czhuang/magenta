@@ -22,8 +22,9 @@ def music_xml_to_sequence_proto(musicxml_fpath):
   Returns:
     A NoteSequence.
   """
-  parser = music21.musicxml.xmlToM21.MusicXMLImporter()
-  music21_score = parser.scoreFromFile(musicxml_fpath)
+  #parser = music21.musicxml.xmlToM21.MusicXMLImporter()
+  #music21_score = parser.scoreFromFile(musicxml_fpath)
+  music21_score = music21.converter.parse(musicxml_fpath)
   sequence_proto = music21_to_sequence_proto(music21_score,
                                              os.path.basename(musicxml_fpath))
   return sequence_proto

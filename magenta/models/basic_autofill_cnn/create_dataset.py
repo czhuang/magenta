@@ -26,10 +26,10 @@ FLAGS = tf.app.flags.FLAGS
 # '/ /is-d/home/annahuang/ttl=100d/BachChorales/instrs=4_wo_16th/all_note_sequences.tfrecord'
 # TODO(annahuang): Set the default input and output_dir to None for opensource.
 # BachChorales-prog.tfrecord has part info, that corresponds to instrument, and also reassigned 4 voice prog
-tf.app.flags.DEFINE_string('input', '/ /is-d/home/annahuang/ttl=100d/BachChorales/BachChorales-prog.tfrecord',
+tf.app.flags.DEFINE_string('input', '/u/huangche/data/bach/bach_chorale_note_sequences.tfrecord',
                            'TFRecord to read NoteSequence protos from.')
 tf.app.flags.DEFINE_string('output_dir',
-                           '/ /is-d/home/annahuang/ttl=100d/BachChorales/',
+                           '/u/huangche/data/bach',
                            'Directory to write training, validation, test '
                            'TFRecord files.')
 tf.app.flags.DEFINE_bool('separate_instruments', True,
@@ -144,8 +144,8 @@ class ToPianorollByInstrumentType(pipeline.Pipeline):
     return [make_tensor_proto(pianoroll)]
 
 
-def get_pipeline(sequence_iterator, num_instruments_requested,
-                 shortest_duration_allowed, separate_instruments):
+def get_pipeline(num_instruments_requested, shortest_duration_allowed, 
+                 separate_instruments):
   """Returns data processing pipeline for score-based NoteSequences.
 
   This pipeline iterates through a NoteSequence TFRecord to return pianorolls of
@@ -154,7 +154,6 @@ def get_pipeline(sequence_iterator, num_instruments_requested,
       separate train, validation and test TFRecords.
 
   Args:
-    sequence_iterator: A TFRecord iterator that iterates over NoteSequences.
     num_instruments_requested: An integer specifying the number of instruments
         a piece should have in order to be included in the dataset.
     shortest_duration_allowed: A float specifying the smallest allowed note
@@ -169,13 +168,9 @@ def get_pipeline(sequence_iterator, num_instruments_requested,
   filter_by_num_instruments = FilterByNumOfVoices(num_instruments_requested)
   filter_by_shortest_duration = FilterByShortestDurationAllowed(
       shortest_duration_allowed)
-  pianoroller = ToPianorollByInstrumentType(
-      separate_instruments=separate_instruments,
-      sequence_iterator=sequence_iterator)
   partitioner = pipelines_common.RandomPartition(music_pb2.NoteSequence,
                                                  ['train', 'valid', 'test'],
                                                  [0.6, 0.2])
-
   dag = {filter_by_num_instruments: dag_pipeline.Input(music_pb2.NoteSequence),
          filter_by_shortest_duration: filter_by_num_instruments,
          partitioner: filter_by_shortest_duration,
@@ -183,15 +178,20 @@ def get_pipeline(sequence_iterator, num_instruments_requested,
   return dag_pipeline.DAGPipeline(dag)
 
 
-def run_from_flags(pipeline_instance):
+def run_pipeline_from_flags():
   """Run the data processing pipline serially, with configs from FLAGS."""
   output_dir_name = 'instrs=%d_duration=%.3f_sep=%s' % (
       FLAGS.num_instruments_requested, FLAGS.shortest_duration_allowed,
       FLAGS.separate_instruments)
   output_fpath = os.path.join(FLAGS.output_dir, output_dir_name)
+  if not os.path.exists(output_fpath):
+    os.mkdir(output_fpath)
+  dataset_pipeline = get_pipeline(
+      FLAGS.num_instruments_requested, FLAGS.shortest_duration_allowed,
+      FLAGS.separate_instruments)
   pipeline.run_pipeline_serial(
-      pipeline_instance,
-      pipeline.tf_record_iterator(FLAGS.input, pipeline_instance.input_type),
+      dataset_pipeline,
+      pipeline.tf_record_iterator(FLAGS.input, dataset_pipeline.input_type),
       output_fpath)
 
 
@@ -201,12 +201,8 @@ def main(unused_argv):
     raise AttributeError('Misspecified flags.')
   if FLAGS.input is None:
     tf.logging.fatal('No input was provided.')
-  fpath = os.path.join(tf.resource_loader.get_data_files_path(), FLAGS.input)
-  dataset_pipeline = get_pipeline(
-      pipeline.tf_record_iterator(fpath, music_pb2.NoteSequence),
-      FLAGS.num_instruments_requested, FLAGS.shortest_duration_allowed,
-      FLAGS.separate_instruments)
-  run_from_flags(dataset_pipeline)
+  #fpath = os.path.join(tf.resource_loader.get_data_files_path(), FLAGS.input)
+  run_pipeline_from_flags()
 
 
 if __name__ == '__main__':

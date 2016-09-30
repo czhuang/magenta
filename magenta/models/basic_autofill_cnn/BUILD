@@ -1,3 +1,21 @@
+py_binary(
+    name = "create_dataset_and_generate",
+    srcs = ["create_dataset_and_generate.py"],
+    deps = [
+        ":create_dataset",
+        ":generate_tools",
+        "//magenta/lib:note_sequence_io",
+    ],
+)
+
+py_binary(
+    name = "music21_corpus_to_note_sequences",
+    srcs = ["music21_corpus_to_note_sequences.py"],
+    deps = [
+	"//magenta/lib:music_xml_io",
+        "//magenta/lib:note_sequence_io",
+    ],
+)
 
 py_binary(
     name = "seed_tools",
@@ -5,7 +23,7 @@ py_binary(
     data = [
         "testdata/jsb/bach-one_phrase-note_sequence.tfrecord",
     ],
-    deps =
+    deps = [
         ":config_tools",
         ":data_tools",
         ":mask_tools",
@@ -28,24 +46,8 @@ py_binary(
         ":mask_tools",
         ":pianorolls_lib",
         ":seed_tools",
+	":plot_tools",
         "//magenta/lib:midi_io",
-    ],
-)
-
-py_binary(
-    name = "create_dataset",
-    srcs = ["create_dataset.py"],
-    data = [
-        "testdata/jsb/note_sequences.tfrecord",
-    ],
-    deps = [
-        ":pianorolls_lib",
-        "//magenta/lib:note_sequence_io",
-        "//magenta/pipelines:dag_pipeline",
-        "//magenta/pipelines:pipeline",
-        "//magenta/pipelines:pipelines_common",
-        "//magenta/pipelines:statistics",
-        "//magenta/protobuf:music_py_pb2",
     ],
 )
 
@@ -101,6 +103,7 @@ py_binary(
     deps = [],
 )
 
+
 py_binary(
     name = "basic_autofill_cnn_graph",
     srcs = ["basic_autofill_cnn_graph.py"],
@@ -112,12 +115,43 @@ py_binary(
     name = "basic_autofill_cnn_train",
     srcs = ["basic_autofill_cnn_train.py"],
     deps = [
-        ":basic_autofill_cnn_graph",
         ":config_tools",
         ":data_tools",
-        ":hparams_tools",
         ":pianorolls_lib",
         ":summary_tools",
+        ":basic_autofill_cnn_graph",
+    ],
+)
+
+py_binary(
+    name = "plot_tools",
+    srcs = ["plot_tools.py"],
+    data = [
+        "testdata/generated/sample1.midi",
+    ],
+    deps = [
+	":pianorolls_lib",
+	":mask_tools",
+	":config_tools",
+        "//magenta/protobuf:music_py_pb2",
+        "//magenta/lib:midi_io",
+    ],
+)
+
+py_binary(
+    name = "create_dataset",
+    srcs = ["create_dataset.py"],
+    data = [
+        "testdata/jsb/note_sequences.tfrecord",
+    ],
+    deps = [
+        ":pianorolls_lib",
+        "//magenta/lib:note_sequence_io",
+        "//magenta/pipelines:dag_pipeline",
+        "//magenta/pipelines:pipeline",
+        "//magenta/pipelines:pipelines_common",
+        "//magenta/pipelines:statistics",
+        "//magenta/protobuf:music_py_pb2",
     ],
 )
 
@@ -235,6 +269,8 @@ py_test(
         ":basic_autofill_cnn_train",
     ],
 )
+
+
 
 py_test(
     name = "summary_tools_test",

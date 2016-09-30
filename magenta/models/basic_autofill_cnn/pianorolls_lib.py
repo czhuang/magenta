@@ -4,8 +4,6 @@ import copy
 from collections import defaultdict
 from collections import OrderedDict
 
- 
-
 import numpy as np
 
 from magenta.protobuf import music_pb2
@@ -88,9 +86,9 @@ def are_instruments_monophonic(pianoroll):
   assert pianoroll.ndim == 3
   #print np.unique(np.sum(pianoroll, axis=1))
   # An instrument can either have one or no pitch on at a time step.
-  print 'are_instruments_monophonic, pianoroll', pianoroll.shape
+  #print 'are_instruments_monophonic, pianoroll', pianoroll.shape
   num_notes_on = np.unique(np.sum(pianoroll, axis=1))
-  print 'num_notes_on', num_notes_on
+  #print 'num_notes_on', num_notes_on
   return np.allclose(num_notes_on, np.arange(2)) or (
       np.allclose(num_notes_on, np.array([1.])))
 
@@ -151,7 +149,15 @@ class PianorollEncoderDecoder(object):
     # Collect notes into voices.
     parts = defaultdict(list)
     #TODO(annahuang): Check source type and then check for parts if score-based.
-    attribute_for_program_index = 'program'
+    if (sequence.source_info.source_type == 
+        music_pb2.NoteSequence.SourceInfo.SCORE_BASED):
+      attribute_for_program_index = 'part'
+    elif (sequence.source_info.encoding_type == 
+          music_pb2.NoteSequence.SourceInfo.MIDI):
+      attribute_for_program_index = 'program'
+    else:
+      raise ValueError(
+          'Source type or encoding type of sequence not yet supported')
     for note in sequence.notes:
       parts[getattr(note, attribute_for_program_index)].append(note)
     sorted_part_keys = sorted(parts.keys())
@@ -182,7 +188,7 @@ class PianorollEncoderDecoder(object):
         else:
           pianoroll[start_index:end_index, pitch_index, 0] = 1
     # TODO(annahuang): Put this constraint somewhere else.
-    if not are_instruments_monophonic(pianoroll):
+    if self.separate_instruments and not are_instruments_monophonic(pianoroll):
       raise ValueError('This encoder only expects monophonic instruments.')
     if return_program_to_pianoroll_map:
       return pianoroll, program_to_pianoroll_index

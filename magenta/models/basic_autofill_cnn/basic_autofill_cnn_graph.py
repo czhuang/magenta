@@ -1,7 +1,5 @@
 """Defines the graph for a convolutional net designed for music autofill."""
 
- 
-
 import tensorflow as tf
 
 

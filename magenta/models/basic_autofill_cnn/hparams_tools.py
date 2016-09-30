@@ -372,6 +372,6 @@ CHECKPOINT_HPARAMS = {
 def get_checkpoint_hparams(model_name):
   """Returns the model architecture."""
   if model_name not in CHECKPOINT_HPARAMS:
-    raise ModelMisspecificationError('Model name does not exist.')
+    raise ModelMisspecificationError('Model name %s does not exist.' % model_name)
   else:
     return CHECKPOINT_HPARAMS[model_name]

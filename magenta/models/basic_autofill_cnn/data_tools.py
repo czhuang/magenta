@@ -2,8 +2,6 @@
 
 import os
 
- 
-
 import numpy as np
 import tensorflow as tf
 
@@ -13,7 +11,6 @@ from magenta.protobuf import music_pb2
 from magenta.models.basic_autofill_cnn import mask_tools
 from magenta.models.basic_autofill_cnn.mask_tools import MaskUseError
 from magenta.models.basic_autofill_cnn.pianorolls_lib import PianorollEncoderDecoder
-
 
 # Enumerations for data augmentation for durations.
 KEEP_ORIGINAL_DURATIONS, HALF_TIME, DOUBLE_TIME = range(3)
