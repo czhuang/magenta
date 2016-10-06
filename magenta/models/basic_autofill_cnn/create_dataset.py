@@ -1,7 +1,7 @@
 r"""Creates pianoroll dataset from NoteSequence tfrecords.
 
 Example usage:
-  $ bazel run :create_dataset -- --input=/tmp/note_sequences \
+  $ bazel run :create_dataset -- --input=/tmp/note_sequences.tfrecord \
       --output_dir=/tmp/tensors  --separate_instruments=False \
       --num_instruments_requested=4
 """

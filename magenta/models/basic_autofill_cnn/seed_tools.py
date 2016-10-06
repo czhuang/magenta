@@ -19,10 +19,6 @@ from magenta.lib.midi_io import midi_to_sequence_proto
 from magenta.lib.music_xml_io import music_xml_to_sequence_proto
 from magenta.models.basic_autofill_cnn.pianorolls_lib import WOODWIND_QUARTET_PROGRAMS
 
-# In the Bach Chorale dataset, highest voice is usually on voice 1, instead of
-# zero.
-MELODY_VOICE_INDEX = 1
-
 
 def get_bach_chorale_four_parts_one_phrase():
   """Returns a one-phrase sequence and its corresponding pianoroll and encoder.
@@ -133,7 +129,7 @@ class SeedPianoroll(object):
   def get_empty_pianoroll(self):
     return np.zeros(self.get_pianoroll_shape())[None, :, :, :]
 
-  def get_midi_prime_pianoroll(self, fpath, prime_duration_ratio=1):
+  def get_prime_pianoroll(self, fpath, prime_voices, prime_duration_ratio=1):
     fpath = os.path.join(tf.resource_loader.get_data_files_path(), 'testdata',
                          fpath)
     file_extension = os.path.splitext(fpath)[1]
@@ -141,6 +137,9 @@ class SeedPianoroll(object):
       sequence = music_xml_to_sequence_proto(fpath)
     elif file_extension == '.mid' or file_extension == '.midi':
       sequence = midi_to_sequence_proto(fpath)
+    elif file_extension == '.tfrecord':
+      # Takes first sequence in TFrecord.
+      sequence = list(note_sequence_record_iterator(fpath))[0]
     else:
       raise ValueError('File %s not supported yet.' % file_extension)
     pianoroll_with_possibly_less_intrs = self.encoder.encode(
@@ -160,19 +159,21 @@ class SeedPianoroll(object):
     assert num_pitches == requested_num_pitches
     assert num_timesteps >= requested_num_timesteps
 
-    if num_instrs == 1:
-      # Voice 1 instead of voice 0 is usually the top voice.
-      pianoroll[:, :, 1:2] = (
-          pianoroll_with_possibly_less_intrs[:requested_num_timesteps])
-      if np.sum(pianoroll[:, :, 1]) == 0:
-        raise ValueError(
-            'Prime melody is empty or it is in a different voice than expected')
-    else:
-      pianoroll[:, :, :num_instrs] = pianoroll_with_possibly_less_intrs[:, :, :]
+    pianoroll[:, :, tuple(prime_voices)] = pianoroll_with_possibly_less_intrs[:requested_num_timesteps, :, tuple(prime_voices)]
+
+    #if num_instrs == 1:
+    #  # Voice 1 instead of voice 0 is usually the top voice.
+    #  pianoroll[:, :, 1:2] = (
+    #      pianoroll_with_possibly_less_intrs[:requested_num_timesteps])
+    #  if np.sum(pianoroll[:, :, 1]) == 0:
+    #    raise ValueError(
+    #        'Prime melody is empty or it is in a different voice than expected')
+    #else:
+    #  pianoroll[:, :, :num_instrs] = pianoroll_with_possibly_less_intrs[:requested_num_timesteps, :, :]
 
     # Check which voices have notes.
     for i in range(requested_num_instrs):
-      print i, np.sum(pianoroll[:, :, i])
+      print i, np.sum(pianoroll[:, :, i]), np.where(pianoroll[:, :, i] > 0)
     return pianoroll[None, :, :, :]
 
   def get_nth_batch(self, nth, return_names=False):
@@ -182,23 +183,27 @@ class SeedPianoroll(object):
                                                batch_size]
     return self._get_batch(ordering, return_names=return_names)
 
-  def get_random_batch(self, requested_index, return_names=False):
+  def get_random_batch(self, requested_index=None, return_names=False):
     '''Returns batch of random crops, except requested_index is cropped from beginning.'''
     ordering = np.random.permutation(len(self._sequences))
     print 'get_random_batch', hash(tuple(ordering)), ordering
     return self._get_batch(ordering, requested_index, return_names=return_names)
 
-  def _get_batch(self, ordering, requested_index, return_names=False):
+  def _get_batch(self, ordering, requested_index=None, return_names=False):
     batch_size = self._config.hparams.batch_size
     sequences = [self._sequences[i] for i in ordering[:batch_size]]
     input_data, _ = data_tools.make_data_feature_maps(
         sequences, self._config, self.encoder)
     pianorolls_without_mask, _ = np.split(input_data, 2, 3)
-    # Crop requested piece separate so that it's cropped from beginning
-    pianoroll = self.encoder.encode(sequences[requested_index])
-    if pianoroll.shape[0] < self.crop_piece_len:
-      raise ValueError('Prime piece too short.')
-    pianorolls_without_mask[requested_index] = pianoroll[:self.crop_piece_len]
+    if requested_index is not None:
+      if requested_index >= pianorolls_without_mask.shape[0]:
+        raise ValueError('Requested index %d exceeded available number of pieces%d.') % (requested_index, pianorolls_without_mask.shape[0])
+      # Crop requested piece separate so that it's cropped from beginning
+      pianoroll = self.encoder.encode(sequences[requested_index])
+      # TODO(annahuang): This shouldn't happen here anymore.
+      if pianoroll.shape[0] < self.crop_piece_len:
+        raise ValueError('Prime piece too short.')
+      pianorolls_without_mask[requested_index] = pianoroll[:self.crop_piece_len]
     if not return_names:
       return pianorolls_without_mask
     piece_names = [self.get_sequence_name(seq) for seq in sequences]
@@ -232,9 +237,8 @@ class SeedPianoroll(object):
     print batch_minus_one.shape
     return np.concatenate((requested_piece_crop, batch_minus_one), 0)
 
-  def get_random_batch_with_midi_prime(self, fpath, prime_duration_ratio):
-    requested_piece_crop = self.get_midi_prime_pianoroll(fpath,
-                                                         prime_duration_ratio)
+  def get_random_batch_with_prime(self, fpath, prime_voices, prime_duration_ratio):
+    requested_piece_crop = self.get_prime_pianoroll(fpath, prime_voices, prime_duration_ratio)
     print 'primed size:', requested_piece_crop.shape
     piece_duration = requested_piece_crop.shape[1]
 

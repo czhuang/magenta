@@ -6,8 +6,12 @@ Example usage:
         --output_dir=/tmp/generated
 """
 from collections import namedtuple
+from collections import defaultdict
+from itertools import permutations
 import os
 import copy
+
+import cPickle as pickle
 
 import numpy as np
 import matplotlib.pylab as plt
@@ -19,15 +23,17 @@ from magenta.models.basic_autofill_cnn import mask_tools
 from magenta.models.basic_autofill_cnn import retrieve_model_tools
 from magenta.models.basic_autofill_cnn import config_tools
 from magenta.models.basic_autofill_cnn import seed_tools
-from magenta.models.basic_autofill_cnn.seed_tools import MELODY_VOICE_INDEX
+#from magenta.models.basic_autofill_cnn.seed_tools import MELODY_VOICE_INDEX
 from magenta.models.basic_autofill_cnn import plot_tools
 from magenta.lib.midi_io import sequence_proto_to_midi_file
 from magenta.protobuf import music_pb2
 
 FLAGS = tf.app.flags.FLAGS
 # TODO(annahuang): Set the default input and output_dir to None for opensource.
+# condition_on/sample1.mid
+# highest.tfrecord
 tf.app.flags.DEFINE_string(
-    'prime_fpath', 'condition_on/sample1.mid',
+    'prime_fpath', '/u/huangche/data/bach/high0.tfrecord',
     'Path to the Midi or MusicXML file that is used as a prime.')
 tf.app.flags.DEFINE_string(
     'validation_set_dir', '/u/huangche/data/bach/instrs=4_duration=0.250_sep=True',
@@ -42,6 +48,8 @@ AutofillStep = namedtuple('AutofillStep', ['prediction', 'change_to_context',
 # Enumerations for timestep generation order within a voice.
 FORWARD, RANDOM = range(2)
 
+# Enumerations for method used to pick a pitch for each timestep.
+ARGMAX, SAMPLE = range(2)
 
 def sample_pitch(prediction, time_step, instr_idx, num_pitches, temperature):
   # At the randomly choosen timestep, sample pitch.
@@ -74,7 +82,10 @@ def regenerate_voice_by_voice(pianorolls, wrapped_model, config):
   autofill_steps = []
 
   # Generate instrument by instrument.
-  instr_ordering = np.random.permutation(config.voices_to_regenerate)
+  if config.instr_ordering is not None:
+    instr_ordering = config.instr_ordering
+  else:
+    instr_ordering = np.random.permutation(config.voices_to_regenerate)
   instr_ordering_str_list = [str(idx) for idx in instr_ordering]
   instr_ordering_str = '_'.join(instr_ordering_str_list)
   for instr_idx in instr_ordering:
@@ -150,7 +161,7 @@ def generate_gibbs_like(pianorolls, wrapped_model, config):
                   for time_idx in timestep_indices]
   print 'len of pair_indices', len(pair_indices)
   pair_indices_copy = []
-  for _ in range(config.num_regenerations):
+  for _ in range(config.num_regen_iterations):
     pair_indices_copy.extend(copy.copy(pair_indices))
 
   pair_indices = pair_indices_copy
@@ -197,7 +208,7 @@ def generate_gibbs_like(pianorolls, wrapped_model, config):
     step = AutofillStep(prediction, (change_index, 1),
                         generated_pianoroll.copy())
     autofill_steps.append(step)
-  return generated_pianoroll, autofill_steps, None
+  return generated_pianoroll, autofill_steps, None, None
 
 
 def generate_routine(config, output_path):
@@ -237,13 +248,14 @@ def generate_routine(config, output_path):
   # Generate and synths output.
   generate_method_name = config.generate_method_name
   for prime_idx in range(config.num_diff_primes):
+    
     # Gets prime and batch.
     if start_with_empty:
       pianorolls = seeder.get_random_batch_with_empty_as_first()
       piece_name = 'empty'
     elif prime_fpath is not None:
-      pianorolls = seeder.get_random_batch_with_midi_prime(
-          prime_fpath, config.prime_duration_ratio)
+      pianorolls = seeder.get_random_batch_with_prime(
+          prime_fpath, config.prime_voices, config.prime_duration_ratio)
       #piece_name = 'magenta_theme'
       piece_name = os.path.split(os.path.basename(prime_fpath))[0]
     elif requested_validation_piece_name is not None:
@@ -266,44 +278,77 @@ def generate_routine(config, output_path):
       piece_name = piece_names[config.requested_index]
     print 'Piece name:', piece_name
 
-    for i in range(config.num_samples):
+    seqs_by_ordering = defaultdict(list)
+    # TODO(annahuang): Use consistent instrument or voice.
+    instr_orderings = list(permutations(config.voices_to_regenerate))
+    if config.num_complete_permutations is not None:
+      instr_orderings = instr_orderings * 2
+    elif config.num_samples is not None:
+      instr_orderings = instr_orderings[:config.num_samples]
+    else:
+      tf.log.warning('Should specify num_samples or num_complete_permutations, otherwise assumes num_complete_permutations to be 1')    
+
+    for i, instr_ordering in enumerate(instr_orderings):	
       # Generate.
-      run_local_id = '%s-%d-%s-%d' % (run_id, prime_idx, piece_name, i)
+      config.instr_ordering = instr_ordering
       generated_results = globals()[generate_method_name](pianorolls,
                                                           wrapped_model, config)
       generated_pianoroll, autofill_steps, original_pianoroll, instr_ordering_str = generated_results
   
-      # Synths original.
-      if original_pianoroll is not None:
+      run_local_id = '%s-%s-%d-%s-%d' % (instr_ordering_str, run_id, prime_idx, piece_name, i)
+      
+      # TODO(annahuang): Remove, just for debugging.
+      requested_instr_ordering_str = '_'.join(str(i) for i in instr_ordering)
+      print 'requested', requested_instr_ordering_str, instr_ordering_str 
+      if instr_ordering_str is not None and instr_ordering_str != requested_instr_ordering_str:
+        raise ValueError('Instrument ordering mismatch')
+
+      # Synths original, only for the first sample.
+      if original_pianoroll is not None and not i:
         original_seq = seeder.encoder.decode(original_pianoroll)
         fpath = os.path.join(
             output_path, 'original-%s-run_id_%s.midi' % (
                 generate_method_name, run_local_id))
         sequence_proto_to_midi_file(original_seq, fpath)
         print 'original', fpath
-
+      elif original_pianoroll is None:
+        original_seq = None     
+ 
       # Synths generated.
       # TODO(annahuang): Output sequence that merges prime and generated.
       generated_seq = seeder.encoder.decode(generated_pianoroll)
+      seqs_by_ordering[instr_ordering_str].append([
+          generated_seq, autofill_steps, original_seq, instr_ordering_str])
       fpath = os.path.join(
-          output_path, 'generated-%s-run_id_%s-order_%s.midi' % (
-              generate_method_name, run_local_id, instr_ordering_str))
+          output_path, 'generated-%s-run_id_%s.midi' % (
+              generate_method_name, run_local_id))
       print 'generated', fpath
       sequence_proto_to_midi_file(generated_seq, fpath)
   
       if config.plot_process:
-        plot_tools.plot_steps(autofill_steps, original_pianoroll)
+        plot_path = os.path.join(output_path, 'plots')
+        if not os.path.exists(plot_path):
+          os.mkdir(plot_path)
+        plot_tools.plot_steps(autofill_steps, original_pianoroll, plot_path, run_local_id)
 
+    # Pickle this current prime's generated sequences.
+    pickle_fname = '%s-%s.pkl' % (generate_method_name, run_local_id)
+    with open(os.path.join(output_path, pickle_fname), 'wb') as p:
+      pickle.dump(seqs_by_ordering, p)
 
+   
 def main(unused_argv):
-  generate_routine(
-      GENERATION_PRESETS['RegenerateValidationPieceVoiceByVoiceConfig'],
-      FLAGS.generation_output_dir)
+  #generate_routine(
+  #    GENERATION_PRESETS['RegenerateValidationPieceVoiceByVoiceConfig'],
+  #    FLAGS.generation_output_dir)
   #generate_routine(GENERATION_PRESETS['RegeneratePrimePieceVoiceByVoiceConfig'],
   #                 FLAGS.generation_output_dir)
   #generate_routine(
   #    GENERATION_PRESETS['GenerateAccompanimentToPrimeMelodyConfig'],
   #    FLAGS.generation_output_dir)
+  generate_routine(GENERATION_PRESETS['GenerateFromScratchVoiceByVoice'],
+                   FLAGS.generation_output_dir)
+
   #generate_routine(GENERATION_PRESETS['GenerateGibbsLikeConfig'],
   #                 FLAGS.generation_output_dir)
 
@@ -329,13 +374,17 @@ class GenerationConfig(object):
       requested_index=0,
 
       # Generation parameters.
+      prime_voices=None,
       voices_to_regenerate=range(4),
+      instr_ordering=None,
       sequential_order_type=RANDOM,
+      pitch_picking_method=SAMPLE,
       temperature=1,
-      num_diff_primes=2,
-      num_samples=2,
+      num_diff_primes=1,
+      num_samples=1,  # None to specify count by permuations.
+      num_complete_permutations=None,  # None to specify count by samples.
       requested_num_timesteps=8,
-      num_regenerations=10,
+      num_regen_iterations=10,  # Number of times to regenerate all the voices.
       plot_process=False)
 
   def __init__(self, *args, **init_hparams):
@@ -357,6 +406,7 @@ GENERATION_PRESETS = {
         validation_path=FLAGS.validation_set_dir,
         #requested_validation_piece_name='bwv103.6.mxl',
         requested_validation_piece_name=None,
+        prime_voices=range(4),
         voices_to_regenerate=range(4),
         sequential_order_type=RANDOM,
         num_diff_primes=100,
@@ -368,10 +418,12 @@ GENERATION_PRESETS = {
         model_name='DeepResidual',
         prime_fpath=FLAGS.prime_fpath,
         validation_path=FLAGS.validation_set_dir,
+        prime_voices=range(4),
         voices_to_regenerate=range(4),
         sequential_order_type=RANDOM,
-        num_samples=2,
-        requested_num_timesteps=8,
+        num_samples=None,
+        num_complete_permutations=10,
+        requested_num_timesteps=32,
         plot_process=False),
     # Configuration for generating an accompaniment to prime melody.
     'GenerateAccompanimentToPrimeMelodyConfig': GenerationConfig(
@@ -379,11 +431,24 @@ GENERATION_PRESETS = {
         model_name='DeepResidual',
         prime_fpath=FLAGS.prime_fpath,
         validation_path=FLAGS.validation_set_dir,
-        prime_duration_ratio=2,
-        voices_to_regenerate=list(set(range(4)) - set([MELODY_VOICE_INDEX])),
-        sequential_order_type=RANDOM,
-        num_samples=2,
-        requested_num_timesteps=8,
+        prime_duration_ratio=1,
+        prime_voices=[0],
+        voices_to_regenerate=[1, 2, 3],  #list(set(range(4)) - set([MELODY_VOICE_INDEX])),
+        sequential_order_type=RANDOM, #FORWARD,
+        num_samples=30,
+        requested_num_timesteps=32,
+        plot_process=False),
+    # Configurations for generating in random instrument cross timestep order.
+    'GenerateFromScratchVoiceByVoice': GenerationConfig(
+        generate_method_name='regenerate_voice_by_voice',
+        model_name='DeepResidual',
+        start_with_empty=True,
+        validation_path=FLAGS.validation_set_dir,
+        voices_to_regenerate=range(4),
+        sequential_order_type=FORWARD, #RANDOM,
+        num_samples=10,
+        requested_num_timesteps=16,
+        num_regen_iterations=2,
         plot_process=False),
     # Configurations for generating in random instrument cross timestep order.
     'GenerateGibbsLikeConfig': GenerationConfig(
@@ -393,9 +458,22 @@ GENERATION_PRESETS = {
         validation_path=FLAGS.validation_set_dir,
         voices_to_regenerate=range(4),
         sequential_order_type=RANDOM,
+        num_samples=5,
+        requested_num_timesteps=16,
+        num_regen_iterations=2,
+        plot_process=False),
+    # Configurations for generating in random instrument cross timestep order.
+    'InpaintingConfig': GenerationConfig(
+        generate_method_name='generate_gibbs_like',
+        model_name='DeepResidual',
+        start_with_empty=False,
+        prime_fpath=FLAGS.prime_fpath,
+        validation_path=FLAGS.validation_set_dir,
+        voices_to_regenerate=None, # Does not apply to this setting, because just fill in all that's empty
+        sequential_order_type=RANDOM,
         num_samples=2,
         requested_num_timesteps=4,
-        num_regenerations=2,
+        num_regen_iterations=2,
         plot_process=False)
 }
 

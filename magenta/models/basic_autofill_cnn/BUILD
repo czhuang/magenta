@@ -9,6 +9,16 @@ py_binary(
 )
 
 py_binary(
+    name = "postprocess",
+    srcs = ["postprocess.py"],
+    deps = [
+        ":generate_tools",
+        "//magenta/protobuf:music_py_pb2",
+        "//magenta/lib:midi_io",
+    ],
+)
+
+py_binary(
     name = "music21_corpus_to_note_sequences",
     srcs = ["music21_corpus_to_note_sequences.py"],
     deps = [

@@ -65,9 +65,12 @@ def get_pianoroll_to_program_assignment(
   num_programs = len(midi_programs)
   num_parts = len(part_indexs)
   num_doublings_per_program = int(np.round(float(num_parts) / num_programs))
+  if num_doublings_per_program == 0:
+    num_doublings_per_program = 1
   sorted_part_indexs = sorted(part_indexs)
   part_to_program = OrderedDict()
   for part_idx, part in enumerate(sorted_part_indexs):
+    print part_idx, num_doublings_per_program
     program_idx = part_idx / num_doublings_per_program
     if program_idx >= num_programs:
       program_idx = num_programs - 1
@@ -88,7 +91,8 @@ def are_instruments_monophonic(pianoroll):
   # An instrument can either have one or no pitch on at a time step.
   #print 'are_instruments_monophonic, pianoroll', pianoroll.shape
   num_notes_on = np.unique(np.sum(pianoroll, axis=1))
-  #print 'num_notes_on', num_notes_on
+  print 'pianoroll shape', pianoroll.shape
+  print 'num_notes_on', num_notes_on
   return np.allclose(num_notes_on, np.arange(2)) or (
       np.allclose(num_notes_on, np.array([1.])))
 
@@ -149,6 +153,7 @@ class PianorollEncoderDecoder(object):
     # Collect notes into voices.
     parts = defaultdict(list)
     #TODO(annahuang): Check source type and then check for parts if score-based.
+    print 'encode: source_type is', sequence.source_info.source_type
     if (sequence.source_info.source_type == 
         music_pb2.NoteSequence.SourceInfo.SCORE_BASED):
       attribute_for_program_index = 'part'
@@ -215,7 +220,8 @@ class PianorollEncoderDecoder(object):
              pianoroll_to_program_map=None,
              velocity=None,
              channel_start_index=0,
-             filename=None):
+             filename=None,
+             source_type=music_pb2.NoteSequence.SourceInfo.SCORE_BASED):
     """Decode pianoroll into NoteSequence."""
     # TODO(annahuang): Handle unquantized time.
     if pianoroll.ndim != 3:
@@ -234,6 +240,8 @@ class PianorollEncoderDecoder(object):
     #source_type = 'basic_autofill_cnn_generated'
     sequence.filename = '%s' % filename
     sequence.collection_name = 'basic_autofill_cnn_generated'
+    # TODO: Do not set default for source_type
+    sequence.source_info.source_type = source_type
 
     tempo = sequence.tempos.add()
     tempo.time = 0.0
