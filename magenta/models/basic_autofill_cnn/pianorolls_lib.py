@@ -74,7 +74,8 @@ def get_pianoroll_to_program_assignment(
     program_idx = part_idx / num_doublings_per_program
     if program_idx >= num_programs:
       program_idx = num_programs - 1
-    part_to_program[part] = midi_programs.keys()[program_idx]
+    # Subtract 1 because MIDI program numbers are 1 based.
+    part_to_program[part] = midi_programs.keys()[program_idx] - 1
   return part_to_program
 
 

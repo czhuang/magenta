@@ -32,8 +32,9 @@ FLAGS = tf.app.flags.FLAGS
 # TODO(annahuang): Set the default input and output_dir to None for opensource.
 # condition_on/sample1.mid
 # highest.tfrecord
+# /u/huangche/data/bach/high0.tfrecord
 tf.app.flags.DEFINE_string(
-    'prime_fpath', '/u/huangche/data/bach/high0.tfrecord',
+    'prime_fpath', '/u/huangche/generated/useful/2016-10-06_17:56:31-DeepResidual/za_last_step_1_2_3_0.tfrecord',
     'Path to the Midi or MusicXML file that is used as a prime.')
 tf.app.flags.DEFINE_string(
     'validation_set_dir', '/u/huangche/data/bach/instrs=4_duration=0.250_sep=True',
@@ -51,14 +52,20 @@ FORWARD, RANDOM = range(2)
 # Enumerations for method used to pick a pitch for each timestep.
 ARGMAX, SAMPLE = range(2)
 
+
 def sample_pitch(prediction, time_step, instr_idx, num_pitches, temperature):
   # At the randomly choosen timestep, sample pitch.
   p = prediction[time_step, :, instr_idx]
-  p = np.exp(np.log(p) / temperature)
-  p /= p.sum()
-  if np.isnan(p).any():
-    print p
-  pitch = np.random.choice(range(num_pitches), p=p)
+  #print 'temperature', temperature
+  if temperature == 0.:
+    print 'Taking the argmax'
+    pitch = np.argmax(p)
+  else:
+    p = np.exp(np.log(p) / temperature)
+    p /= p.sum()
+    if np.isnan(p).any():
+      print p
+    pitch = np.random.choice(range(num_pitches), p=p)
   return pitch
 
 
@@ -82,19 +89,32 @@ def regenerate_voice_by_voice(pianorolls, wrapped_model, config):
   autofill_steps = []
 
   # Generate instrument by instrument.
+  print 'config.instr_ordering', config.instr_ordering
   if config.instr_ordering is not None:
     instr_ordering = config.instr_ordering
   else:
-    instr_ordering = np.random.permutation(config.voices_to_regenerate)
+    instr_ordering = list(np.random.permutation(config.voices_to_regenerate))
+  print 'instr_ordering', instr_ordering
+
   instr_ordering_str_list = [str(idx) for idx in instr_ordering]
   instr_ordering_str = '_'.join(instr_ordering_str_list)
-  for instr_idx in instr_ordering:
+  
+  duplicated_instr_ordering = instr_ordering * config.num_rewrite_iterations
+  print 'duplicated_instr_ordering', duplicated_instr_ordering 
+  np.random.shuffle(duplicated_instr_ordering)
+  print 'shuffled', duplicated_instr_ordering
+
+  for instr_idx in duplicated_instr_ordering: #instr_ordering:
     print 'instr_idx', instr_idx
     mask_for_generation = mask_tools.get_instrument_mask(pianoroll_shape,
                                                          instr_idx)
 
     # Mask out the part that is going to be predicted.
     context_pianoroll *= 1 - mask_for_generation
+    
+    # Since might be regenerating multiple iterations, mask out the current
+    # instrument in the generated pianoroll too.
+    generated_pianoroll *= 1 - mask_for_generation
 
     # For each instrument, choose random ordering in time for filling in.
     if config.sequential_order_type == FORWARD:
@@ -140,75 +160,9 @@ def regenerate_voice_by_voice(pianorolls, wrapped_model, config):
       step = AutofillStep(prediction, (change_index, 1),
                           generated_pianoroll.copy())
       autofill_steps.append(step)
-
+  print np.sum(generated_pianoroll), num_timesteps * num_instruments
+  assert np.sum(generated_pianoroll) == num_timesteps * num_instruments
   return generated_pianoroll, autofill_steps, original_pianoroll, instr_ordering_str
-
-
-def generate_gibbs_like(pianorolls, wrapped_model, config):
-  model = wrapped_model.model
-
-  # Getss shapes.
-  batch_size, num_timesteps, num_pitches, num_instruments = pianorolls.shape
-  pianoroll_shape = pianorolls[0].shape
-
-  generated_pianoroll = np.zeros(pianoroll_shape)
-  generated_mask = np.zeros(pianoroll_shape)
-  autofill_steps = []
-
-  timestep_indices = range(num_timesteps)
-  pair_indices = [(instr_idx, time_idx)
-                  for instr_idx in config.voices_to_regenerate
-                  for time_idx in timestep_indices]
-  print 'len of pair_indices', len(pair_indices)
-  pair_indices_copy = []
-  for _ in range(config.num_regen_iterations):
-    pair_indices_copy.extend(copy.copy(pair_indices))
-
-  pair_indices = pair_indices_copy
-  print 'len of pair_indices after', len(pair_indices)
-  # In place shuffling.
-  np.random.shuffle(pair_indices)
-  counter = 0
-  for instr_idx, time_step in pair_indices:
-    counter += 1
-    if counter % 100 == 0:
-      print 'taken steps', counter
-    #print 'instr_idx, time_step', instr_idx, time_step
-    assert generated_mask.ndim == 3
-    # Reset mask.
-    generated_mask[:, :, :] = 0
-    # Turn on mask for the step being generated.
-    generated_mask[time_step, :, instr_idx] = 1
-    # Remove the note to be regenerated.
-    generated_pianoroll[time_step, :, instr_idx] = 0
-
-    # Stack all pieces to create a batch.
-    input_datas = []
-    for data_index in range(batch_size):
-      if data_index == config.requested_index:
-        input_data = mask_tools.apply_mask_and_stack(generated_pianoroll,
-                                                     generated_mask)
-      else:
-        mask = mask_tools.get_random_instrument_mask(pianoroll_shape)
-        input_data = mask_tools.apply_mask_and_stack(pianorolls[data_index],
-                                                     mask)
-      input_datas.append(input_data)
-    input_datas = np.asarray(input_datas)
-
-    raw_prediction = wrapped_model.sess.run(model.predictions,
-                                            {model.input_data: input_datas})
-
-    prediction = raw_prediction[config.requested_index]
-    pitch = sample_pitch(prediction, time_step, instr_idx, num_pitches,
-                         config.temperature)
-
-    generated_pianoroll[time_step, pitch, instr_idx] = 1
-
-    change_index = tuple([time_step, pitch, instr_idx])
-    step = AutofillStep(prediction, (change_index, 1),
-                        generated_pianoroll.copy())
-    autofill_steps.append(step)
-  return generated_pianoroll, autofill_steps, None, None
 
 
 def generate_routine(config, output_path):
@@ -239,6 +193,10 @@ def generate_routine(config, output_path):
   output_path = os.path.join(output_path, run_id)
   if not os.path.exists(output_path):
     os.makedirs(output_path)
+
+  # Save config, as .py so that can read with syntax highlighting.
+  with open(os.path.join(output_path, 'config.py'), 'w') as p:
+    p.writelines(str(config))
 
   # Gets model.
   print 'Retrieving %s model...' % model_name
@@ -281,27 +239,33 @@ def generate_routine(config, output_path):
     seqs_by_ordering = defaultdict(list)
     # TODO(annahuang): Use consistent instrument or voice.
     instr_orderings = list(permutations(config.voices_to_regenerate))
-    if config.num_complete_permutations is not None:
-      instr_orderings = instr_orderings * 2
+    if config.num_samples_per_instr_ordering is not None:
+      instr_orderings = instr_orderings * config.num_samples_per_instr_ordering
     elif config.num_samples is not None:
-      instr_orderings = instr_orderings[:config.num_samples]
+      # TODO(annahuang): A hack, instrument ordering not used directly for this case, instead just for looping
+      instr_orderings = range(config.num_samples)
+      #instr_orderings = instr_orderings[:config.num_samples]
     else:
-      tf.log.warning('Should specify num_samples or num_complete_permutations, otherwise assumes num_complete_permutations to be 1')    
+      tf.log.warning('Should specify num_samples or num_samples_per_instr_ordering, otherwise assumes num_samples_per_instr_ordering to be 1')    
 
     for i, instr_ordering in enumerate(instr_orderings):	
       # Generate.
-      config.instr_ordering = instr_ordering
+      if isinstance(instr_ordering, list):
+        config.instr_ordering = instr_ordering
       generated_results = globals()[generate_method_name](pianorolls,
                                                           wrapped_model, config)
       generated_pianoroll, autofill_steps, original_pianoroll, instr_ordering_str = generated_results
   
-      run_local_id = '%s-%s-%d-%s-%d' % (instr_ordering_str, run_id, prime_idx, piece_name, i)
+      run_local_id = '%d-%s-%d-%s-%s' % (i, run_id, prime_idx, piece_name, instr_ordering_str)
+      if config.run_description is not None:
+        run_local_id = config.run_description + run_local_id
       
       # TODO(annahuang): Remove, just for debugging.
-      requested_instr_ordering_str = '_'.join(str(i) for i in instr_ordering)
-      print 'requested', requested_instr_ordering_str, instr_ordering_str 
-      if instr_ordering_str is not None and instr_ordering_str != requested_instr_ordering_str:
-        raise ValueError('Instrument ordering mismatch')
+      if isinstance(instr_ordering, list):
+        requested_instr_ordering_str = '_'.join(str(i) for i in instr_ordering)
+        print 'requested', requested_instr_ordering_str, instr_ordering_str 
+        if instr_ordering_str is not None and instr_ordering_str != requested_instr_ordering_str:
+          raise ValueError('Instrument ordering mismatch')
 
       # Synths original, only for the first sample.
       if original_pianoroll is not None and not i:
@@ -362,6 +326,7 @@ class GenerationConfig(object):
     model_name: A string that gives the ...
   """
   _defaults = dict(
+      run_description=None,
       generate_method_name='regenerate_voice_by_voice',
       model_name='DeepResidual',
       prime_fpath=None,
@@ -382,9 +347,9 @@ class GenerationConfig(object):
       temperature=1,
       num_diff_primes=1,
       num_samples=1,  # None to specify count by permuations.
-      num_complete_permutations=None,  # None to specify count by samples.
+      num_samples_per_instr_ordering=None,  # Only used when we care about analyzing different instrument ordering as oppose to just getting more samples.
       requested_num_timesteps=8,
-      num_regen_iterations=10,  # Number of times to regenerate all the voices.
+      num_rewrite_iterations=10,  # Number of times to regenerate all the voices.
       plot_process=False)
 
   def __init__(self, *args, **init_hparams):
@@ -397,6 +362,16 @@ class GenerationConfig(object):
       if key in init_hparams:
         value = init_hparams[key]
       setattr(self, key, value)
+
+  def __str__(self):
+    config_str = 'config = dict(\n'
+    for key, value in self.__dict__.items():
+      if isinstance(value, str):
+        config_str += '  %s="%s",\n' % (str(key), str(value))
+      else:
+        config_str += '  %s=%s,\n' % (str(key), str(value))
+    config_str += ')'
+    return config_str
 
 
 GENERATION_PRESETS = {
@@ -421,9 +396,9 @@ GENERATION_PRESETS = {
         prime_voices=range(4),
         voices_to_regenerate=range(4),
         sequential_order_type=RANDOM,
-        num_samples=None,
-        num_complete_permutations=10,
-        requested_num_timesteps=32,
+        num_samples=50,
+        num_rewrite_iterations=10,
+        requested_num_timesteps=16,
         plot_process=False),
     # Configuration for generating an accompaniment to prime melody.
     'GenerateAccompanimentToPrimeMelodyConfig': GenerationConfig(
@@ -445,10 +420,11 @@ GENERATION_PRESETS = {
         start_with_empty=True,
         validation_path=FLAGS.validation_set_dir,
         voices_to_regenerate=range(4),
-        sequential_order_type=FORWARD, #RANDOM,
-        num_samples=10,
-        requested_num_timesteps=16,
-        num_regen_iterations=2,
+        sequential_order_type=RANDOM, 
+        num_samples=3,
+        requested_num_timesteps=32, #32, #64, #16,
+        num_rewrite_iterations=5,
+        temperature=0, #0.1, #0.5, #1 # It seems forward requires a higher temperature, with 0.1 its holding on to same notes.
         plot_process=False),
     # Configurations for generating in random instrument cross timestep order.
     'GenerateGibbsLikeConfig': GenerationConfig(
@@ -460,7 +436,7 @@ GENERATION_PRESETS = {
         sequential_order_type=RANDOM,
         num_samples=5,
         requested_num_timesteps=16,
-        num_regen_iterations=2,
+        num_rewrite_iterations=2,
         plot_process=False),
     # Configurations for generating in random instrument cross timestep order.
     'InpaintingConfig': GenerationConfig(
@@ -473,7 +449,7 @@ GENERATION_PRESETS = {
         sequential_order_type=RANDOM,
         num_samples=2,
         requested_num_timesteps=4,
-        num_regen_iterations=2,
+        num_rewrite_iterations=2,
         plot_process=False)
 }
 

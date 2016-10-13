@@ -43,15 +43,32 @@ def get_input():
   return pianoroll
 
 
-def set_axes_style(ax, total_time):
+def set_axes_style(ax, total_time, subplots, pitch_lb=None, pitch_ub=None):
   ax.tick_params(axis=u'both', which=u'both',length=0)
-  ax.tick_params(axis='both', which='major', labelsize=7)
-  ax.tick_params(axis='both', which='minor', labelsize=7)
+  if subplots:
+    labelsize=4
+  else:
+    labelsize=7
+  ax.tick_params(axis='both', which='major', labelsize=labelsize)
+  ax.tick_params(axis='both', which='minor', labelsize=labelsize)
   pitch_base = 37  # the label is actually one above 36, since starts with 0, ends at 88
   c_ticks = [12*i + 11 for i in range(4)] 
   y_ticks = [0] + c_ticks + [89-pitch_base]
+
+  # blabel_pitch_base = pitch_base + 1  # the label is actually one above 36, since starts with 0, ends at 88
+  # c_ticks = [12*i + label_pitch_base % 12 for i in range(num_pitches/12 + 1)] 
+  # label_pitch_top = label_pitch_base + num_pitches
+  # if label_pitch_top % 12 == 0:
+  #   extra_top_tick = []
+  # else:
+  #   extra_top_tick = [num_pitches]
+  # y_ticks = c_ticks + extra_top_tick
+  # print extra_top_tick
+  # print 'y_ticks', y_ticks
   ax.yaxis.set_ticks(y_ticks)
   ax.set_yticklabels([pitch_base+tick for tick in y_ticks])
+  if pitch_lb is not None and pitch_ub is not None:
+    ax.set_ylim([pitch_lb - pitch_base, pitch_ub - pitch_base])
 
   time_hop = 8
   x_ticks = range(total_time/time_hop + 1)
@@ -183,51 +200,74 @@ def plot_blankout():
   plt.close()
 
 
-def plot_steps(autofill_steps, original_pianoroll, output_path, run_id, subplots=False):
+def plot_steps(steps, original_pianoroll, output_path, run_id, 
+               subplot_step_indices=None, subplots=False):
+  if subplots and subplot_step_indices is None:
+    raise ValueError('Need to provide subplot_step_indices')
   maskedout_instr_indices = set()
-  shape = autofill_steps[0].prediction.shape
+  shape = steps[0].prediction.shape
   num_timesteps, num_pitches, num_instrs = shape
   
   # TODO: just for debugging
-  num_regen_iterations = len(autofill_steps) / (num_timesteps * num_instrs)
+  num_regen_iterations = len(steps) / (num_timesteps * num_instrs)
   print 'num_regen_iterations', num_regen_iterations 
   
   already_generated_pianoroll = np.zeros(shape)
   previous_already_generated_pianoroll = already_generated_pianoroll.copy()
-  num_steps = len(autofill_steps)
-  ALLOWED_STEPS = 4
-  if subplots:
-    assert num_steps == ALLOWED_STEPS
-    #fig, axes = plt.subplots(nrows=1, ncols=4)
+  history_generated_pianoroll = np.zeros(shape)
+  previous_change_index = None
+  num_steps = len(steps)
 
   if not os.path.exists(output_path):
     os.mkdir(output_path)
-  
-  for i, step in enumerate(autofill_steps):
-    if subplots:
-      #axis = axes.flat[i]
-      plt.subplot(1, ALLOWED_STEPS, i+1)
-    else:
-      plt.figure()
-    axis = plt.gca()
-   
+ 
+  # Crop heatmap to save space:
+  pitch_lb, pitch_ub = None, None
+
+  pitch_lb = 60 # which is 59 on plot axes
+  pitch_ub = 89 
+  print 'shape', shape
+  # The matrices for plotting is tranposed, where the first dimension is pitch.
+  # Lambda function for cropping the region for plotting.
+  crop_matrix_for_plot = lambda x: x  #x[:plot_pitch_start_index, :]
+  shift_pitch_for_plot = lambda x: x  #x - plot_pitch_start_index
+ 
+  for i, step in enumerate(steps):
     # Update change.
     change_index = step.change_to_context[0]
     time_step, pitch, instr_idx = change_index
     maskedout_instr_indices.add(instr_idx)
     
     # Since there might be multiple regenerations, need to blank out the pianoroll before adding.
+    history_generated_pianoroll[time_step, :, instr_idx] += already_generated_pianoroll[time_step, :, instr_idx]
     already_generated_pianoroll[time_step, :, instr_idx] = 0
     already_generated_pianoroll[change_index] = 1
-   
+  
+    if subplots and i not in subplot_step_indices:
+      # Update previous.
+      previous_already_generated_pianoroll = already_generated_pianoroll.copy()
+      previous_change_index = change_index
+      continue
+    
+    print 'plotting for step %d' % i
+    # Setting up plotting.
+    if subplots and i in subplot_step_indices:
+      #axis = axes.flat[i]
+      print '# of steps to plot:', len(subplot_step_indices)
+      #plt.subplot(1, len(subplot_step_indices), subplot_step_indices.index(i)+1)
+      plt.subplot(2, len(subplot_step_indices) / 2, subplot_step_indices.index(i)+1)
+    else:
+      plt.figure()
+    axis = plt.gca()
     # TODO(annahuang): Seems to have lost the current instr original context
    
     # Mark the context that is conditioned on as darker.
     print 'maskedout_instr_indices', maskedout_instr_indices
     original_context = np.delete(original_pianoroll, list(maskedout_instr_indices), 2)
     print original_pianoroll.shape
-    for t, p in zip(*np.where(original_context.sum(axis=2))):
-      axis.add_patch(Rectangle((t-.5, p-.5), 1, 1,
+
+    for t, p in zip(*np.where(crop_matrix_for_plot(original_context.sum(axis=2)))):
+      axis.add_patch(Rectangle((t, p-.5), 1, 1,
            facecolor="lawngreen", edgecolor='none'))
    
     # Prediction for mask outs of current instrument.
@@ -235,11 +275,11 @@ def plot_steps(autofill_steps, original_pianoroll, output_path, run_id, subplots
     # 1 (previous_already_generated_pianoroll[:, :, instr_idx].T)
     #plt.imshow(prediction_for_masked, origin='lower',
     #   nterpolation='none', aspect='auto', cmap='summer')
-   
+
     # Trying log scale.
     #im = axis.imshow(20*np.log(prediction_for_masked+1), origin='lower',
     #   interpolation='none', aspect='auto', cmap='Greys') #cmap='summer')
-    im = axis.imshow(prediction_for_masked, origin='lower',
+    im = axis.imshow(crop_matrix_for_plot(prediction_for_masked), origin='lower',
       interpolation='none', aspect='equal', cmap='Greys', vmin=0, vmax=1) #cmap='summer')
    
     # Prediction on the current context.
@@ -248,35 +288,53 @@ def plot_steps(autofill_steps, original_pianoroll, output_path, run_id, subplots
     #plt.imshow(prediction_for_masked, origin='lower',
     #   nterpolation='none', aspect='auto', cmap='summer', alpha=0.4)
    
+    # Mark the historical generated as magenta boxes.
+    for t, p in zip(*np.where(
+        crop_matrix_for_plot(history_generated_pianoroll.sum(axis=2)))):
+      axis.add_patch(Rectangle((t, p-.5), 1, 1,
+           facecolor='none', edgecolor='magenta'))
+   
+
     # Marks the already generated as magenta.
-    for t, p in zip(*np.where(previous_already_generated_pianoroll.sum(axis=2))):
-      axis.add_patch(Rectangle((t-.5, p-.5), 1, 1,
+    for t, p in zip(*np.where(
+        crop_matrix_for_plot(previous_already_generated_pianoroll.sum(axis=2)))):
+      axis.add_patch(Rectangle((t, p-.5), 1, 1,
            facecolor='magenta', edgecolor='none'))
    
     # Mark the current instrument original.
     if instr_idx < original_pianoroll.shape[-1]:
       current_context = original_pianoroll[:, :, instr_idx]
       print current_context.shape
-      for t, p in zip(*np.where(current_context)):
-        axis.add_patch(Rectangle((t-.5, p-.5), 1, 1,
+      for t, p in zip(*np.where(crop_matrix_for_plot(current_context))):
+        axis.add_patch(Rectangle((t, p-.5), 1, 1,
              fill=None, edgecolor="lawngreen"))
    
     # Marks the current change.
-    axis.add_patch(Rectangle((time_step-.5, pitch-.5), 1, 1,
-           fill=None, edgecolor="magenta", linewidth='2'))
-    
+    axis.add_patch(Rectangle((time_step, shift_pitch_for_plot(pitch-.5)), 1, 1,
+           fill=None, edgecolor="darkturquoise", linewidth='2'))
+   
+    # Mark the previous change, adds a thicker border to it.
+    if previous_change_index is not None:
+      axis.add_patch(
+          Rectangle((previous_change_index[0], shift_pitch_for_plot(previous_change_index[1]-.5)), 1, 1,
+          fill=None, edgecolor="darkturquoise", linewidth='1'))
+
     # Setting axes styles.  
     total_time = step.prediction.shape[0]
-    c_positions, b_positions = set_axes_style(axis, total_time) 
+    c_positions, b_positions = set_axes_style(
+        axis, total_time, subplots, pitch_lb, pitch_ub)
  
     # Add lines for C.
     offset = 0.5
     c_positions = [c_positions[0] - 12] + c_positions
     b_positions = b_positions + [5]
+    print 'c_positions', c_positions
     for c_pos in c_positions:
       c_y_pos = c_pos-offset
       c_alpha = 0.9
-      plt.axhline(y=c_y_pos, xmin=0, xmax=total_time, color='royalblue', linewidth='1', alpha=c_alpha)
+      print c_y_pos
+      if c_pos > 0:
+        plt.axhline(y=c_y_pos, xmin=0, xmax=total_time, color='royalblue', linewidth='1', alpha=c_alpha)
       # Add dash lines for black keys.
       for b_pos in b_positions:
         y_pos = c_y_pos + b_pos
@@ -285,31 +343,44 @@ def plot_steps(autofill_steps, original_pianoroll, output_path, run_id, subplots
           alpha = 0.5
         else:
           y_pos += offset
+        print y_pos
         plt.axhline(y=y_pos, xmin=0, xmax=total_time, color='royalblue', linewidth='1', alpha=alpha)
 
     # TODO: Don't know why title missing for other subplots. 
-    plt.title('Sampled step %d' % (i+1), fontsize=10)
+    #plt.title('Sampled step %d' % (i+1), fontsize=10)
     #plt.title(repr(step.change_to_context))
+    if subplots:
+      title_fontsize=6
+    else:
+      title_fontsize=10
+    plt.title('Step %d: v%d, t%d, p%d' % (i, instr_idx, time_step, pitch+1), fontsize=title_fontsize)
     #plt.tight_layout()
     
+    # TODO: Add colorbar to a different subplot..
     # TODO: can't get colorbar to position correctly in subplots
     # Setting colorbar styles.
-    if not subplots or (subplots and i + 1 == ALLOWED_STEPS):
-      ticklabels = [0.0, 0.5, 1.0]
-      #cbar = fig.colorbar(im, ax=axes.ravel().tolist(), ticks=ticklabels)
-      #fig.subplots_adjust(right=0.8)
-      #cbar_ax = fig.add_axes([0.85, 0.15, 0.03, 0.7])
-      #cbar = fig.colorbar(im, cax=cbar_ax)
-      cbar = plt.colorbar(im, ticks=ticklabels)
-      cbar.ax.set_yticklabels(ticklabels, size=6)
-      cbar.outline.set_linewidth(0.5) 
+    #if not subplots or (subplots and i + 1 == ALLOWED_STEPS):
+    #  ticklabels = [0.0, 0.5, 1.0]
+    #  #cbar = fig.colorbar(im, ax=axes.ravel().tolist(), ticks=ticklabels)
+    #  #fig.subplots_adjust(right=0.8)
+    #  #cbar_ax = fig.add_axes([0.85, 0.15, 0.03, 0.7])
+    #  #cbar = fig.colorbar(im, cax=cbar_ax)
+    #  cbar = plt.colorbar(im, ticks=ticklabels)
+    #  cbar.ax.set_yticklabels(ticklabels, size=6)
+    #  cbar.outline.set_linewidth(0.5) 
     
-    if not subplots or (subplots and i + 1 == ALLOWED_STEPS):
-      plt.savefig(os.path.join(output_path, 'z_run_id_%s-iter_%d.png' % (run_id, i)), dpi=300)#,
-                 # bbox_inches='tight')
+    if not subplots or (subplots and i == subplot_step_indices[-1]):
+      fname_prefix = 'z'
+      if subplots:
+        fname_prefix = 'zz'
+      plt.savefig(
+          os.path.join(output_path, '%s_run_id_%s-iter_%d.png' % (
+              fname_prefix, run_id, i)), dpi=300)#, bbox_inches='tight')
       plt.close()
    
     previous_already_generated_pianoroll = already_generated_pianoroll.copy()
+    previous_change_index = change_index
+  print 'equal', np.sum(already_generated_pianoroll), num_timesteps * num_instrs
   assert np.sum(already_generated_pianoroll) == num_timesteps * num_instrs
   return already_generated_pianoroll
 
