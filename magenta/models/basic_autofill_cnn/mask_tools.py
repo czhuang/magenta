@@ -175,6 +175,24 @@ def get_random_time_range_mask(pianoroll_shape, mask_border):
   return mask
 
 
+def get_random_instrument_time_mask(pianoroll_shape, timesteps):
+  if len(pianoroll_shape) != 3:
+    raise ValueError(
+        'Shape needs to of 3 dimensional, time, pitch, and instrument.')
+  mask = np.zeros(pianoroll_shape)
+  time_range, _, num_instruments = pianoroll_shape
+  # Mask out only one intrument.
+  instr_idx = np.random.randint(num_instruments)
+  random_start_idx = np.random.randint(time_range)
+  end_idx = random_start_idx + timesteps
+  #print 'random_start_idx, end_idx', random_start_idx, end_idx 
+  for time_idx in range(random_start_idx, end_idx):
+    time_idx %= time_range
+    mask[time_idx, :, instr_idx] = 1
+  assert np.sum(mask) != timesteps
+  return mask
+
+
 def get_multiple_random_instrument_time_mask(pianoroll_shape, mask_border,
                                              num_maskout):
   """Mask out multiple random time ranges, randomly across instruments.

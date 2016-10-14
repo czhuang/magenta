@@ -92,8 +92,8 @@ def are_instruments_monophonic(pianoroll):
   # An instrument can either have one or no pitch on at a time step.
   #print 'are_instruments_monophonic, pianoroll', pianoroll.shape
   num_notes_on = np.unique(np.sum(pianoroll, axis=1))
-  print 'pianoroll shape', pianoroll.shape
-  print 'num_notes_on', num_notes_on
+  #print 'pianoroll shape', pianoroll.shape
+  #print 'num_notes_on', num_notes_on
   return np.allclose(num_notes_on, np.arange(2)) or (
       np.allclose(num_notes_on, np.array([1.])))
 
@@ -154,7 +154,7 @@ class PianorollEncoderDecoder(object):
     # Collect notes into voices.
     parts = defaultdict(list)
     #TODO(annahuang): Check source type and then check for parts if score-based.
-    print 'encode: source_type is', sequence.source_info.source_type
+    #print 'encode: source_type is', sequence.source_info.source_type
     if (sequence.source_info.source_type == 
         music_pb2.NoteSequence.SourceInfo.SCORE_BASED):
       attribute_for_program_index = 'part'

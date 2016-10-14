@@ -165,6 +165,100 @@ def regenerate_voice_by_voice(pianorolls, wrapped_model, config):
   return generated_pianoroll, autofill_steps, original_pianoroll, instr_ordering_str
 
 
+def generate_gibbs_like(pianorolls, wrapped_model, config):
+  model = wrapped_model.model
+  assert pianorolls.ndim == 4
+  # Gets shapes.
+  batch_size, num_timesteps, num_pitches, num_instruments = pianorolls.shape
+  pianoroll_shape = pianorolls[0].shape
+
+  generated_pianoroll = np.zeros(pianoroll_shape)
+  # To check if all was regenerated
+  global_check = np.ones(pianoroll_shape)
+  autofill_steps = []
+
+  # Estimated number of prediction steps to cover the whole pianoroll.
+  if config.condition_mask_size is None:
+    raise ValueError('condition_mask_size is not yet set, still None.')
+  inverse_blankout_ratio = int(np.ceil(
+      float(num_timesteps) / config.condition_mask_size * (1 + 1./config.sample_extra_percentage)))
+  #print 'inverse_blankout_ratio', inverse_blankout_ratio
+  num_steps_per_rewrite = num_instruments * inverse_blankout_ratio
+  #print 'num_steps_per_rewrite', num_steps_per_rewrite
+
+  # TODO: for debug
+  counter = 0
+  for _ in range(config.num_rewrite_iterations * num_steps_per_rewrite):
+    
+    # Create mask for one instrument, with blankout_timesteps blanked out.
+    # TODO: Make it possible to use any mask.  Can just set a config parameter.
+    # If blank out multiple instruments at the same time then can more easily resample the harmony.
+    if config.condition_mask_size is None:
+      raise ValueError('condition_mask_size is not yet set, still None.')
+    mask_func = mask_tools.get_random_instrument_time_mask
+    condition_mask = mask_func(pianoroll_shape, config.condition_mask_size)
+    #print 'condition_mask.shape', condition_mask.shape
+    #print np.sum(condition_mask), config.condition_mask_size * num_pitches
+    assert np.sum(condition_mask) == config.condition_mask_size * num_pitches
+    global_check -= condition_mask
+    global_check = np.clip(global_check, 0, 1)
+    #print 'np.sum(global_check)', np.sum(global_check)
+    #if np.sum(global_check) == 0.:
+    #  print 'first iter where all has been rewritten', counter
+
+    # Need to generate one by one.
+    resample_order = np.random.permutation(np.arange(int(np.sum(condition_mask)/num_pitches)))
+    indices_to_resample = np.array(np.where(condition_mask[:, :1, :]>0)).T
+    #print 'indices_to_resample.shape', indices_to_resample.shape   
+    #print counter, indices_to_resample
+    
+    for resample_idx in resample_order:
+      time_step, _, instr_idx = indices_to_resample[resample_idx]
+      # TODO(annahuang): print for debugging
+      counter += 1
+      if counter % 100 == 0:
+        print 'taken steps', counter, '# of pianoroll cells unvisited', np.sum(global_check)
+      
+      # Remove the note to be resampled since might already have a note there.
+      generated_pianoroll[time_step, :, instr_idx] = 0
+ 
+      # Stack all pieces to create a batch.
+      input_datas = []
+      for data_index in range(batch_size):
+        if data_index == config.requested_index:
+          input_data = mask_tools.apply_mask_and_stack(generated_pianoroll,
+                                                       condition_mask)
+        else:
+          # TODO: Maybe need to change this mask to match the mask used for generation.
+          mask = mask_tools.get_random_instrument_mask(pianoroll_shape)
+          input_data = mask_tools.apply_mask_and_stack(pianorolls[data_index],
+                                                       mask)
+        input_datas.append(input_data)
+      input_datas = np.asarray(input_datas)
+      print 'sess.run...' 
+      predictions = wrapped_model.sess.run(model.predictions,
+                                              {model.input_data: input_datas})
+  
+      prediction = predictions[config.requested_index]
+      pitch = sample_pitch(prediction, time_step, instr_idx, num_pitches,
+                           config.temperature)
+  
+      generated_pianoroll[time_step, pitch, instr_idx] = 1
+  
+      change_index = tuple([time_step, pitch, instr_idx])
+      step = AutofillStep(prediction, (change_index, 1),
+                          generated_pianoroll.copy())
+      autofill_steps.append(step)
+  
+      # Update.
+      condition_mask[time_step, :, instr_idx] = 0
+
+  print 'np.sum(global_check) should equal to zero', np.sum(global_check), 
+  print 'ratio unvisited', np.sum(global_check)/np.product(pianoroll_shape)
+  #assert np.sum(global_check) == 0.
+  return generated_pianoroll, autofill_steps, None, None
+
+
 def generate_routine(config, output_path):
   prime_fpath = config.prime_fpath
   requested_validation_piece_name = config.requested_validation_piece_name
@@ -302,6 +396,7 @@ def generate_routine(config, output_path):
 
    
 def main(unused_argv):
+  print 'main..'
   #generate_routine(
   #    GENERATION_PRESETS['RegenerateValidationPieceVoiceByVoiceConfig'],
   #    FLAGS.generation_output_dir)
@@ -310,11 +405,11 @@ def main(unused_argv):
   #generate_routine(
   #    GENERATION_PRESETS['GenerateAccompanimentToPrimeMelodyConfig'],
   #    FLAGS.generation_output_dir)
-  generate_routine(GENERATION_PRESETS['GenerateFromScratchVoiceByVoice'],
-                   FLAGS.generation_output_dir)
-
-  #generate_routine(GENERATION_PRESETS['GenerateGibbsLikeConfig'],
+  #generate_routine(GENERATION_PRESETS['GenerateFromScratchVoiceByVoice'],
   #                 FLAGS.generation_output_dir)
+
+  generate_routine(GENERATION_PRESETS['GenerateGibbsLikeConfig'],
+                   FLAGS.generation_output_dir)
 
 
 class GenerationConfig(object):
@@ -350,6 +445,8 @@ class GenerationConfig(object):
       num_samples_per_instr_ordering=None,  # Only used when we care about analyzing different instrument ordering as oppose to just getting more samples.
       requested_num_timesteps=8,
       num_rewrite_iterations=10,  # Number of times to regenerate all the voices.
+      condition_mask_size=None,
+      sample_extra_percentage=None,
       plot_process=False)
 
   def __init__(self, *args, **init_hparams):
@@ -434,9 +531,11 @@ GENERATION_PRESETS = {
         validation_path=FLAGS.validation_set_dir,
         voices_to_regenerate=range(4),
         sequential_order_type=RANDOM,
-        num_samples=5,
-        requested_num_timesteps=16,
-        num_rewrite_iterations=2,
+        num_samples=3,
+        requested_num_timesteps=32,
+        num_rewrite_iterations=10,
+        condition_mask_size=8,
+        sample_extra_percentage=10,
         plot_process=False),
     # Configurations for generating in random instrument cross timestep order.
     'InpaintingConfig': GenerationConfig(
