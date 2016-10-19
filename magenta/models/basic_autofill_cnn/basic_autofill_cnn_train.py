@@ -20,11 +20,13 @@ from magenta.models.basic_autofill_cnn.basic_autofill_cnn_graph import BasicAuto
 from magenta.models.basic_autofill_cnn.basic_autofill_cnn_graph import build_placeholders_initializers_graph
 from magenta.models.basic_autofill_cnn.hparams_tools import Hyperparameters
 
+
+# '/u/huangche/data/bach/instrs=4_duration=0.250_sep=True',
 FLAGS = tf.app.flags.FLAGS
 # TODO(annahuang): Set the default input and output_dir to None for opensource.
 tf.app.flags.DEFINE_string(
     'input_dir',
-    '/u/huangche/data/bach/instrs=4_duration=0.250_sep=True',
+    '/u/huangche/data/bach/qbm120/instrs=4_duration=0.125_sep=True',
     'Path to the directory that holds the train, valid, test TFRecords.')
 tf.app.flags.DEFINE_string('run_dir', '/u/huangche/tf_logss',
                            'Path to the directory where checkpoints and '
@@ -59,10 +61,10 @@ tf.app.flags.DEFINE_integer('num_epochs', 0,
 tf.app.flags.DEFINE_integer('save_model_secs', 30,
                             'The number of seconds between saving each '
                             'checkpoint.')
-tf.app.flags.DEFINE_string('maskout_method', 'random_multiple_instrument_time',
-                           "The choices include: 'random_instrument', "
+tf.app.flags.DEFINE_string('maskout_method', 'random_all_time_instrument',
+                           "The choices include: 'random_all_time_instrument', "
                            "'random_patches', 'random_pitch_range',"
-                           'random_time_range, '
+                           'random_time_range, random_multiple_instrument_time, '
                            'random_multiple_instrument_time.')
 tf.app.flags.DEFINE_bool('separate_instruments', True,
                          'Separate instruments into different input feature'

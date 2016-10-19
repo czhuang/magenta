@@ -160,7 +160,10 @@ def make_data_feature_maps(sequences, config, encoder, start_crop_index=None):
     elif maskout_method == config.RANDOM_MULTIPLE_INSTRUMENT_TIME:
       mask = mask_tools.get_multiple_random_instrument_time_mask(
           cropped_pianoroll.shape, maskout_border, config.num_maskout)
-
+    elif maskout_method == config.RANDOM_ALL_TIME_INSTRUMENT:
+      mask = mask_tools.get_random_all_time_instrument_mask(cropped_pianoroll.shape)
+    else:
+      raise ValueError('Mask method not supported.')
     masked_pianoroll = mask_tools.apply_mask_and_stack(cropped_pianoroll, mask)
     input_data.append(masked_pianoroll)
     targets.append(cropped_pianoroll)

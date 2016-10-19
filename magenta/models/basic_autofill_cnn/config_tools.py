@@ -33,10 +33,11 @@ class PipelineConfig(object):
   initial_maskout_factor = 0.001
   maskout_method_strs = ['random_instrument', 'random_patches',
                          'random_pitch_range', 'random_time_range',
-                         'random_multiple_instrument_time']
+                         'random_multiple_instrument_time',
+                         'random_all_time_instrument']
   RANDOM_INSTRUMENT, RANDOM_PATCHES, RANDOM_PITCH_RANGE = range(3)
   RANDOM_TIME_RANGE, RANDOM_MULTIPLE_INSTRUMENT_TIME = range(3, 5)
-
+  RANDOM_ALL_TIME_INSTRUMENT = 5
   # Run time configurations.
   eval_freq = 5
 

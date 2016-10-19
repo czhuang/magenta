@@ -29,7 +29,7 @@ FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('input', '/u/huangche/data/bach/bach_chorale_note_sequences.tfrecord',
                            'TFRecord to read NoteSequence protos from.')
 tf.app.flags.DEFINE_string('output_dir',
-                           '/u/huangche/data/bach',
+                           '/u/huangche/data/bach/qbm120',
                            'Directory to write training, validation, test '
                            'TFRecord files.')
 tf.app.flags.DEFINE_bool('separate_instruments', True,
@@ -37,10 +37,10 @@ tf.app.flags.DEFINE_bool('separate_instruments', True,
                          'which results in a 3D tensor per piece. If False, '
                          'encodes all instruments in one pianoroll, resulting '
                          'in just one pianoroll.')
-tf.app.flags.DEFINE_float('shortest_duration_allowed', 0.25,
+tf.app.flags.DEFINE_float('shortest_duration_allowed', 0.125,
                           'Only include pieces that do not have note '
-                          'durations shorter than the requested value.  The '
-                          'unit is notated quarter note equals 0.5. ')
+                          'durations shorter than the requested value. '
+                          'For qpm=120, notated quarter note equals 0.5.')
 tf.app.flags.DEFINE_integer('num_instruments_requested', 4,
                             'Only includes pieces with the requested number of '
                             'instruments. To include all pieces regardless of '

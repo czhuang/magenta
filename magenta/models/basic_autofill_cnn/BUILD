@@ -9,6 +9,16 @@ py_binary(
 )
 
 py_binary(
+    name = 'dataset_statistics_tools',
+    srcs = ["dataset_statistics_tools.py"],
+    deps = [
+        ":data_tools",
+        ":test_tools",
+        "//magenta/lib:note_sequence_io",
+    ],
+)
+
+py_binary(
     name = "postprocess",
     srcs = ["postprocess.py"],
     deps = [

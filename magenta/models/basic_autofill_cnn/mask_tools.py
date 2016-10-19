@@ -85,6 +85,19 @@ def get_instrument_mask(pianoroll_shape, instr_idx):
   return mask
 
 
+def get_random_all_time_instrument_mask(pianoroll_shape):
+  """
+
+  Returns:
+    A 3D binary mask.
+  """
+  if len(pianoroll_shape) != 3:
+    raise ValueError(
+        'Shape needs to of 3 dimensional, time, pitch, and instrument.')
+  mask = np.random.random(pianoroll_shape) > 0.5
+  return mask.astype(np.float32)
+
+
 def get_multiple_random_patch_mask(pianoroll_shape, mask_border,
                                    initial_maskout_factor):
   """Creates a mask with multiple random patches to be masked out.
