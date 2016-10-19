@@ -130,6 +130,8 @@ def make_data_feature_maps(sequences, config, encoder, start_crop_index=None):
   input_data = []
   targets = []
   maskout_border = config.maskout_border
+  batch_size = config.hparams.batch_size
+  seq_count = 0
   for sequence in sequences:
     pianoroll = random_double_or_halftime_pianoroll_from_note_sequence(
         sequence, config.hparams.augment_by_halfing_doubling_durations, encoder)
@@ -140,6 +142,7 @@ def make_data_feature_maps(sequences, config, encoder, start_crop_index=None):
     except DataProcessingError:
       tf.logging.warning('Piece shorter than requested crop length.')
       continue
+    seq_count += 1
     if maskout_method == config.RANDOM_INSTRUMENT:
       mask = mask_tools.get_random_instrument_mask(cropped_pianoroll.shape)
     elif maskout_method == config.RANDOM_PATCHES:
@@ -161,6 +164,10 @@ def make_data_feature_maps(sequences, config, encoder, start_crop_index=None):
     masked_pianoroll = mask_tools.apply_mask_and_stack(cropped_pianoroll, mask)
     input_data.append(masked_pianoroll)
     targets.append(cropped_pianoroll)
+    assert len(input_data) == seq_count
+    assert len(input_data) == len(targets)
+    if len(input_data) == batch_size:
+      break
 
   input_data = np.asarray(input_data)
   targets = np.asarray(targets)

@@ -218,6 +218,9 @@ def plot_steps(steps, original_pianoroll, output_path, run_id,
   previous_change_index = None
   num_steps = len(steps)
 
+  intermediate_seqs = []
+  encoder = pianorolls_lib.PianorollEncoderDecoder()
+
   if not os.path.exists(output_path):
     os.mkdir(output_path)
  
@@ -377,12 +380,16 @@ def plot_steps(steps, original_pianoroll, output_path, run_id,
           os.path.join(output_path, '%s_run_id_%s-iter_%d.png' % (
               fname_prefix, run_id, i)), dpi=300)#, bbox_inches='tight')
       plt.close()
-   
+
+    current_seq = encoder.decode(already_generated_pianoroll)
+    intermediate_seqs.append(current_seq) 
+
     previous_already_generated_pianoroll = already_generated_pianoroll.copy()
     previous_change_index = change_index
   print 'equal', np.sum(already_generated_pianoroll), num_timesteps * num_instrs
   assert np.sum(already_generated_pianoroll) == num_timesteps * num_instrs
-  return already_generated_pianoroll
+
+  return already_generated_pianoroll, intermediate_seqs
 
 
 def main(argv):

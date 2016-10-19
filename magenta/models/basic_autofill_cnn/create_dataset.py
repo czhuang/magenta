@@ -47,6 +47,15 @@ tf.app.flags.DEFINE_integer('num_instruments_requested', 4,
                             'the number of instruments used, type 0.')
 
 
+class FilterByLength(pipeline.Pipeline):
+  """Filter NoteSequences to return those with a minimum length."""
+
+  def __init__(self, len_requested):
+    super(FilterByLength, self).__init__(
+      input_type=music_pb2.NoteSequence, output_type=music_pb2.NoteSequence)
+    self.len_requested = len_requested
+    
+
 class FilterByNumOfVoices(pipeline.Pipeline):
   """Filter NoteSequences to return those with desired number of instruments."""
 

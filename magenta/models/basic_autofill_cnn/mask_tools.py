@@ -175,14 +175,16 @@ def get_random_time_range_mask(pianoroll_shape, mask_border):
   return mask
 
 
-def get_random_instrument_time_mask(pianoroll_shape, timesteps):
+def get_random_instrument_time_mask(pianoroll_shape, timesteps, voices_for_mask_candidate=None):
   if len(pianoroll_shape) != 3:
     raise ValueError(
         'Shape needs to of 3 dimensional, time, pitch, and instrument.')
   mask = np.zeros(pianoroll_shape)
   time_range, _, num_instruments = pianoroll_shape
   # Mask out only one intrument.
-  instr_idx = np.random.randint(num_instruments)
+  if voices_for_mask_candidate is None:
+    voices_for_mask_candidate = range(num_instruments)
+  instr_idx = np.random.choice(voices_for_mask_candidate)
   random_start_idx = np.random.randint(time_range)
   end_idx = random_start_idx + timesteps
   #print 'random_start_idx, end_idx', random_start_idx, end_idx 
@@ -193,8 +195,30 @@ def get_random_instrument_time_mask(pianoroll_shape, timesteps):
   return mask
 
 
+def get_multiple_random_instrument_time_mask_by_mask_size(pianoroll_shape, mask_size, 
+                                             num_maskout, voices_for_mask_candidate=None):
+  """Mask out multiple random time ranges, randomly across instruments.
+
+  Args:
+    pianoroll_shape: The shape of the pianoroll to be blanked out. The shape
+        should be 3D, with dimensions representing time, pitch, and instrument.
+    mask_border: The border before and after a randomly choosen timestep to mask
+        out.
+
+  Returns:
+    A 3D binary mask.
+  """
+  if len(pianoroll_shape) != 3:
+    raise ValueError(
+        'Shape needs to of 3 dimensional, time, pitch, and instrument.')
+  mask = np.zeros(pianoroll_shape)
+  for i in range(num_maskout):
+    mask += get_random_instrument_time_mask(pianoroll_shape, mask_size, voices_for_mask_candidate)
+  return np.clip(mask, 0, 1)
+
+
 def get_multiple_random_instrument_time_mask(pianoroll_shape, mask_border,
-                                             num_maskout):
+                                             num_maskout, voices_for_mask_candidate=None):
   """Mask out multiple random time ranges, randomly across instruments.
 
   Args:

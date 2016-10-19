@@ -20,6 +20,9 @@ STRING_QUARTET_PROGRAMS = OrderedDict(
 CHANNEL_START_INDEXS = OrderedDict([('original_context', 0),
                                     ('generated_in_mask', 3), ('silence', -4)])
 
+_DEFAULT_QPM=60
+
+
 class PitchOutOfEncodeRangeError(Exception):
   """Exception for when pitch of note is out of encoding range."""
   pass
@@ -120,7 +123,7 @@ class PianorollEncoderDecoder(object):
   velocity_in_mask = 127
 
   def __init__(self,
-               shortest_duration=0.25,
+               shortest_duration=0.125,
                min_pitch=36,
                max_pitch=88,
                sequence_iterator=None,
@@ -219,6 +222,7 @@ class PianorollEncoderDecoder(object):
   def decode(self,
              pianoroll,
              pianoroll_to_program_map=None,
+             qpm=_DEFAULT_QPM,
              velocity=None,
              channel_start_index=0,
              filename=None,
@@ -248,7 +252,7 @@ class PianorollEncoderDecoder(object):
     tempo.time = 0.0
     # TODO(annahuang): Infer and retrieve actual bpm.
     # Using default bpm.
-    tempo.qpm = 120
+    tempo.qpm = qpm
 
     # Using the MuseScore tick length for quarter notes.
     sequence.ticks_per_quarter = 480

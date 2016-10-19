@@ -10,6 +10,7 @@ from collections import defaultdict
 from itertools import permutations
 import os
 import copy
+import time
 
 import cPickle as pickle
 
@@ -26,18 +27,23 @@ from magenta.models.basic_autofill_cnn import seed_tools
 #from magenta.models.basic_autofill_cnn.seed_tools import MELODY_VOICE_INDEX
 from magenta.models.basic_autofill_cnn import plot_tools
 from magenta.lib.midi_io import sequence_proto_to_midi_file
+from magenta.lib.note_sequence_io import NoteSequenceRecordWriter
 from magenta.protobuf import music_pb2
+
 
 FLAGS = tf.app.flags.FLAGS
 # TODO(annahuang): Set the default input and output_dir to None for opensource.
 # condition_on/sample1.mid
 # highest.tfrecord
 # /u/huangche/data/bach/high0.tfrecord
+# 'prime_fpath', '/u/huangche/generated/useful/2016-10-06_17:56:31-DeepResidual/za_last_step_1_2_3_0.tfrecord',
 tf.app.flags.DEFINE_string(
-    'prime_fpath', '/u/huangche/generated/useful/2016-10-06_17:56:31-DeepResidual/za_last_step_1_2_3_0.tfrecord',
+    'prime_fpath', '/u/huangche/data/bach/bwv103.6.tfrecord',
     'Path to the Midi or MusicXML file that is used as a prime.')
+
+# TODO(annahuang): Using all files for now!
 tf.app.flags.DEFINE_string(
-    'validation_set_dir', '/u/huangche/data/bach/instrs=4_duration=0.250_sep=True',
+    'validation_set_dir', '/u/huangche/data/bach/filtered/instrs=4_duration=0.125_sep=True', 
     'Directory for validation set to use in batched prediction')
 tf.app.flags.DEFINE_string(
     'generation_output_dir', '/u/huangche/generated/',
@@ -173,6 +179,9 @@ def generate_gibbs_like(pianorolls, wrapped_model, config):
   pianoroll_shape = pianorolls[0].shape
 
   generated_pianoroll = np.zeros(pianoroll_shape)
+  original_pianoroll = pianorolls[config.requested_index].copy()
+  context_pianoroll = np.zeros(pianoroll_shape)
+  context_pianoroll[:, :, tuple(config.prime_voices)] = original_pianoroll[:, :, tuple(config.prime_voices)]
   # To check if all was regenerated
   global_check = np.ones(pianoroll_shape)
   autofill_steps = []
@@ -181,10 +190,15 @@ def generate_gibbs_like(pianorolls, wrapped_model, config):
   if config.condition_mask_size is None:
     raise ValueError('condition_mask_size is not yet set, still None.')
   inverse_blankout_ratio = int(np.ceil(
-      float(num_timesteps) / config.condition_mask_size * (1 + 1./config.sample_extra_percentage)))
+      float(num_timesteps) / config.condition_mask_size * (1 + config.sample_extra_ratio)))
   #print 'inverse_blankout_ratio', inverse_blankout_ratio
   num_steps_per_rewrite = num_instruments * inverse_blankout_ratio
   #print 'num_steps_per_rewrite', num_steps_per_rewrite
+
+  #mask_border = config.condition_mask_size / 2
+  num_maskout = 4
+  #print mask_border, 'num_maskout', num_maskout
+  mask_func = mask_tools.get_multiple_random_instrument_time_mask_by_mask_size
 
   # TODO: for debug
   counter = 0
@@ -193,13 +207,21 @@ def generate_gibbs_like(pianorolls, wrapped_model, config):
     # Create mask for one instrument, with blankout_timesteps blanked out.
     # TODO: Make it possible to use any mask.  Can just set a config parameter.
     # If blank out multiple instruments at the same time then can more easily resample the harmony.
-    if config.condition_mask_size is None:
-      raise ValueError('condition_mask_size is not yet set, still None.')
-    mask_func = mask_tools.get_random_instrument_time_mask
-    condition_mask = mask_func(pianoroll_shape, config.condition_mask_size)
+    condition_mask = mask_func(pianoroll_shape, config.condition_mask_size, num_maskout, config.voices_to_regenerate)
+    #condition_mask = mask_func(pianoroll_shape, mask_border, num_maskout)
+
+    # Mask out the part that is going to be predicted.
+    context_pianoroll *= 1 - condition_mask 
+    
+    # Since might be regenerating multiple iterations, mask out the current
+    # instrument in the generated pianoroll too.
+    generated_pianoroll *= 1 - condition_mask 
+
     #print 'condition_mask.shape', condition_mask.shape
-    #print np.sum(condition_mask), config.condition_mask_size * num_pitches
-    assert np.sum(condition_mask) == config.condition_mask_size * num_pitches
+    print np.sum(condition_mask), config.condition_mask_size * num_pitches * num_maskout
+    #assert np.sum(condition_mask) == config.condition_mask_size * num_pitches
+    # TODO(annahuang): they might overlap
+    #assert np.sum(condition_mask) == config.condition_mask_size * num_pitches * num_maskout
     global_check -= condition_mask
     global_check = np.clip(global_check, 0, 1)
     #print 'np.sum(global_check)', np.sum(global_check)
@@ -218,24 +240,28 @@ def generate_gibbs_like(pianorolls, wrapped_model, config):
       counter += 1
       if counter % 100 == 0:
         print 'taken steps', counter, '# of pianoroll cells unvisited', np.sum(global_check)
+     
+      # Update the context with recently generated note. 
+      context_pianoroll += generated_pianoroll
+      context_pianoroll = np.clip(context_pianoroll, 0, 1)
       
-      # Remove the note to be resampled since might already have a note there.
-      generated_pianoroll[time_step, :, instr_idx] = 0
- 
       # Stack all pieces to create a batch.
       input_datas = []
       for data_index in range(batch_size):
+        # The piece being generated.
         if data_index == config.requested_index:
-          input_data = mask_tools.apply_mask_and_stack(generated_pianoroll,
+          input_data = mask_tools.apply_mask_and_stack(context_pianoroll,
                                                        condition_mask)
+        # The other pieces for batch statistics.
         else:
           # TODO: Maybe need to change this mask to match the mask used for generation.
-          mask = mask_tools.get_random_instrument_mask(pianoroll_shape)
+          #mask = mask_tools.get_random_instrument_mask(pianoroll_shape)
+          mask = mask_func(pianoroll_shape, config.condition_mask_size, num_maskout)
           input_data = mask_tools.apply_mask_and_stack(pianorolls[data_index],
                                                        mask)
         input_datas.append(input_data)
       input_datas = np.asarray(input_datas)
-      print 'sess.run...' 
+      #print 'sess.run...' 
       predictions = wrapped_model.sess.run(model.predictions,
                                               {model.input_data: input_datas})
   
@@ -256,7 +282,7 @@ def generate_gibbs_like(pianorolls, wrapped_model, config):
   print 'np.sum(global_check) should equal to zero', np.sum(global_check), 
   print 'ratio unvisited', np.sum(global_check)/np.product(pianoroll_shape)
   #assert np.sum(global_check) == 0.
-  return generated_pianoroll, autofill_steps, None, None
+  return generated_pianoroll, autofill_steps, original_pianoroll, None
 
 
 def generate_routine(config, output_path):
@@ -341,16 +367,18 @@ def generate_routine(config, output_path):
       #instr_orderings = instr_orderings[:config.num_samples]
     else:
       tf.log.warning('Should specify num_samples or num_samples_per_instr_ordering, otherwise assumes num_samples_per_instr_ordering to be 1')    
-
+    
     for i, instr_ordering in enumerate(instr_orderings):	
+      start_time = time.time()
       # Generate.
       if isinstance(instr_ordering, list):
         config.instr_ordering = instr_ordering
       generated_results = globals()[generate_method_name](pianorolls,
                                                           wrapped_model, config)
       generated_pianoroll, autofill_steps, original_pianoroll, instr_ordering_str = generated_results
-  
-      run_local_id = '%d-%s-%d-%s-%s' % (i, run_id, prime_idx, piece_name, instr_ordering_str)
+      time_taken = (time.time() - start_time) / 60.0 #  In minutes. 
+ 
+      run_local_id = '%d-%.2fmin-%s-%d-%s-%s' % (i, time_taken, run_id, prime_idx, piece_name, instr_ordering_str)
       if config.run_description is not None:
         run_local_id = config.run_description + run_local_id
       
@@ -375,28 +403,39 @@ def generate_routine(config, output_path):
       # Synths generated.
       # TODO(annahuang): Output sequence that merges prime and generated.
       generated_seq = seeder.encoder.decode(generated_pianoroll)
-      seqs_by_ordering[instr_ordering_str].append([
-          generated_seq, autofill_steps, original_seq, instr_ordering_str])
       fpath = os.path.join(
           output_path, 'generated-%s-run_id_%s.midi' % (
               generate_method_name, run_local_id))
       print 'generated', fpath
       sequence_proto_to_midi_file(generated_seq, fpath)
-  
+      tfrecord_fpath = os.path.splitext(fpath)[0] + '.tfrecord'
+      writer = NoteSequenceRecordWriter(tfrecord_fpath)     
+      writer.write(generated_seq)    
+
+      seqs_by_ordering[instr_ordering_str].append([
+          generated_seq, autofill_steps, original_seq, instr_ordering_str])
+
       if config.plot_process:
         plot_path = os.path.join(output_path, 'plots')
         if not os.path.exists(plot_path):
           os.mkdir(plot_path)
         plot_tools.plot_steps(autofill_steps, original_pianoroll, plot_path, run_local_id)
 
-    # Pickle this current prime's generated sequences.
-    pickle_fname = '%s-%s.pkl' % (generate_method_name, run_local_id)
-    with open(os.path.join(output_path, pickle_fname), 'wb') as p:
-      pickle.dump(seqs_by_ordering, p)
+      # Pickle every sample for this prime's generated sequences.
+      if not isinstance(instr_ordering, list):
+        pickle_fname = '%s_' % str(instr_ordering)
+      else:
+        pickle_fname = ''
+      pickle_fname += '%s-%s.pkl' % (generate_method_name, run_local_id)
+      with open(os.path.join(output_path, pickle_fname), 'wb') as p:
+        pickle.dump(seqs_by_ordering, p)
 
    
 def main(unused_argv):
   print 'main..'
+  generate_routine(
+       GENERATION_PRESETS['RegeneratePrimePieceByGibbsOnMeasures'],
+       FLAGS.generation_output_dir)
   #generate_routine(
   #    GENERATION_PRESETS['RegenerateValidationPieceVoiceByVoiceConfig'],
   #    FLAGS.generation_output_dir)
@@ -408,8 +447,8 @@ def main(unused_argv):
   #generate_routine(GENERATION_PRESETS['GenerateFromScratchVoiceByVoice'],
   #                 FLAGS.generation_output_dir)
 
-  generate_routine(GENERATION_PRESETS['GenerateGibbsLikeConfig'],
-                   FLAGS.generation_output_dir)
+  #generate_routine(GENERATION_PRESETS['GenerateGibbsLikeConfig'],
+  #                 FLAGS.generation_output_dir)
 
 
 class GenerationConfig(object):
@@ -446,7 +485,7 @@ class GenerationConfig(object):
       requested_num_timesteps=8,
       num_rewrite_iterations=10,  # Number of times to regenerate all the voices.
       condition_mask_size=None,
-      sample_extra_percentage=None,
+      sample_extra_ratio=None,
       plot_process=False)
 
   def __init__(self, *args, **init_hparams):
@@ -472,6 +511,23 @@ class GenerationConfig(object):
 
 
 GENERATION_PRESETS = {
+
+    'RegeneratePrimePieceByGibbsOnMeasures': GenerationConfig(
+        generate_method_name='generate_gibbs_like',
+        model_name='DeepResidual',
+        prime_fpath=FLAGS.prime_fpath,
+        validation_path=FLAGS.validation_set_dir,
+        prime_voices=range(3),
+        voices_to_regenerate=range(3),
+        sequential_order_type=RANDOM,
+        num_samples=5,
+        requested_num_timesteps=32, #16, #128, #64,
+        num_rewrite_iterations=20, #20, #20,
+        condition_mask_size=8, #8, #8,
+        sample_extra_ratio=1, 
+        temperature=0.1,
+        plot_process=False),
+
     'RegenerateValidationPieceVoiceByVoiceConfig': GenerationConfig(
         generate_method_name='regenerate_voice_by_voice',
         model_name='DeepResidual',
@@ -493,9 +549,12 @@ GENERATION_PRESETS = {
         prime_voices=range(4),
         voices_to_regenerate=range(4),
         sequential_order_type=RANDOM,
-        num_samples=50,
-        num_rewrite_iterations=10,
-        requested_num_timesteps=16,
+        num_samples=1, #5,
+        requested_num_timesteps=16, #16, #128, #64,
+        num_rewrite_iterations=1, #20, #20,
+        condition_mask_size=4, #8, #8,
+        sample_extra_ratio=1, #10, #10,
+        temperature=0.1,
         plot_process=False),
     # Configuration for generating an accompaniment to prime melody.
     'GenerateAccompanimentToPrimeMelodyConfig': GenerationConfig(
@@ -531,11 +590,12 @@ GENERATION_PRESETS = {
         validation_path=FLAGS.validation_set_dir,
         voices_to_regenerate=range(4),
         sequential_order_type=RANDOM,
-        num_samples=3,
-        requested_num_timesteps=32,
-        num_rewrite_iterations=10,
-        condition_mask_size=8,
-        sample_extra_percentage=10,
+        num_samples=5, #5,
+        requested_num_timesteps=64, #16, #128, #64,
+        num_rewrite_iterations=40, #20, #20,
+        condition_mask_size=8, #8, #8,
+        sample_extra_ratio=1, #10, #10,
+        temperature=0.1,
         plot_process=False),
     # Configurations for generating in random instrument cross timestep order.
     'InpaintingConfig': GenerationConfig(

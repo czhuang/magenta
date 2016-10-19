@@ -2,6 +2,7 @@ import cPickle as pickle
 import os
 from collections import defaultdict
 
+import tensorflow as tf
 import numpy as np
 
 from magenta.protobuf import music_pb2
@@ -35,6 +36,34 @@ def concatenate_seqs(seqs, gap_in_seconds=1.5):
   return concatenated_seq
 
 
+def concatenate_process():
+  path = '/u/huangche/generated/2016-10-16_23:45:29-DeepResidual'
+  fname = '0_generate_gibbs_like-0-2016-10-16_23:45:29-DeepResidual-0--None.pkl'
+  requested_index = int(fname.split('_')[0])  
+  results = retrieve_pickle(os.path.join(path, fname))
+  print results.keys, type(results[None]), type(results[None][requested_index])
+  seq_bundle = results[None][requested_index]
+  generated_seq, steps, original_seq, _ = seq_bundle 
+  print 'type(steps)', type(steps)
+  num_steps = len(steps)
+  print '# of steps:', num_steps
+  
+  inspect_length = 16
+  plot_num_steps = 5
+  inspect_indices = range(0, num_steps, num_steps / plot_num_steps)
+  last_seq, intermediate_seqs = plot_process(seq_bundle, inspect_indices, path)
+  encoder = pianorolls_lib.PianorollEncoderDecoder()
+  inspect_seqs = []
+  for i in inspect_indices:
+    pianoroll = encoder.encode(intermediate_seqs[i])
+    assert pianoroll.shape[0] < inspect_length
+    seq = encoder.decode(pianoroll[:inspect_length, :, :])
+    inspect_seqs.append(seq)
+  concated_seqs = concatenate_seqs(inspect_seqs)
+  output_fname = 'zaa_%s_process_concat.midi' % os.path.splitext(fname)[0]
+  sequence_proto_to_midi_file(concated_seqs, os.path.join(path, output_fname))
+
+
 def concatenate_generated_seqs():
   path = '/u/huangche/generated/2016-09-30_15:57:51-DeepResidual'
   fname = 'regenerate_voice_by_voice-2016-09-30_15:57:51-DeepResidual-1--1.pkl'
@@ -53,7 +82,7 @@ def concatenate_generated_seqs():
     sequence_proto_to_midi_file(concatenate_seqs(generated_seqs), output_fpath)
     
 
-def plot_process():
+def get_seq_bundle():
   # seq_key = None, results[seq_key][0] # first one is really nice, hence ending and interesting theme 
   path = '/u/huangche/generated/nice/2016-10-05_17:13:46-DeepResidual'
   fname = 'generate_gibbs_like-None-2016-10-05_17:13:46-DeepResidual-0-empty-4.pkl'
@@ -109,6 +138,15 @@ def plot_process():
   print 'keys', results.keys()
   print 'num sequences available', len(results[seq_key])
   seq_bundle = results[seq_key][requested_index]  # [0]
+  return seq_bundle, subplot_step_indices, path
+
+
+def plot_process_main():
+  seq_bundle, subplot_step_indices, path = get_seq_bundle()
+  plot_process(seq_bundle, subplot_step_indices, path)
+
+
+def plot_process(seq_bundle, subplot_step_indices, path):
   steps = seq_bundle[1]
   original_seq = seq_bundle[2]
   prediction_shape = steps[0].prediction.shape
@@ -125,7 +163,7 @@ def plot_process():
     original_pianoroll = np.zeros(prediction_shape)
   print 'original_pianoroll', original_pianoroll.shape  
   plot_output_path = os.path.join(path, 'plots')
-  last_pianoroll = plot_steps(steps, original_pianoroll, plot_output_path, seq_key, 
+  last_pianoroll, intermediate_seqs = plot_steps(steps, original_pianoroll, plot_output_path, seq_key, 
       subplot_step_indices=subplot_step_indices, subplots=subplots)
   
   # Synth last pianoroll.  
@@ -135,6 +173,8 @@ def plot_process():
   
   midi_fpath = os.path.join(path, 'plots', 'z_last_step_%s.midi' % seq_key) 
   sequence_proto_to_midi_file(generated_seq, midi_fpath)
+  return last_pianoroll, intermediate_seqs
+
 
 def save_last_prediction_as_tfrecord():
   # The one used for plots.
@@ -186,8 +226,19 @@ def save_last_prediction_as_tfrecord():
   writer = NoteSequenceRecordWriter(tfrecord_fpath)
   writer.write(generated_seq)
 
-
-if __name__ == '__main__':
+def main(unused_args):
   #concatenate_generated_seqs()
   #plot_process()
-  save_last_prediction_as_tfrecord()
+  #save_last_prediction_as_tfrecord()
+  try:
+    concatenate_process()
+  except:
+    import sys
+    rahh = sys.exc_info()
+    print '\nError msg:', repr(rahh[1])
+    import pdb; pdb.post_mortem()
+ # concatenate_process()
+
+if __name__ == '__main__':
+  tf.app.run()
+
