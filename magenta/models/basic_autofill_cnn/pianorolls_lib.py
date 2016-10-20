@@ -20,7 +20,7 @@ STRING_QUARTET_PROGRAMS = OrderedDict(
 CHANNEL_START_INDEXS = OrderedDict([('original_context', 0),
                                     ('generated_in_mask', 3), ('silence', -4)])
 
-_DEFAULT_QPM=60
+_DEFAULT_QPM=120
 
 
 class PitchOutOfEncodeRangeError(Exception):

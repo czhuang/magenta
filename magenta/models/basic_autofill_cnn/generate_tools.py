@@ -37,16 +37,18 @@ FLAGS = tf.app.flags.FLAGS
 # highest.tfrecord
 # /u/huangche/data/bach/high0.tfrecord
 # 'prime_fpath', '/u/huangche/generated/useful/2016-10-06_17:56:31-DeepResidual/za_last_step_1_2_3_0.tfrecord',
+#  'validation_set_dir', '/u/huangche/data/bach/filtered/instrs=4_duration=0.125_sep=True', 
+#    'validation_set_dir', '/u/huangche/data/bach/qbm120/instrs=4_duration=0.125_sep=True',
 tf.app.flags.DEFINE_string(
     'prime_fpath', '/u/huangche/data/bach/bwv103.6.tfrecord',
     'Path to the Midi or MusicXML file that is used as a prime.')
 
-# TODO(annahuang): Using all files for now!
 tf.app.flags.DEFINE_string(
-    'validation_set_dir', '/u/huangche/data/bach/filtered/instrs=4_duration=0.125_sep=True', 
+    'validation_set_dir', '/Tmp/huangche/data/bach/qbm120/instrs=4_duration=0.125_sep=True',
     'Directory for validation set to use in batched prediction')
+#    'generation_output_dir', '/Tmp/huangche/generation',
 tf.app.flags.DEFINE_string(
-    'generation_output_dir', '/u/huangche/generated/',
+    'generation_output_dir', '/data/lisatmp4/huangche/new_generated',
     'Output directory for storing the generated Midi.')
 
 AutofillStep = namedtuple('AutofillStep', ['prediction', 'change_to_context',
@@ -432,7 +434,7 @@ def generate_routine(config, output_path):
 
    
 def main(unused_argv):
-  print 'main..'
+  print '..............................main..'
   generate_routine(
        GENERATION_PRESETS['RegeneratePrimePieceByGibbsOnMeasures'],
        FLAGS.generation_output_dir)
@@ -509,23 +511,24 @@ class GenerationConfig(object):
     config_str += ')'
     return config_str
 
+_DEFAULT_MODEL_NAME = 'DeepResidualRandomMask'
 
 GENERATION_PRESETS = {
 
     'RegeneratePrimePieceByGibbsOnMeasures': GenerationConfig(
         generate_method_name='generate_gibbs_like',
-        model_name='DeepResidual',
+        model_name= _DEFAULT_MODEL_NAME, #'DeepResidual',
         prime_fpath=FLAGS.prime_fpath,
         validation_path=FLAGS.validation_set_dir,
         prime_voices=range(3),
         voices_to_regenerate=range(3),
         sequential_order_type=RANDOM,
-        num_samples=5,
-        requested_num_timesteps=32, #16, #128, #64,
-        num_rewrite_iterations=20, #20, #20,
+        num_samples=4,
+        requested_num_timesteps=16, #16, #128, #64,
+        num_rewrite_iterations=10, #20, #20,
         condition_mask_size=8, #8, #8,
-        sample_extra_ratio=1, 
-        temperature=0.1,
+        sample_extra_ratio=0, 
+        temperature=1,
         plot_process=False),
 
     'RegenerateValidationPieceVoiceByVoiceConfig': GenerationConfig(

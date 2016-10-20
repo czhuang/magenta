@@ -1,7 +1,5 @@
 """Classes for defining hypermaters and model architectures."""
 
- 
-
 
 class ModelMisspecificationError(Exception):
   """Exception for specifying a model that is not currently supported."""
@@ -331,6 +329,21 @@ class PitchFullyConnectedWithResidual(ConvArchitecture):
 
 
 CHECKPOINT_HPARAMS = {
+    'DeepResidual': Hyperparameters(
+        num_layers=28,
+        num_filters=256,
+        use_residual=True,
+        model_name='DeepStraightConvSpecs',
+        checkpoint_name='DeepStraightConvSpecs-with_res-multi_instr_depth-28_filter-256-256-best_model.ckpt'
+    ),
+    'DeepResidualRandomMask': Hyperparameters(
+        num_layers=28,
+        num_filters=256,
+        use_residual=True,
+        model_name='DeepStraightConvSpecs',
+        checkpoint_name='DeepResidualRandomMask_d-28_f-256-best_model.ckpt'
+    ),
+
     'DeepResidualDataAug': Hyperparameters(
         num_layers=28,
         num_filters=256,
@@ -340,13 +353,6 @@ CHECKPOINT_HPARAMS = {
         use_residual=True,
         model_name='DeepStraightConvSpecs',
         checkpoint_name='DeepStraightConvSpecs-with_res-with_aug-multi_instr_depth-28_filter-256-256-best_model.ckpt'
-    ),
-    'DeepResidual': Hyperparameters(
-        num_layers=28,
-        num_filters=256,
-        use_residual=True,
-        model_name='DeepStraightConvSpecs',
-        checkpoint_name='DeepStraightConvSpecs-with_res-multi_instr_depth-28_filter-256-256-best_model.ckpt'
     ),
     'PitchFullyConnectedWithResidual': Hyperparameters(
         num_layers=28,

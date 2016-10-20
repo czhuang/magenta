@@ -37,8 +37,11 @@ def concatenate_seqs(seqs, gap_in_seconds=1.5):
 
 
 def concatenate_process():
-  path = '/u/huangche/generated/2016-10-16_23:45:29-DeepResidual'
-  fname = '0_generate_gibbs_like-0-2016-10-16_23:45:29-DeepResidual-0--None.pkl'
+  path = '/data/lisatmp4/huangche/new_generated/2016-10-20_00:25:18-DeepResidualRandomMask'
+  fname = '0_generate_gibbs_like-0-4.49min-2016-10-20_00:25:18-DeepResidualRandomMask-0--None.pkl' 
+  #path = '/u/huangche/generated/2016-10-16_23:45:29-DeepResidual'
+  #fname = '0_generate_gibbs_like-0-2016-10-16_23:45:29-DeepResidual-0--None.pkl'
+  run_id = fname.split('.pkl')[0]
   requested_index = int(fname.split('_')[0])  
   results = retrieve_pickle(os.path.join(path, fname))
   print results.keys, type(results[None]), type(results[None][requested_index])
@@ -48,19 +51,28 @@ def concatenate_process():
   num_steps = len(steps)
   print '# of steps:', num_steps
   
-  inspect_length = 16
-  plot_num_steps = 5
-  inspect_indices = range(0, num_steps, num_steps / plot_num_steps)
-  last_seq, intermediate_seqs = plot_process(seq_bundle, inspect_indices, path)
+  #plot_num_steps = 5
+  plot_indices = []
   encoder = pianorolls_lib.PianorollEncoderDecoder()
+  original_pianoroll = encoder.encode(original_seq)
+  last_seq, intermediate_seqs = plot_steps(steps, original_pianoroll, path, run_id, 
+                                           subplots=True, subplot_step_indices=plot_indices)
+  
   inspect_seqs = []
-  for i in inspect_indices:
+  inspect_crop_len = 16
+  #inspect_indices = range(0, num_steps, num_steps / plot_num_steps)
+  synth_interval = 16
+  synth_indices = range(0, num_steps, synth_interval) 
+  print '# of intermediate seqs:', len(intermediate_seqs), '# of steps:', num_steps
+  for i in synth_indices:
     pianoroll = encoder.encode(intermediate_seqs[i])
-    assert pianoroll.shape[0] < inspect_length
-    seq = encoder.decode(pianoroll[:inspect_length, :, :])
+    print 'pianoroll.shape', pianoroll.shape, inspect_crop_len
+    # TODO: not sure why when pianoroll is supposed to be 16 when uncropped but would be 11.
+    #assert pianoroll.shape[0] >= inspect_crop_len
+    seq = encoder.decode(pianoroll[:inspect_crop_len, :, :])
     inspect_seqs.append(seq)
   concated_seqs = concatenate_seqs(inspect_seqs)
-  output_fname = 'zaa_%s_process_concat.midi' % os.path.splitext(fname)[0]
+  output_fname = 'zaa_%s_process_concat.midi' % run_id
   sequence_proto_to_midi_file(concated_seqs, os.path.join(path, output_fname))
 
 

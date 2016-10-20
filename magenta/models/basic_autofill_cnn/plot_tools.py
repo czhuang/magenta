@@ -247,6 +247,9 @@ def plot_steps(steps, original_pianoroll, output_path, run_id,
     already_generated_pianoroll[change_index] = 1
   
     if subplots and i not in subplot_step_indices:
+      current_seq = encoder.decode(already_generated_pianoroll)
+      intermediate_seqs.append(current_seq) 
+
       # Update previous.
       previous_already_generated_pianoroll = already_generated_pianoroll.copy()
       previous_change_index = change_index
@@ -386,8 +389,8 @@ def plot_steps(steps, original_pianoroll, output_path, run_id,
 
     previous_already_generated_pianoroll = already_generated_pianoroll.copy()
     previous_change_index = change_index
-  print 'equal', np.sum(already_generated_pianoroll), num_timesteps * num_instrs
-  assert np.sum(already_generated_pianoroll) == num_timesteps * num_instrs
+  print 'might not equal when blankouts might overlap', np.sum(already_generated_pianoroll), num_timesteps * num_instrs
+  #assert np.sum(already_generated_pianoroll) == num_timesteps * num_instrs
 
   return already_generated_pianoroll, intermediate_seqs
 
