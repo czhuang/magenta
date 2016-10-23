@@ -201,13 +201,16 @@ class BasicAutofillCNNGraph(object):
     else:
       self._loss = self._loss_total
 
+    self.learning_rate = tf.Variable(hparams.learning_rate, name="learning_rate", trainable=False, dtype=tf.float32)
+
     # If not training, don't need to add optimizer to the graph.
     if not is_training:
       self._train_op = tf.no_op
       return
 
-    self._optimizer = tf.train.AdamOptimizer(
-        learning_rate=hparams.learning_rate)
+    # FIXME 0.5 -> hparams.decay_rate
+    self.decay_op = tf.assign(self.learning_rate, 0.5*self.learning_rate)
+    self._optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
     self._train_op = self._optimizer.minimize(self._loss)
     self._gradient_norms = [
         tf.sqrt(tf.reduce_sum(gradient[0]**2))

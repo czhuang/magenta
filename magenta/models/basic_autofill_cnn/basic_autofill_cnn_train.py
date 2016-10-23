@@ -122,11 +122,12 @@ def run_epoch(supervisor,
     # Evaluate the graph and run back propagation.
     results = sess.run([m.predictions, m.loss, m.loss_total, m.loss_mask,
                         m.mask_size, m.mask, m.loss_unmask, m.unmask_size,
+                        m.learning_rate,
                         eval_op], {m.input_data: x,
                                    m.targets: y})
 
     (predictions, loss, loss_total, loss_mask, mask_size, mask, loss_unmask,
-     unmask_size, _) = results
+     unmask_size, learning_rate, _) = results
 
     # Aggregate performances.
     losses_total.add(loss_total, 1)
@@ -157,6 +158,7 @@ def run_epoch(supervisor,
       np.exp(losses_unmask.mean))
   run_stats['perplexity_total_%s' % experiment_type] = np.exp(losses_total.mean)
   run_stats['perplexity_%s' % experiment_type] = np.exp(losses.mean)
+  run_stats['learning_rate'] = float(learning_rate)
 
   # Make summaries.
   if FLAGS.log_progress:
@@ -194,6 +196,7 @@ def run_epoch(supervisor,
   tf.logging.info('perplexity, loss (total): %.3f, %.3f, ' %
                   (run_stats['perplexity_total_%s' % experiment_type],
                    run_stats['loss_total_%s' % experiment_type]))
+  tf.logging.info('log lr: %.3f' % np.log2(run_stats['learning_rate']))
   tf.logging.info('time taken: %.4f' % (time.time() - start_time))
 
   # TODO(annahuang): Remove printouts.
@@ -207,7 +210,11 @@ def run_epoch(supervisor,
   print 'perplexity, loss (total): %.3f, %.3f, ' % (
       run_stats['perplexity_total_%s' % experiment_type],
       run_stats['loss_total_%s' % experiment_type]),
+  print 'maskfrac: %.3f' % (mask_size/float(mask_size + unmask_size)),
+  print 'log lr: %.3f' % np.log2(run_stats['learning_rate']),
   print 'time taken: %.4f' % (time.time() - start_time)
+
+  return best_validation_loss
 
 
 def main(unused_argv):
@@ -279,6 +286,8 @@ def main(unused_argv):
     #with sv.managed_session('local') as sess:
     with sv.PrepareSession() as sess:
       epoch_count = 0
+      time_since_improvement = 0
+      patience = 5
       while epoch_count < FLAGS.num_epochs or not FLAGS.num_epochs:
         if sv.should_stop():
           break
@@ -288,9 +297,17 @@ def main(unused_argv):
 
         # Run validation.
         if epoch_count % config.eval_freq == 0:
-          run_epoch(sv, sess, mvalid, valid_data, pianoroll_encoder, config,
-                    no_op, 'valid', epoch_count, best_validation_loss,
-                    best_model_saver)
+          new_best_validation_loss = run_epoch(sv, sess, mvalid, valid_data, pianoroll_encoder, config,
+                                               no_op, 'valid', epoch_count, best_validation_loss,
+                                               best_model_saver)
+          if new_best_validation_loss < best_validation_loss:
+            best_validation_loss = new_best_validation_loss
+            time_since_improvement = 0
+          else:
+            time_since_improvement += 1
+            if time_since_improvement > patience:
+              sess.run(m.decay_op)
+              time_since_improvement = 0
         epoch_count += 1
 
     return best_validation_loss
