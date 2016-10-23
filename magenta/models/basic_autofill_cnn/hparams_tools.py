@@ -91,7 +91,8 @@ class Hyperparameters(object):
         'num_filters', 'input_depth', 'model_name',
         'batch_norm_variance_epsilon', 'batch_norm_gamma', 'batch_norm',
         'init_scale', 'crop_piece_len', 'maskout_method', 'learning_rate',
-        'prediction_threshold', 'optimize_mask_only', 'conv_arch'
+        'prediction_threshold', 'optimize_mask_only', 'conv_arch',
+        'augment_by_halfing_doubling_durations', 'augment_by_transposing',
     ]
     return ("maskout_prob=0.75," +
             ','.join('%s=%s' % (key, self.__dict__[key]) for key in sorted_keys
