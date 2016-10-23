@@ -190,9 +190,9 @@ class TBFDeepStraightConvSpecs(ConvArchitecture):
     super(TBFDeepStraightConvSpecs, self).__init__()
     self.condensed_specs = [
         dict(filters=[3, 3, input_depth, num_filters])
-        (num_layers - 3, dict(filters=[3, 3, num_filters, num_filters]),
+        (num_layers - 3, dict(filters=[3, 3, num_filters, num_filters])),
         dict(change_to_pitch_fully_connected=1,
-             filters=[1, 1, num_pitches * num_filters, num_pitches * num_instruments])
+             filters=[1, 1, num_pitches * num_filters, num_pitches * num_instruments]),
         dict(filters=[1, 1, num_pitches * num_instruments, num_pitches * num_instruments],
              activation=lambda x: x),
         dict(change_to_pitch_fully_connected=-1, activation=lambda x: x)
