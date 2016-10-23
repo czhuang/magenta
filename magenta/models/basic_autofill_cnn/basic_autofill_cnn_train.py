@@ -77,9 +77,6 @@ tf.app.flags.DEFINE_integer('augment_by_halfing_doubling_durations', 0, 'If '
                             'or halve durations or stay the same.  The former '
                             'two options are only available if they do not '
                             'go outside of the original set of durations.')
-tf.app.flags.DEFINE_bool('use_pitch_locally_connected', True, 'If True '
-                         'interleaves locally connected in pitch layers '
-                         'with regular convnet layers.')
 tf.app.flags.DEFINE_bool('mask_indicates_context', True, 'Feed inverted mask into convnet so that zero-padding makes sense')
 
 
@@ -235,8 +232,7 @@ def main(unused_argv):
       mask_indicates_context=FLAGS.mask_indicates_context,
       augment_by_transposing=FLAGS.augment_by_transposing,
       augment_by_halfing_doubling_durations=FLAGS.
-      augment_by_halfing_doubling_durations,
-      use_pitch_locally_connected=FLAGS.use_pitch_locally_connected)
+      augment_by_halfing_doubling_durations)
 
   config = config_tools.PipelineConfig(hparams, FLAGS.maskout_method,
                                        FLAGS.separate_instruments)

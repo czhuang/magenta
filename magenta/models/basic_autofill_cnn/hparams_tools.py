@@ -35,7 +35,6 @@ class Hyperparameters(object):
       # Training.
       learning_rate=2**-6,
       mask_indicates_context=False,
-      use_pitch_locally_connected=False,
       # Prediction threshold.
       prediction_threshold=0.5)
 
@@ -101,7 +100,6 @@ class Hyperparameters(object):
   def get_conv_arch(self):
     """Returns the model architecture."""
     if self.model_name == 'PitchLocallyConnectedConvSpecs':
-      assert self.use_pitch_locally_connected
       return PitchLocallyConnectedConvSpecs(
           self.input_depth, self.num_layers, self.num_filters, self.num_pitches)
 
@@ -146,28 +144,26 @@ class PitchLocallyConnectedConvSpecs(ConvArchitecture):
   model_name = 'PitchLocallyConnectedConvSpecs'
 
   def __init__(self, input_depth, num_layers, num_filters, num_pitches):
+    num_instruments = input_depth // 2
     if num_layers < 4:
       raise ModelMisspecificationError(
           'The network needs to be at least 4 layers deep, %d given.' %
           num_layers)
     super(PitchLocallyConnectedConvSpecs, self).__init__()
-    self.condensed_specs = [
-        dict(
-            filters=[3, 3, input_depth, num_filters],
-            conv_stride=1, conv_pad='SAME'), 
-        (num_layers - 4, dict(filters=[3, 3, num_filters, num_filters],
-            conv_stride=1, conv_pad='SAME')), 
-        dict(filters=[3, 3, num_filters, num_filters], 
-            pitch_locally_connected = True,
-            conv_stride=1, conv_pad='SAME'), 
-        dict(filters=[3, 3, num_filters, num_filters], 
-            pitch_locally_connected = True,
-            conv_stride=1, conv_pad='SAME'), 
-        dict(filters=[3, 3, num_filters, input_depth / 2],
-            pitch_locally_connected = True,
-            conv_stride=1, conv_pad='SAME', 
-            activation=lambda x: x)
-    ]
+    bottom = [dict(filters=[3, 3, input_depth, num_filters])]
+    middle = []
+    for i in range(num_layers - 4):
+      middle.append(dict(filters=[3, 3, num_filters, num_filters],
+                         pitch_locally_connected=i % 8 == 7))
+    top = [dict(filters=[3, 3, num_filters, num_instruments], pitch_locally_connected = True),
+           dict(filters=[3, 3, num_instruments, num_instruments], pitch_locally_connected = True),
+           dict(change_to_pitch_fully_connected=1,
+                filters=[3, 1, num_pitches * num_instruments, num_pitches * num_instruments],
+                activation=lambda x: x),
+           dict(change_to_pitch_fully_connected=-1, activation=lambda x: x)]
+    self.condensed_specs = bottom + middle + top
+    # -1 because the last layer is just a reshape
+    assert len(self.condensed_specs) - 1 == num_layers
     self.specs = self.get_spec()
     assert self.specs
     if input_depth != 2:

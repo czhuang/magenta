@@ -60,8 +60,6 @@ class BasicAutofillCNNGraph(object):
     num_conv_layers = len(conv_specs) - 1
 
     residual_period = 2
-    locally_connected_period = 8
-    locally_connected_stop_index = num_conv_layers - 5
 
     # Build convolutional layers.
     output = self._input_data
@@ -98,12 +96,12 @@ class BasicAutofillCNNGraph(object):
           # layer.
           output_for_residual = None
           # Needs to be the layer about the last to do the reshaping
-          assert i == num_conv_layers
+          assert specs is conv_specs[-1]
           continue
 
         if "filters" in specs:
           # Compute convolution.
-          if 'pitch_locally_connected' in specs or (i != 0 and i % 8 == 0 and i < locally_connected_stop_index):
+          if specs.get('pitch_locally_connected', False):
             # Weight instantiation and initialization is wrapped inside.
             conv, weights = locally_connected_layer_2d_with_second_axis_shared(
                 output, specs['filters'])
@@ -124,8 +122,12 @@ class BasicAutofillCNNGraph(object):
                 strides=[1, stride, stride, 1],
                 padding=specs.get('conv_pad', 'SAME'))
 
+          num_source_filters, num_target_filters = specs['filters'][-2:]
+          if num_target_filters != num_source_filters:
+            output_for_residual = None
+            residual_counter = 0
+
           # Compute batch normalization or add biases.
-          num_target_filters = specs['filters'][-1]
           if not hparams.batch_norm:
             layer.biases = tf.get_variable(
                 'bias', [num_target_filters],
