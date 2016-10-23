@@ -99,46 +99,47 @@ class BasicAutofillCNNGraph(object):
           assert i == num_conv_layers
           continue
 
-        # Compute convolution.
-        if 'pitch_locally_connected' in specs or (i != 0 and i % 8 == 0 and i < locally_connected_stop_index):
-          # Weight instantiation and initialization is wrapped inside.
-          conv, weights = locally_connected_layer_2d_with_second_axis_shared(
-              output, specs['filters'])
-          layer = ConvLayerParams(weights)
-        else:
-          # Instantiate or retrieve filter weights.
-          stddev = tf.sqrt(
-              tf.div(2.0, tf.to_float(tf.reduce_prod(specs['filters'][:-1]))))
-          weights = tf.get_variable(
-              'weights',
-              specs['filters'],
-              initializer=tf.random_normal_initializer(0.0, stddev))
-          layer = ConvLayerParams(weights)
-          stride = specs['conv_stride']
-          conv = tf.nn.conv2d(
-              output,
-              layer.weights,
-              strides=[1, stride, stride, 1],
-              padding=specs['conv_pad'])
+        if "filters" in specs:
+          # Compute convolution.
+          if 'pitch_locally_connected' in specs or (i != 0 and i % 8 == 0 and i < locally_connected_stop_index):
+            # Weight instantiation and initialization is wrapped inside.
+            conv, weights = locally_connected_layer_2d_with_second_axis_shared(
+                output, specs['filters'])
+            layer = ConvLayerParams(weights)
+          else:
+            # Instantiate or retrieve filter weights.
+            stddev = tf.sqrt(
+                tf.div(2.0, tf.to_float(tf.reduce_prod(specs['filters'][:-1]))))
+            weights = tf.get_variable(
+                'weights',
+                specs['filters'],
+                initializer=tf.random_normal_initializer(0.0, stddev))
+            layer = ConvLayerParams(weights)
+            stride = specs.get('conv_stride', 1)
+            conv = tf.nn.conv2d(
+                output,
+                layer.weights,
+                strides=[1, stride, stride, 1],
+                padding=specs.get('conv_pad', 'SAME'))
 
-        # Compute batch normalization or add biases.
-        num_target_filters = specs['filters'][-1]
-        if not hparams.batch_norm:
-          layer.biases = tf.get_variable(
-              'bias', [num_target_filters],
-              initializer=tf.constant_initializer(0.0))
-          output = tf.nn.bias_add(conv, layer.biases)
-        else:
-          layer.gammas = tf.get_variable(
-              'gamma', [1, 1, 1, num_target_filters],
-              initializer=tf.constant_initializer(hparams.batch_norm_gamma))
-          layer.betas = tf.get_variable(
-              'beta', [num_target_filters],
-              initializer=tf.constant_initializer(0.0))
-          mean, variance = tf.nn.moments(conv, [0, 1, 2], keep_dims=True)
-          output = tf.nn.batch_normalization(
-              conv, mean, variance, layer.betas, layer.gammas,
-              hparams.batch_norm_variance_epsilon)
+          # Compute batch normalization or add biases.
+          num_target_filters = specs['filters'][-1]
+          if not hparams.batch_norm:
+            layer.biases = tf.get_variable(
+                'bias', [num_target_filters],
+                initializer=tf.constant_initializer(0.0))
+            output = tf.nn.bias_add(conv, layer.biases)
+          else:
+            layer.gammas = tf.get_variable(
+                'gamma', [1, 1, 1, num_target_filters],
+                initializer=tf.constant_initializer(hparams.batch_norm_gamma))
+            layer.betas = tf.get_variable(
+                'beta', [num_target_filters],
+                initializer=tf.constant_initializer(0.0))
+            mean, variance = tf.nn.moments(conv, [0, 1, 2], keep_dims=True)
+            output = tf.nn.batch_normalization(
+                conv, mean, variance, layer.betas, layer.gammas,
+                hparams.batch_norm_variance_epsilon)
 
         # Sum residual before nonlinearity if odd layer and residual exist.
         if hparams.use_residual and output_for_residual is not None and (
