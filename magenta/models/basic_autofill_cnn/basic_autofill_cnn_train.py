@@ -94,6 +94,9 @@ def run_epoch(supervisor,
   """Runs an epoch of training or evaluate the model on given data."""
   input_data, targets = data_tools.make_data_feature_maps(raw_data, config,
                                                           encoder)
+  permutation = np.random.permutation(len(input_data))
+  input_data = input_data[permutation]
+  targets = targets[permutation]
 
   # TODO(annahuang): Leaves out last incomplete minibatch, needs wrap around.
   batch_size = m.batch_size
