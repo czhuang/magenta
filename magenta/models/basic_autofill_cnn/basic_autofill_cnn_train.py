@@ -38,14 +38,14 @@ tf.app.flags.DEFINE_string('run_dir', '/u/huangche/tf_logss',
 tf.app.flags.DEFINE_bool('log_progress', True,
                          'If False, do not log any checkpoints and summary'
                          'statistics.')
-tf.app.flags.DEFINE_string('model_name', 'DeepStraightConvSpecs',
+tf.app.flags.DEFINE_string('model_name', 'PitchLocallyConnectedConvSpecs',
                            'A string specifying the name of the model.  The '
                            'choices are currently "PitchFullyConnected", '
                            '"DeepStraightConvSpecs", and '
                            '"DeepStraightConvSpecsWithEmbedding".')
 tf.app.flags.DEFINE_integer('num_layers', 28,
                             'The number of convolutional layers.')
-tf.app.flags.DEFINE_integer('num_filters', 256, 
+tf.app.flags.DEFINE_integer('num_filters', 128,  
                             'The number of filters for each convolutional '
                             'layer.')
 tf.app.flags.DEFINE_integer('batch_size', 20,
@@ -77,6 +77,9 @@ tf.app.flags.DEFINE_integer('augment_by_halfing_doubling_durations', 0, 'If '
                             'or halve durations or stay the same.  The former '
                             'two options are only available if they do not '
                             'go outside of the original set of durations.')
+tf.app.flags.DEFINE_bool('use_pitch_locally_connected', True, 'If True '
+                         'interleaves locally connected in pitch layers '
+                         'with regular convnet layers.')
 
 
 def run_epoch(supervisor,
@@ -223,7 +226,8 @@ def main(unused_argv):
       use_residual=FLAGS.use_residual,
       augment_by_transposing=FLAGS.augment_by_transposing,
       augment_by_halfing_doubling_durations=FLAGS.
-      augment_by_halfing_doubling_durations)
+      augment_by_halfing_doubling_durations,
+      use_pitch_locally_connected=FLAGS.use_pitch_locally_connected)
 
   config = config_tools.PipelineConfig(hparams, FLAGS.maskout_method,
                                        FLAGS.separate_instruments)

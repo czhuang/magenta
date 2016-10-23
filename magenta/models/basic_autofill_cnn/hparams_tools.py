@@ -34,6 +34,7 @@ class Hyperparameters(object):
       use_softmax_loss=True,
       # Training.
       learning_rate=1e-2,
+      use_pitch_locally_connected=False,
       # Prediction threshold.
       prediction_threshold=0.5)
 
@@ -97,6 +98,11 @@ class Hyperparameters(object):
 
   def get_conv_arch(self):
     """Returns the model architecture."""
+    if self.model_name == 'PitchLocallyConnectedConvSpecs':
+      assert self.use_pitch_locally_connected
+      return PitchLocallyConnectedConvSpecs(
+          self.input_depth, self.num_layers, self.num_filters, self.num_pitches)
+
     if self.model_name == 'DeepStraightConvSpecs':
       return DeepStraightConvSpecs(self.input_depth, self.num_layers,
                                    self.num_filters, self.num_pitches)
@@ -131,6 +137,44 @@ class ConvArchitecture(object):
       else:
         conv_specs_expanded.append(layer)
     return conv_specs_expanded
+
+
+class PitchLocallyConnectedConvSpecs(ConvArchitecture):
+  """A convolutional net where each layer has the same number of filters."""
+  model_name = 'PitchLocallyConnectedConvSpecs'
+
+  def __init__(self, input_depth, num_layers, num_filters, num_pitches):
+    if num_layers < 4:
+      raise ModelMisspecificationError(
+          'The network needs to be at least 4 layers deep, %d given.' %
+          num_layers)
+    super(PitchLocallyConnectedConvSpecs, self).__init__()
+    self.condensed_specs = [
+        dict(
+            filters=[3, 3, input_depth, num_filters],
+            conv_stride=1, conv_pad='SAME'), 
+        (num_layers - 4, dict(filters=[3, 3, num_filters, num_filters],
+            conv_stride=1, conv_pad='SAME')), 
+        dict(filters=[3, 3, num_filters, num_filters], 
+            pitch_locally_connected = True,
+            conv_stride=1, conv_pad='SAME'), 
+        dict(filters=[3, 3, num_filters, num_filters], 
+            pitch_locally_connected = True,
+            conv_stride=1, conv_pad='SAME'), 
+        dict(filters=[3, 3, num_filters, input_depth / 2],
+            pitch_locally_connected = True,
+            conv_stride=1, conv_pad='SAME', 
+            activation=lambda x: x)
+    ]
+    self.specs = self.get_spec()
+    assert self.specs
+    if input_depth != 2:
+      self.name_prefix = '%s-multi_instr' % self.model_name
+    else:
+      self.name_prefix = '%s-col_instr' % self.model_name
+    self.name = '%s_depth-%d_filter-%d-%d' % (self.name_prefix, len(self.specs),
+                                              num_filters, num_filters)
+
 
 
 class DeepStraightConvSpecs(ConvArchitecture):

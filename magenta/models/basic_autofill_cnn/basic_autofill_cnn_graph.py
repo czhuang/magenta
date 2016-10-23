@@ -13,6 +13,35 @@ class ConvLayerParams(object):
     self.betas = betas
 
 
+def locally_connected_layer_2d_with_second_axis_shared(input_, filter_sizes):
+  print 'locally_connected_layer_2d_with_second_axis_shared'
+  filter_height, filter_width, num_in_channels, num_out_channels = filter_sizes
+  input_shape = input_.get_shape().as_list()
+  print 'input', input_shape
+  print 'filter', filter_sizes
+  batch, in_height, in_width = input_shape[0], input_shape[1], input_shape[2]
+  input_pad = tf.pad(input_, [[0, 0], [1,1], [1,1], [0, 0]])
+  W_shape = (filter_width, filter_width, 
+             in_height, num_in_channels, num_out_channels)
+  stddev = tf.sqrt(
+      tf.div(2.0, tf.to_float(tf.reduce_prod(W_shape[:-1]))))
+  W = tf.get_variable('locally_connected_weights', W_shape, 
+                      initializer=tf.random_normal_initializer(0.0, stddev))
+  end = (filter_width - 1) // 2
+  start = - (filter_width - 1 - end) 
+  #print start, end
+  Y = tf.zeros((batch_size, in_height, in_width, num_out_channels))
+  for dh in range(start, end+1):
+    for dw in range(start, end+1):
+      i = 1+dh
+      j = 1+dw
+      local_input = input_pad[:, i:i+in_height, j:j+in_width, :]
+      #print tf.shape(W[i, j]).eval(), tf.shape(local_input).eval()
+      # np.einsum('hio,bhwi->bhwo', W[i, j].eval(), local_X.eval())
+      Y += tf.einsum('cef,bcde->bcdf', W[i, j], local_input)
+  return Y, W
+
+
 class BasicAutofillCNNGraph(object):
   """Model for predicting autofills given context."""
 
@@ -25,15 +54,17 @@ class BasicAutofillCNNGraph(object):
     self._targets = targets
     self.prediction_threshold = hparams.prediction_threshold
     input_shape = tf.shape(self._input_data)
+    conv_specs = hparams.conv_arch.specs
+    num_conv_layers = len(conv_specs) - 1
 
     residual_period = 2
+    locally_connected_period = 8
+    locally_connected_stop_index = num_conv_layers - 5
 
     # Build convolutional layers.
     output = self._input_data
     output_for_residual = None
     residual_counter = -1
-    conv_specs = hparams.conv_arch.specs
-    num_conv_layers = len(conv_specs) - 1
     for i, specs in enumerate(conv_specs):
       with tf.variable_scope('conv%d' % i):
         residual_counter += 1
@@ -64,20 +95,26 @@ class BasicAutofillCNNGraph(object):
           continue
 
         # Compute convolution.
-        # Instantiate or retrieve filter weights.
-        stddev = tf.sqrt(
-            tf.div(2.0, tf.to_float(tf.reduce_prod(specs['filters'][:-1]))))
-        weights = tf.get_variable(
-            'weights',
-            specs['filters'],
-            initializer=tf.random_normal_initializer(0.0, stddev))
-        layer = ConvLayerParams(weights)
-        stride = specs['conv_stride']
-        conv = tf.nn.conv2d(
-            output,
-            layer.weights,
-            strides=[1, stride, stride, 1],
-            padding=specs['conv_pad'])
+        if 'pitch_locally_connected' in specs or (i != 0 and i % 8 == 0 and i < locally_connected_stop_index):
+          # Weight instantiation and initialization is wrapped inside.
+          conv, weights = locally_connected_layer_2d_with_second_axis_shared(
+              output, specs['filters'])
+          layer = ConvLayerParams(weights)
+        else:
+          # Instantiate or retrieve filter weights.
+          stddev = tf.sqrt(
+              tf.div(2.0, tf.to_float(tf.reduce_prod(specs['filters'][:-1]))))
+          weights = tf.get_variable(
+              'weights',
+              specs['filters'],
+              initializer=tf.random_normal_initializer(0.0, stddev))
+          layer = ConvLayerParams(weights)
+          stride = specs['conv_stride']
+          conv = tf.nn.conv2d(
+              output,
+              layer.weights,
+              strides=[1, stride, stride, 1],
+              padding=specs['conv_pad'])
 
         # Compute batch normalization or add biases.
         num_target_filters = specs['filters'][-1]
