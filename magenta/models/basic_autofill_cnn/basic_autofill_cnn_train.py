@@ -38,7 +38,7 @@ tf.app.flags.DEFINE_string('run_dir', '/u/huangche/tf_logss',
 tf.app.flags.DEFINE_bool('log_progress', True,
                          'If False, do not log any checkpoints and summary'
                          'statistics.')
-tf.app.flags.DEFINE_string('model_name', 'PitchLocallyConnectedConvSpecs',
+tf.app.flags.DEFINE_string('model_name', 'PitchFullyConnectedConvSpecs',
                            'A string specifying the name of the model.  The '
                            'choices are currently "PitchFullyConnected", '
                            '"DeepStraightConvSpecs", and '
