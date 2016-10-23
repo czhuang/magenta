@@ -94,8 +94,9 @@ class Hyperparameters(object):
         'init_scale', 'crop_piece_len', 'maskout_method', 'learning_rate',
         'prediction_threshold', 'optimize_mask_only', 'conv_arch'
     ]
-    return ','.join('%s=%s' % (key, self.__dict__[key]) for key in sorted_keys
-                    if key not in keys_to_filter_out)
+    return ("maskout_prob=0.75," +
+            ','.join('%s=%s' % (key, self.__dict__[key]) for key in sorted_keys
+                     if key not in keys_to_filter_out))
 
   def get_conv_arch(self):
     """Returns the model architecture."""

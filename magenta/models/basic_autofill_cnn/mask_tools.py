@@ -94,8 +94,10 @@ def get_random_all_time_instrument_mask(pianoroll_shape):
   if len(pianoroll_shape) != 3:
     raise ValueError(
         'Shape needs to of 3 dimensional, time, pitch, and instrument.')
-  mask = np.random.random(pianoroll_shape) > 0.25  #0.5
-  return mask.astype(np.float32)
+  mask = np.random.random([pianoroll_shape[0], 1, pianoroll_shape[2]]) > 0.75
+  mask = mask.astype(np.float32)
+  mask = np.tile(mask, [1, pianoroll_shape[1], 1])
+  return mask
 
 
 def get_multiple_random_patch_mask(pianoroll_shape, mask_border,
