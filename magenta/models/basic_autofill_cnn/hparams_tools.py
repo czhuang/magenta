@@ -33,7 +33,8 @@ class Hyperparameters(object):
       optimize_mask_only=False,
       use_softmax_loss=True,
       # Training.
-      learning_rate=1e-2,
+      learning_rate=2**-6,
+      mask_indicates_context=False,
       use_pitch_locally_connected=False,
       # Prediction threshold.
       prediction_threshold=0.5)

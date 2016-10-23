@@ -63,6 +63,11 @@ class BasicAutofillCNNGraph(object):
 
     # Build convolutional layers.
     output = self._input_data
+    if hparams.mask_indicates_context:
+      def flip_mask(input):
+        stuff, mask = tf.split(3, 2, output)
+        return tf.concat(3, [stuff, 1 - mask])
+      output = flip_mask(output)
     output_for_residual = None
     residual_counter = -1
     for i, specs in enumerate(conv_specs):

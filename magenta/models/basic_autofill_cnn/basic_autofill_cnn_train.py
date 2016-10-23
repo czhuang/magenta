@@ -80,6 +80,7 @@ tf.app.flags.DEFINE_integer('augment_by_halfing_doubling_durations', 0, 'If '
 tf.app.flags.DEFINE_bool('use_pitch_locally_connected', True, 'If True '
                          'interleaves locally connected in pitch layers '
                          'with regular convnet layers.')
+tf.app.flags.DEFINE_bool('mask_indicates_context', True, 'Feed inverted mask into convnet so that zero-padding makes sense')
 
 
 def run_epoch(supervisor,
@@ -224,6 +225,7 @@ def main(unused_argv):
       num_filters=FLAGS.num_filters,
       batch_size=FLAGS.batch_size,
       use_residual=FLAGS.use_residual,
+      mask_indicates_context=FLAGS.mask_indicates_context,
       augment_by_transposing=FLAGS.augment_by_transposing,
       augment_by_halfing_doubling_durations=FLAGS.
       augment_by_halfing_doubling_durations,
