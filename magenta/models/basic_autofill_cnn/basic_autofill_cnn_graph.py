@@ -16,15 +16,15 @@ class ConvLayerParams(object):
 def locally_connected_layer_2d_with_second_axis_shared(input_, filter_sizes):
   print 'locally_connected_layer_2d_with_second_axis_shared'
   filter_height, filter_width, num_in_channels, num_out_channels = filter_sizes
-  input_shape = input_.get_shape().as_list()
-  print 'input', input_shape
   print 'filter', filter_sizes
-  batch, in_height, in_width = input_shape[0], input_shape[1], input_shape[2]
+  assert filter_height == filter_width
+  batch_size = input_.get_shape().as_list()[0]
+  in_height = tf.shape(input_)[1]
+  in_width = input_.get_shape().as_list()[2]
   input_pad = tf.pad(input_, [[0, 0], [1,1], [1,1], [0, 0]])
-  W_shape = (filter_width, filter_width, 
-             in_height, num_in_channels, num_out_channels)
-  stddev = tf.sqrt(
-      tf.div(2.0, tf.to_float(tf.reduce_prod(W_shape[:-1]))))
+  W_shape = (filter_height, filter_width, 
+             in_width, num_in_channels, num_out_channels)
+  stddev = tf.sqrt(tf.div(2.0, tf.to_float(tf.reduce_prod(W_shape[:-1]))))
   W = tf.get_variable('locally_connected_weights', W_shape, 
                       initializer=tf.random_normal_initializer(0.0, stddev))
   end = (filter_width - 1) // 2
@@ -36,9 +36,11 @@ def locally_connected_layer_2d_with_second_axis_shared(input_, filter_sizes):
       i = 1+dh
       j = 1+dw
       local_input = input_pad[:, i:i+in_height, j:j+in_width, :]
+      local_input.set_shape([batch_size, None, in_width, num_in_channels])
       #print tf.shape(W[i, j]).eval(), tf.shape(local_input).eval()
-      # np.einsum('hio,bhwi->bhwo', W[i, j].eval(), local_X.eval())
-      Y += tf.einsum('cef,bcde->bcdf', W[i, j], local_input)
+      # np.einsum('wio,bhwi->bhwo', W[i, j].eval(), local_X.eval())
+      Y += tf.einsum('def,bcde->bcdf', W[i, j], local_input)
+  print "Y shape", Y.get_shape().as_list()
   return Y, W
 
 
@@ -283,9 +285,10 @@ class BasicAutofillCNNGraph(object):
 
 def build_placeholders_initializers_graph(is_training, hparams):
   """Builds input and target placeholders, initializer, and training graph."""
-  input_data = tf.placeholder(tf.float32, [None, None, None,
+  # NOTE: fixed batch_size because einstein sum can only deal with up to 1 unknown dimension
+  input_data = tf.placeholder(tf.float32, [hparams.batch_size, None, hparams.num_pitches,
                                            hparams.input_depth])
-  targets = tf.placeholder(tf.float32, [None, None, None,
+  targets = tf.placeholder(tf.float32, [hparams.batch_size, None, hparams.num_pitches,
                                         hparams.input_depth / 2])
 
   # Setup initializer.
