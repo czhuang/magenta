@@ -15,7 +15,7 @@ class Hyperparameters(object):
       batch_size=20,
       # Input dimensions.
       num_pitches=53,  #53 + 11
-      crop_piece_len=32,
+      crop_piece_len=64,
       input_depth=8,
       # Batch norm parameters.
       batch_norm=True,

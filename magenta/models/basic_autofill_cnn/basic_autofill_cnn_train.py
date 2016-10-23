@@ -43,9 +43,9 @@ tf.app.flags.DEFINE_string('model_name', 'PitchLocallyConnectedConvSpecs',
                            'choices are currently "PitchFullyConnected", '
                            '"DeepStraightConvSpecs", and '
                            '"DeepStraightConvSpecsWithEmbedding".')
-tf.app.flags.DEFINE_integer('num_layers', 28,
+tf.app.flags.DEFINE_integer('num_layers', 64,
                             'The number of convolutional layers.')
-tf.app.flags.DEFINE_integer('num_filters', 128,  
+tf.app.flags.DEFINE_integer('num_filters', 128,
                             'The number of filters for each convolutional '
                             'layer.')
 tf.app.flags.DEFINE_integer('batch_size', 20,
