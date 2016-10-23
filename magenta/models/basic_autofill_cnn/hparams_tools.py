@@ -177,35 +177,6 @@ class PitchLocallyConnectedConvSpecs(ConvArchitecture):
     self.name = '%s_depth-%d_filter-%d-%d' % (self.name_prefix, len(self.specs),
                                               num_filters, num_filters)
 
-class TBFDeepStraightConvSpecs(ConvArchitecture):
-  """A convolutional net where each layer has the same number of filters."""
-  model_name = 'TBFDeepStraightConvSpecs'
-
-  def __init__(self, input_depth, num_layers, num_filters, num_pitches):
-    num_instruments = input_depth // 2
-    if num_layers < 4:
-      raise ModelMisspecificationError(
-          'The network needs to be at least 4 layers deep, %d given.' %
-          num_layers)
-    super(TBFDeepStraightConvSpecs, self).__init__()
-    self.condensed_specs = [
-        dict(filters=[3, 3, input_depth, num_filters])
-        (num_layers - 3, dict(filters=[3, 3, num_filters, num_filters])),
-        dict(change_to_pitch_fully_connected=1,
-             filters=[1, 1, num_pitches * num_filters, num_pitches * num_instruments]),
-        dict(filters=[1, 1, num_pitches * num_instruments, num_pitches * num_instruments],
-             activation=lambda x: x),
-        dict(change_to_pitch_fully_connected=-1, activation=lambda x: x)
-    ]
-    self.specs = self.get_spec()
-    assert self.specs
-    if input_depth != 2:
-      self.name_prefix = '%s-multi_instr' % self.model_name
-    else:
-      self.name_prefix = '%s-col_instr' % self.model_name
-    self.name = '%s_depth-%d_filter-%d-%d' % (self.name_prefix, len(self.specs),
-                                              num_filters, num_filters)
-
 class PitchFullyConnectedConvSpecs(ConvArchitecture):
   """A convolutional net where each layer has the same number of filters."""
   model_name = 'PitchFullyConnectedConvSpecs'
