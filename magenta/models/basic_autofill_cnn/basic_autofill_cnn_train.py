@@ -38,17 +38,17 @@ tf.app.flags.DEFINE_string('run_dir', '/u/huangche/tf_logss',
 tf.app.flags.DEFINE_bool('log_progress', True,
                          'If False, do not log any checkpoints and summary'
                          'statistics.')
-tf.app.flags.DEFINE_string('model_name', 'PitchFullyConnectedConvSpecs',
+tf.app.flags.DEFINE_string('model_name', 'PitchLocallyConnectedConvSpecs',
                            'A string specifying the name of the model.  The '
-                           'choices are currently "PitchFullyConnected", '
+                           'choices are currently "PitchFullyConnectedConvSpecs", '
                            '"DeepStraightConvSpecs", and '
                            '"DeepStraightConvSpecsWithEmbedding".')
-tf.app.flags.DEFINE_integer('num_layers', 64,
+tf.app.flags.DEFINE_integer('num_layers', 24,
                             'The number of convolutional layers.')
 tf.app.flags.DEFINE_integer('num_filters', 128,
                             'The number of filters for each convolutional '
                             'layer.')
-tf.app.flags.DEFINE_integer('batch_size', 20,
+tf.app.flags.DEFINE_integer('batch_size', 10,
                             'The batch size training and validation the model.')
 # TODO(annahuang): Some are meant to be booleans.
 tf.app.flags.DEFINE_integer('use_residual', 1,

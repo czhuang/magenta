@@ -15,7 +15,7 @@ class Hyperparameters(object):
       batch_size=20,
       # Input dimensions.
       num_pitches=53,  #53 + 11
-      crop_piece_len=64,
+      crop_piece_len=32, #64,
       input_depth=8,
       # Batch norm parameters.
       batch_norm=True,
@@ -88,9 +88,9 @@ class Hyperparameters(object):
     # directory name.
     keys_to_filter_out = [
         'batch_size', 'use_softmax_loss', ' instr_sep', 'border', 'num_layers',
-        'num_filters', 'input_depth', 'model_name',
+        'input_depth', 'model_name',
         'batch_norm_variance_epsilon', 'batch_norm_gamma', 'batch_norm',
-        'init_scale', 'crop_piece_len', 'maskout_method', 'learning_rate',
+        'init_scale', 'maskout_method', 'learning_rate',
         'prediction_threshold', 'optimize_mask_only', 'conv_arch',
         'augment_by_halfing_doubling_durations', 'augment_by_transposing',
     ]
