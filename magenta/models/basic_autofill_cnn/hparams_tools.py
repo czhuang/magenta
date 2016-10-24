@@ -15,7 +15,7 @@ class Hyperparameters(object):
       batch_size=20,
       # Input dimensions.
       num_pitches=53,  #53 + 11
-      crop_piece_len=32,
+      crop_piece_len=64,
       input_depth=8,
       # Batch norm parameters.
       batch_norm=True,
@@ -33,8 +33,8 @@ class Hyperparameters(object):
       optimize_mask_only=False,
       use_softmax_loss=True,
       # Training.
-      learning_rate=1e-2,
-      use_pitch_locally_connected=False,
+      learning_rate=2**-6,
+      mask_indicates_context=False,
       # Prediction threshold.
       prediction_threshold=0.5)
 
@@ -91,17 +91,21 @@ class Hyperparameters(object):
         'num_filters', 'input_depth', 'model_name',
         'batch_norm_variance_epsilon', 'batch_norm_gamma', 'batch_norm',
         'init_scale', 'crop_piece_len', 'maskout_method', 'learning_rate',
-        'prediction_threshold', 'optimize_mask_only', 'conv_arch'
+        'prediction_threshold', 'optimize_mask_only', 'conv_arch',
+        'augment_by_halfing_doubling_durations', 'augment_by_transposing',
     ]
-    return ','.join('%s=%s' % (key, self.__dict__[key]) for key in sorted_keys
-                    if key not in keys_to_filter_out)
+    return ("maskout_prob=0.75," +
+            ','.join('%s=%s' % (key, self.__dict__[key]) for key in sorted_keys
+                     if key not in keys_to_filter_out))
 
   def get_conv_arch(self):
     """Returns the model architecture."""
     if self.model_name == 'PitchLocallyConnectedConvSpecs':
-      assert self.use_pitch_locally_connected
       return PitchLocallyConnectedConvSpecs(
           self.input_depth, self.num_layers, self.num_filters, self.num_pitches)
+
+    if self.model_name == 'PitchFullyConnectedConvSpecs':
+      return globals()[self.model_name](self.input_depth, self.num_layers, self.num_filters, self.num_pitches)
 
     if self.model_name == 'DeepStraightConvSpecs':
       return DeepStraightConvSpecs(self.input_depth, self.num_layers,
@@ -144,28 +148,26 @@ class PitchLocallyConnectedConvSpecs(ConvArchitecture):
   model_name = 'PitchLocallyConnectedConvSpecs'
 
   def __init__(self, input_depth, num_layers, num_filters, num_pitches):
+    num_instruments = input_depth // 2
     if num_layers < 4:
       raise ModelMisspecificationError(
           'The network needs to be at least 4 layers deep, %d given.' %
           num_layers)
     super(PitchLocallyConnectedConvSpecs, self).__init__()
-    self.condensed_specs = [
-        dict(
-            filters=[3, 3, input_depth, num_filters],
-            conv_stride=1, conv_pad='SAME'), 
-        (num_layers - 4, dict(filters=[3, 3, num_filters, num_filters],
-            conv_stride=1, conv_pad='SAME')), 
-        dict(filters=[3, 3, num_filters, num_filters], 
-            pitch_locally_connected = True,
-            conv_stride=1, conv_pad='SAME'), 
-        dict(filters=[3, 3, num_filters, num_filters], 
-            pitch_locally_connected = True,
-            conv_stride=1, conv_pad='SAME'), 
-        dict(filters=[3, 3, num_filters, input_depth / 2],
-            pitch_locally_connected = True,
-            conv_stride=1, conv_pad='SAME', 
-            activation=lambda x: x)
-    ]
+    bottom = [dict(filters=[3, 3, input_depth, num_filters])]
+    middle = []
+    for i in range(num_layers - 4):
+      middle.append(dict(filters=[3, 3, num_filters, num_filters],
+                         pitch_locally_connected=i % 8 == 7))
+    top = [dict(filters=[3, 3, num_filters, num_instruments], pitch_locally_connected = True),
+           dict(filters=[3, 3, num_instruments, num_instruments], pitch_locally_connected = True),
+           dict(change_to_pitch_fully_connected=1,
+                filters=[3, 1, num_pitches * num_instruments, num_pitches * num_instruments],
+                activation=lambda x: x),
+           dict(change_to_pitch_fully_connected=-1, activation=lambda x: x)]
+    self.condensed_specs = bottom + middle + top
+    # -1 because the last layer is just a reshape
+    assert len(self.condensed_specs) - 1 == num_layers
     self.specs = self.get_spec()
     assert self.specs
     if input_depth != 2:
@@ -175,7 +177,37 @@ class PitchLocallyConnectedConvSpecs(ConvArchitecture):
     self.name = '%s_depth-%d_filter-%d-%d' % (self.name_prefix, len(self.specs),
                                               num_filters, num_filters)
 
+class PitchFullyConnectedConvSpecs(ConvArchitecture):
+  """A convolutional net where each layer has the same number of filters."""
+  model_name = 'PitchFullyConnectedConvSpecs'
 
+  def __init__(self, input_depth, num_layers, num_filters, num_pitches):
+    num_instruments = input_depth // 2
+    if num_layers < 4:
+      raise ModelMisspecificationError(
+          'The network needs to be at least 4 layers deep, %d given.' %
+          num_layers)
+    super(PitchFullyConnectedConvSpecs, self).__init__()
+    bottom = [dict(filters=[3, 3, input_depth, num_filters])]
+    middle = []
+    for i in range(num_layers - 3):
+      middle.append(dict(filters=[3, 3, num_filters, num_filters]))
+    top = [dict(change_to_pitch_fully_connected=1, activation=lambda x: x),
+           dict(filters=[1, 1, num_pitches * num_filters,     num_pitches * num_instruments]),
+           dict(filters=[3, 1, num_pitches * num_instruments, num_pitches * num_instruments],
+                activation=lambda x: x),
+           dict(change_to_pitch_fully_connected=-1, activation=lambda x: x)]
+    self.condensed_specs = bottom + middle + top
+    # -2 because two layers are just reshapes
+    assert len(self.condensed_specs) - 2 == num_layers
+    self.specs = self.get_spec()
+    assert self.specs
+    if input_depth != 2:
+      self.name_prefix = '%s-multi_instr' % self.model_name
+    else:
+      self.name_prefix = '%s-col_instr' % self.model_name
+    self.name = '%s_depth-%d_filter-%d-%d' % (self.name_prefix, len(self.specs),
+                                              num_filters, num_filters)
 
 class DeepStraightConvSpecs(ConvArchitecture):
   """A convolutional net where each layer has the same number of filters."""

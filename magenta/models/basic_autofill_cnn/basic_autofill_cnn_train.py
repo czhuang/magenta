@@ -38,14 +38,14 @@ tf.app.flags.DEFINE_string('run_dir', '/u/huangche/tf_logss',
 tf.app.flags.DEFINE_bool('log_progress', True,
                          'If False, do not log any checkpoints and summary'
                          'statistics.')
-tf.app.flags.DEFINE_string('model_name', 'PitchLocallyConnectedConvSpecs',
+tf.app.flags.DEFINE_string('model_name', 'PitchFullyConnectedConvSpecs',
                            'A string specifying the name of the model.  The '
                            'choices are currently "PitchFullyConnected", '
                            '"DeepStraightConvSpecs", and '
                            '"DeepStraightConvSpecsWithEmbedding".')
-tf.app.flags.DEFINE_integer('num_layers', 28,
+tf.app.flags.DEFINE_integer('num_layers', 64,
                             'The number of convolutional layers.')
-tf.app.flags.DEFINE_integer('num_filters', 128,  
+tf.app.flags.DEFINE_integer('num_filters', 128,
                             'The number of filters for each convolutional '
                             'layer.')
 tf.app.flags.DEFINE_integer('batch_size', 20,
@@ -77,9 +77,7 @@ tf.app.flags.DEFINE_integer('augment_by_halfing_doubling_durations', 0, 'If '
                             'or halve durations or stay the same.  The former '
                             'two options are only available if they do not '
                             'go outside of the original set of durations.')
-tf.app.flags.DEFINE_bool('use_pitch_locally_connected', True, 'If True '
-                         'interleaves locally connected in pitch layers '
-                         'with regular convnet layers.')
+tf.app.flags.DEFINE_bool('mask_indicates_context', True, 'Feed inverted mask into convnet so that zero-padding makes sense')
 
 
 def run_epoch(supervisor,
@@ -96,6 +94,9 @@ def run_epoch(supervisor,
   """Runs an epoch of training or evaluate the model on given data."""
   input_data, targets = data_tools.make_data_feature_maps(raw_data, config,
                                                           encoder)
+  permutation = np.random.permutation(len(input_data))
+  input_data = input_data[permutation]
+  targets = targets[permutation]
 
   # TODO(annahuang): Leaves out last incomplete minibatch, needs wrap around.
   batch_size = m.batch_size
@@ -121,11 +122,12 @@ def run_epoch(supervisor,
     # Evaluate the graph and run back propagation.
     results = sess.run([m.predictions, m.loss, m.loss_total, m.loss_mask,
                         m.mask_size, m.mask, m.loss_unmask, m.unmask_size,
+                        m.learning_rate,
                         eval_op], {m.input_data: x,
                                    m.targets: y})
 
     (predictions, loss, loss_total, loss_mask, mask_size, mask, loss_unmask,
-     unmask_size, _) = results
+     unmask_size, learning_rate, _) = results
 
     # Aggregate performances.
     losses_total.add(loss_total, 1)
@@ -156,6 +158,7 @@ def run_epoch(supervisor,
       np.exp(losses_unmask.mean))
   run_stats['perplexity_total_%s' % experiment_type] = np.exp(losses_total.mean)
   run_stats['perplexity_%s' % experiment_type] = np.exp(losses.mean)
+  run_stats['learning_rate'] = float(learning_rate)
 
   # Make summaries.
   if FLAGS.log_progress:
@@ -193,6 +196,7 @@ def run_epoch(supervisor,
   tf.logging.info('perplexity, loss (total): %.3f, %.3f, ' %
                   (run_stats['perplexity_total_%s' % experiment_type],
                    run_stats['loss_total_%s' % experiment_type]))
+  tf.logging.info('log lr: %.3f' % np.log2(run_stats['learning_rate']))
   tf.logging.info('time taken: %.4f' % (time.time() - start_time))
 
   # TODO(annahuang): Remove printouts.
@@ -206,7 +210,11 @@ def run_epoch(supervisor,
   print 'perplexity, loss (total): %.3f, %.3f, ' % (
       run_stats['perplexity_total_%s' % experiment_type],
       run_stats['loss_total_%s' % experiment_type]),
+  print 'maskfrac: %.3f' % (mask_size/float(mask_size + unmask_size)),
+  print 'log lr: %.3f' % np.log2(run_stats['learning_rate']),
   print 'time taken: %.4f' % (time.time() - start_time)
+
+  return best_validation_loss
 
 
 def main(unused_argv):
@@ -224,10 +232,10 @@ def main(unused_argv):
       num_filters=FLAGS.num_filters,
       batch_size=FLAGS.batch_size,
       use_residual=FLAGS.use_residual,
+      mask_indicates_context=FLAGS.mask_indicates_context,
       augment_by_transposing=FLAGS.augment_by_transposing,
       augment_by_halfing_doubling_durations=FLAGS.
-      augment_by_halfing_doubling_durations,
-      use_pitch_locally_connected=FLAGS.use_pitch_locally_connected)
+      augment_by_halfing_doubling_durations)
 
   config = config_tools.PipelineConfig(hparams, FLAGS.maskout_method,
                                        FLAGS.separate_instruments)
@@ -277,6 +285,8 @@ def main(unused_argv):
     #with sv.managed_session('local') as sess:
     with sv.PrepareSession() as sess:
       epoch_count = 0
+      time_since_improvement = 0
+      patience = 5
       while epoch_count < FLAGS.num_epochs or not FLAGS.num_epochs:
         if sv.should_stop():
           break
@@ -286,9 +296,17 @@ def main(unused_argv):
 
         # Run validation.
         if epoch_count % config.eval_freq == 0:
-          run_epoch(sv, sess, mvalid, valid_data, pianoroll_encoder, config,
-                    no_op, 'valid', epoch_count, best_validation_loss,
-                    best_model_saver)
+          new_best_validation_loss = run_epoch(sv, sess, mvalid, valid_data, pianoroll_encoder, config,
+                                               no_op, 'valid', epoch_count, best_validation_loss,
+                                               best_model_saver)
+          if new_best_validation_loss < best_validation_loss:
+            best_validation_loss = new_best_validation_loss
+            time_since_improvement = 0
+          else:
+            time_since_improvement += 1
+            if time_since_improvement > patience:
+              sess.run(m.decay_op)
+              time_since_improvement = 0
         epoch_count += 1
 
     return best_validation_loss

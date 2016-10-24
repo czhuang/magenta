@@ -39,7 +39,7 @@ class PipelineConfig(object):
   RANDOM_TIME_RANGE, RANDOM_MULTIPLE_INSTRUMENT_TIME = range(3, 5)
   RANDOM_ALL_TIME_INSTRUMENT = 5
   # Run time configurations.
-  eval_freq = 5
+  eval_freq = 10
 
   # A identifier for each run.
   run_id = get_current_time_as_str()

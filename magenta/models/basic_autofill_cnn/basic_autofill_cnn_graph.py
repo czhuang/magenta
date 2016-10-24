@@ -16,15 +16,15 @@ class ConvLayerParams(object):
 def locally_connected_layer_2d_with_second_axis_shared(input_, filter_sizes):
   print 'locally_connected_layer_2d_with_second_axis_shared'
   filter_height, filter_width, num_in_channels, num_out_channels = filter_sizes
-  input_shape = input_.get_shape().as_list()
-  print 'input', input_shape
   print 'filter', filter_sizes
-  batch, in_height, in_width = input_shape[0], input_shape[1], input_shape[2]
+  assert filter_height == filter_width
+  batch_size = input_.get_shape().as_list()[0]
+  in_height = tf.shape(input_)[1]
+  in_width = input_.get_shape().as_list()[2]
   input_pad = tf.pad(input_, [[0, 0], [1,1], [1,1], [0, 0]])
-  W_shape = (filter_width, filter_width, 
-             in_height, num_in_channels, num_out_channels)
-  stddev = tf.sqrt(
-      tf.div(2.0, tf.to_float(tf.reduce_prod(W_shape[:-1]))))
+  W_shape = (filter_height, filter_width, 
+             in_width, num_in_channels, num_out_channels)
+  stddev = tf.sqrt(tf.div(2.0, tf.to_float(tf.reduce_prod(W_shape[:-1]))))
   W = tf.get_variable('locally_connected_weights', W_shape, 
                       initializer=tf.random_normal_initializer(0.0, stddev))
   end = (filter_width - 1) // 2
@@ -36,9 +36,11 @@ def locally_connected_layer_2d_with_second_axis_shared(input_, filter_sizes):
       i = 1+dh
       j = 1+dw
       local_input = input_pad[:, i:i+in_height, j:j+in_width, :]
+      local_input.set_shape([batch_size, None, in_width, num_in_channels])
       #print tf.shape(W[i, j]).eval(), tf.shape(local_input).eval()
-      # np.einsum('hio,bhwi->bhwo', W[i, j].eval(), local_X.eval())
-      Y += tf.einsum('cef,bcde->bcdf', W[i, j], local_input)
+      # np.einsum('wio,bhwi->bhwo', W[i, j].eval(), local_X.eval())
+      Y += tf.einsum('def,bcde->bcdf', W[i, j], local_input)
+  print "Y shape", Y.get_shape().as_list()
   return Y, W
 
 
@@ -58,11 +60,14 @@ class BasicAutofillCNNGraph(object):
     num_conv_layers = len(conv_specs) - 1
 
     residual_period = 2
-    locally_connected_period = 8
-    locally_connected_stop_index = num_conv_layers - 5
 
     # Build convolutional layers.
     output = self._input_data
+    if hparams.mask_indicates_context:
+      def flip_mask(input):
+        stuff, mask = tf.split(3, 2, output)
+        return tf.concat(3, [stuff, 1 - mask])
+      output = flip_mask(output)
     output_for_residual = None
     residual_counter = -1
     for i, specs in enumerate(conv_specs):
@@ -91,49 +96,54 @@ class BasicAutofillCNNGraph(object):
           # layer.
           output_for_residual = None
           # Needs to be the layer about the last to do the reshaping
-          assert i == num_conv_layers
+          assert specs is conv_specs[-1]
           continue
 
-        # Compute convolution.
-        if 'pitch_locally_connected' in specs or (i != 0 and i % 8 == 0 and i < locally_connected_stop_index):
-          # Weight instantiation and initialization is wrapped inside.
-          conv, weights = locally_connected_layer_2d_with_second_axis_shared(
-              output, specs['filters'])
-          layer = ConvLayerParams(weights)
-        else:
-          # Instantiate or retrieve filter weights.
-          stddev = tf.sqrt(
-              tf.div(2.0, tf.to_float(tf.reduce_prod(specs['filters'][:-1]))))
-          weights = tf.get_variable(
-              'weights',
-              specs['filters'],
-              initializer=tf.random_normal_initializer(0.0, stddev))
-          layer = ConvLayerParams(weights)
-          stride = specs['conv_stride']
-          conv = tf.nn.conv2d(
-              output,
-              layer.weights,
-              strides=[1, stride, stride, 1],
-              padding=specs['conv_pad'])
+        if "filters" in specs:
+          # Compute convolution.
+          if specs.get('pitch_locally_connected', False):
+            # Weight instantiation and initialization is wrapped inside.
+            conv, weights = locally_connected_layer_2d_with_second_axis_shared(
+                output, specs['filters'])
+            layer = ConvLayerParams(weights)
+          else:
+            # Instantiate or retrieve filter weights.
+            stddev = tf.sqrt(
+                tf.div(2.0, tf.to_float(tf.reduce_prod(specs['filters'][:-1]))))
+            weights = tf.get_variable(
+                'weights',
+                specs['filters'],
+                initializer=tf.random_normal_initializer(0.0, stddev))
+            layer = ConvLayerParams(weights)
+            stride = specs.get('conv_stride', 1)
+            conv = tf.nn.conv2d(
+                output,
+                layer.weights,
+                strides=[1, stride, stride, 1],
+                padding=specs.get('conv_pad', 'SAME'))
 
-        # Compute batch normalization or add biases.
-        num_target_filters = specs['filters'][-1]
-        if not hparams.batch_norm:
-          layer.biases = tf.get_variable(
-              'bias', [num_target_filters],
-              initializer=tf.constant_initializer(0.0))
-          output = tf.nn.bias_add(conv, layer.biases)
-        else:
-          layer.gammas = tf.get_variable(
-              'gamma', [1, 1, 1, num_target_filters],
-              initializer=tf.constant_initializer(hparams.batch_norm_gamma))
-          layer.betas = tf.get_variable(
-              'beta', [num_target_filters],
-              initializer=tf.constant_initializer(0.0))
-          mean, variance = tf.nn.moments(conv, [0, 1, 2], keep_dims=True)
-          output = tf.nn.batch_normalization(
-              conv, mean, variance, layer.betas, layer.gammas,
-              hparams.batch_norm_variance_epsilon)
+          num_source_filters, num_target_filters = specs['filters'][-2:]
+          if num_target_filters != num_source_filters:
+            output_for_residual = None
+            residual_counter = 0
+
+          # Compute batch normalization or add biases.
+          if not hparams.batch_norm:
+            layer.biases = tf.get_variable(
+                'bias', [num_target_filters],
+                initializer=tf.constant_initializer(0.0))
+            output = tf.nn.bias_add(conv, layer.biases)
+          else:
+            layer.gammas = tf.get_variable(
+                'gamma', [1, 1, 1, num_target_filters],
+                initializer=tf.constant_initializer(hparams.batch_norm_gamma))
+            layer.betas = tf.get_variable(
+                'beta', [num_target_filters],
+                initializer=tf.constant_initializer(0.0))
+            mean, variance = tf.nn.moments(conv, [0, 1, 2], keep_dims=True)
+            output = tf.nn.batch_normalization(
+                conv, mean, variance, layer.betas, layer.gammas,
+                hparams.batch_norm_variance_epsilon)
 
         # Sum residual before nonlinearity if odd layer and residual exist.
         if hparams.use_residual and output_for_residual is not None and (
@@ -195,13 +205,16 @@ class BasicAutofillCNNGraph(object):
     else:
       self._loss = self._loss_total
 
+    self.learning_rate = tf.Variable(hparams.learning_rate, name="learning_rate", trainable=False, dtype=tf.float32)
+
     # If not training, don't need to add optimizer to the graph.
     if not is_training:
       self._train_op = tf.no_op
       return
 
-    self._optimizer = tf.train.AdamOptimizer(
-        learning_rate=hparams.learning_rate)
+    # FIXME 0.5 -> hparams.decay_rate
+    self.decay_op = tf.assign(self.learning_rate, 0.5*self.learning_rate)
+    self._optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
     self._train_op = self._optimizer.minimize(self._loss)
     self._gradient_norms = [
         tf.sqrt(tf.reduce_sum(gradient[0]**2))
@@ -274,9 +287,10 @@ class BasicAutofillCNNGraph(object):
 
 def build_placeholders_initializers_graph(is_training, hparams):
   """Builds input and target placeholders, initializer, and training graph."""
-  input_data = tf.placeholder(tf.float32, [None, None, None,
+  # NOTE: fixed batch_size because einstein sum can only deal with up to 1 unknown dimension
+  input_data = tf.placeholder(tf.float32, [hparams.batch_size, None, hparams.num_pitches,
                                            hparams.input_depth])
-  targets = tf.placeholder(tf.float32, [None, None, None,
+  targets = tf.placeholder(tf.float32, [hparams.batch_size, None, hparams.num_pitches,
                                         hparams.input_depth / 2])
 
   # Setup initializer.

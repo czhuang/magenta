@@ -174,11 +174,10 @@ def make_data_feature_maps(sequences, config, encoder, start_crop_index=None):
 
   input_data = np.asarray(input_data)
   targets = np.asarray(targets)
-  print input_data.ndim, targets.ndim
   if not (input_data.ndim == 4 and targets.ndim == 4):
+    print input_data.ndim, targets.ndim
     raise DataProcessingError('Input data or target dimensions incorrect.')
   return input_data, targets
-
 
 
 def get_pianoroll_from_note_sequence_data(path, type_):
