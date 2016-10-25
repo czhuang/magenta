@@ -55,6 +55,56 @@ def apply_mask_and_stack(pianoroll, mask):
   return np.concatenate([masked_pianoroll, mask], 2)
 
 
+def perturb_and_stack(pianoroll, mask):
+  """Alternative implementation."""
+  if pianoroll.ndim != 3:
+    raise ValueError(
+      'Shape needs to be 3 dimensional, consisting of time, pitch, and instrument.')
+  if pianoroll.shape != mask.shape:
+    raise ValueError(
+      'Mismatch in pianoroll and mask shape')
+  # Mask gives which time steps to perturb, and then for each time step, randomly sample a pitch.
+  # First, blankout those positions and then add the new sampled random pitch in.
+  masked_pianoroll = pianoroll * (1 - mask)
+  mask_without_pitch_dim = np.sum(mask, axis=1)
+  masked_indices = np.where(mask_without_pitch_dim > 0)
+  num_pitches = pianoroll.shape[1]
+  num_of_masked_positions = int(np.sum(mask_without_pitch_dim > 0))
+  sampled_pitches = np.random.randint(num_pitches, size=num_of_masked_positions)
+  pianoroll[masked_indices[0], :, masked_indices[1]] = (
+      sampled_pitches[:, None] == np.arange(num_pitches)[None, :])
+  pianoroll = pianoroll.astype(np.float32)
+  num_notes_on = np.unique(np.sum(pianoroll, axis=1))
+  print 'pianoroll shape', pianoroll.shape
+  print 'num_notes_on', num_notes_on
+  assert np.allclose(num_notes_on, np.arange(2)) or (
+      np.allclose(num_notes_on, np.array([1.])))
+  # Check that every timestep has no more than 1 pitch.  Can use the check from pianorolls_lib
+  return np.concatenate([masked_pianoroll, mask], 2)
+
+
+def perturb_and_stack(pianoroll, mask):
+  """Alternative implementation."""
+  if pianoroll.ndim != 3:
+    raise ValueError(
+      'Shape needs to be 3 dimensional, consisting of time, pitch, and instrument.')
+  if pianoroll.shape != mask.shape:
+    raise ValueError(
+      'Mismatch in pianoroll and mask shape')
+  num_timesteps, num_pitches, num_instrs = pianoroll.shape
+  categorical_pianoroll = np.random.randint(num_pitches, size=(num_timesteps, num_instrs))
+  onehot_pianoroll = np.transpose(np.eye(num_pitches)[categorical_pianoroll], axes=[0, 2, 1])
+  masked_pianoroll = (1 - mask * pianoroll) + (mask * onehot_pianoroll)
+  # Check to make sure monophonic.  
+  num_notes_on = np.unique(np.sum(pianoroll, axis=1))
+  #print 'pianoroll shape', pianoroll.shape
+  #print 'num_notes_on', num_notes_on
+  assert np.allclose(num_notes_on, np.arange(2)) or (
+      np.allclose(num_notes_on, np.array([1.])))
+  # Check that every timestep has no more than 1 pitch.  Can use the check from pianorolls_lib
+  return np.concatenate([masked_pianoroll, mask], 2)
+
+
 def get_random_instrument_mask(pianoroll_shape):
   """Creates a mask to mask out a random instrument.
 
@@ -85,7 +135,7 @@ def get_instrument_mask(pianoroll_shape, instr_idx):
   return mask
 
 
-def get_random_all_time_instrument_mask(pianoroll_shape):
+def get_random_all_time_instrument_mask(pianoroll_shape, blankout_ratio):
   """
 
   Returns:
@@ -94,7 +144,8 @@ def get_random_all_time_instrument_mask(pianoroll_shape):
   if len(pianoroll_shape) != 3:
     raise ValueError(
         'Shape needs to of 3 dimensional, time, pitch, and instrument.')
-  mask = np.random.random([pianoroll_shape[0], 1, pianoroll_shape[2]]) > 0.75
+  mask = np.random.random(
+      [pianoroll_shape[0], 1, pianoroll_shape[2]]) > (1 - blankout_ratio)
   mask = mask.astype(np.float32)
   mask = np.tile(mask, [1, pianoroll_shape[1], 1])
   return mask

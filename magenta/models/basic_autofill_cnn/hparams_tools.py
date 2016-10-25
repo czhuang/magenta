@@ -13,10 +13,12 @@ class Hyperparameters(object):
       augment_by_transposing=0,
       augment_by_halfing_doubling_durations=0,
       batch_size=20,
+      corrupt_ratio=0.25,
       # Input dimensions.
       num_pitches=53,  #53 + 11
-      crop_piece_len=32, #64,
+      crop_piece_len=64, #64,
       input_depth=8,
+      output_depth=4,
       # Batch norm parameters.
       batch_norm=True,
       batch_norm_variance_epsilon=1e-7,
@@ -29,6 +31,7 @@ class Hyperparameters(object):
       model_name=None,
       checkpoint_name=None,
       use_residual=True,
+      denoise_mode=False,
       # Loss setup.
       optimize_mask_only=False,
       use_softmax_loss=True,
@@ -68,6 +71,15 @@ class Hyperparameters(object):
       self.num_pitches = 53 + 11
       #raise ValueError("num_pitches should be 53 + 11 if transposing")
 
+    # If denoising mode, then masks are not feed into model.
+    if self.denoise_mode:
+      self.input_depth //= 2
+      if self.input_depth != self.output_depth:
+        raise ValueError('Legacy from before, Input depth needs to be twice as output depth initially to account for mask that is not used in convolution but for computing debug statistics.')
+    else:
+      if self.input_depth // 2 != self.output_depth:
+        raise ValueError('Output depth should be half of that of input.')
+
     self.conv_arch = self.get_conv_arch()
 
   @property
@@ -88,7 +100,7 @@ class Hyperparameters(object):
     # directory name.
     keys_to_filter_out = [
         'batch_size', 'use_softmax_loss', ' instr_sep', 'border', 'num_layers',
-        'input_depth', 'model_name',
+        'input_depth', 'output_depth', 'model_name',
         'batch_norm_variance_epsilon', 'batch_norm_gamma', 'batch_norm',
         'init_scale', 'maskout_method', 'learning_rate',
         'prediction_threshold', 'optimize_mask_only', 'conv_arch',
@@ -102,14 +114,14 @@ class Hyperparameters(object):
     """Returns the model architecture."""
     if self.model_name == 'PitchLocallyConnectedConvSpecs':
       return PitchLocallyConnectedConvSpecs(
-          self.input_depth, self.num_layers, self.num_filters, self.num_pitches)
+          self.input_depth, self.num_layers, self.num_filters, self.num_pitches, self.output_depth)
 
     if self.model_name == 'PitchFullyConnectedConvSpecs':
-      return globals()[self.model_name](self.input_depth, self.num_layers, self.num_filters, self.num_pitches)
+      return globals()[self.model_name](self.input_depth, self.num_layers, self.num_filters, self.num_pitches, self.output_depth)
 
     if self.model_name == 'DeepStraightConvSpecs':
       return DeepStraightConvSpecs(self.input_depth, self.num_layers,
-                                   self.num_filters, self.num_pitches)
+                                   self.num_filters, self.num_pitches, self.output_depth)
     elif self.model_name == 'DeepStraightConvSpecsWithEmbedding':
       return DeepStraightConvSpecsWithEmbedding(self.input_depth,
                                                 self.num_layers,
@@ -147,8 +159,8 @@ class PitchLocallyConnectedConvSpecs(ConvArchitecture):
   """A convolutional net where each layer has the same number of filters."""
   model_name = 'PitchLocallyConnectedConvSpecs'
 
-  def __init__(self, input_depth, num_layers, num_filters, num_pitches):
-    num_instruments = input_depth // 2
+  def __init__(self, input_depth, num_layers, num_filters, num_pitches, output_depth):
+    num_instruments = output_depth
     if num_layers < 4:
       raise ModelMisspecificationError(
           'The network needs to be at least 4 layers deep, %d given.' %
@@ -181,8 +193,8 @@ class PitchFullyConnectedConvSpecs(ConvArchitecture):
   """A convolutional net where each layer has the same number of filters."""
   model_name = 'PitchFullyConnectedConvSpecs'
 
-  def __init__(self, input_depth, num_layers, num_filters, num_pitches):
-    num_instruments = input_depth // 2
+  def __init__(self, input_depth, num_layers, num_filters, num_pitches, output_depth):
+    num_instruments = output_depth
     if num_layers < 4:
       raise ModelMisspecificationError(
           'The network needs to be at least 4 layers deep, %d given.' %
@@ -213,7 +225,7 @@ class DeepStraightConvSpecs(ConvArchitecture):
   """A convolutional net where each layer has the same number of filters."""
   model_name = 'DeepStraightConvSpecs'
 
-  def __init__(self, input_depth, num_layers, num_filters, num_pitches):
+  def __init__(self, input_depth, num_layers, num_filters, num_pitches, output_depth):
     if num_layers < 4:
       raise ModelMisspecificationError(
           'The network needs to be at least 4 layers deep, %d given.' %
@@ -230,7 +242,7 @@ class DeepStraightConvSpecs(ConvArchitecture):
                     filters=[2, 2, num_filters, num_filters],
                     conv_stride=1,
                     conv_pad='SAME'), dict(
-                        filters=[2, 2, num_filters, input_depth / 2],
+                        filters=[2, 2, num_filters, output_depth],
                         conv_stride=1,
                         conv_pad='SAME',
                         activation=lambda x: x)
@@ -427,7 +439,15 @@ CHECKPOINT_HPARAMS = {
         model_name='DeepStraightConvSpecs',
         checkpoint_name='DeepStraightConvSpecs-multi_instr_depth-64_filter-128-128-best_model.ckpt'
     ),
-
+    'Denoising': Hyperparameters(
+        num_layers=48,
+        num_filters=128,
+        use_residual=True,
+        mask_indicates_context=True,
+        model_name='DeepStraightConvSpecs',
+        checkpoint_name='DeepStraightConvSpecs_d-48_f-128_denoising_best_model.ckpt'
+    ),
+ 
     'DeepResidualDataAug': Hyperparameters(
         num_layers=28,
         num_filters=256,

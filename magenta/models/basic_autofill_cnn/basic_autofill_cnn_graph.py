@@ -74,6 +74,7 @@ class BasicAutofillCNNGraph(object):
     self._targets = targets
     self.prediction_threshold = hparams.prediction_threshold
     input_shape = tf.shape(self._input_data)
+    output_depth = input_shape[3] / 2
     conv_specs = hparams.conv_arch.specs
     num_conv_layers = len(conv_specs) - 1
 
@@ -86,6 +87,12 @@ class BasicAutofillCNNGraph(object):
         stuff, mask = tf.split(3, 2, output)
         return tf.concat(3, [stuff, 1 - mask])
       output = flip_mask(output)
+
+    # For denoising case, don't use masks in model
+    if hparams.denoise_mode:
+      output = tf.split(3, 2, output)[0]
+      input_shape = tf.shape(output)
+
     output_for_residual = None
     residual_counter = -1
     for i, specs in enumerate(conv_specs):
@@ -193,7 +200,7 @@ class BasicAutofillCNNGraph(object):
       self._logits = output
       softmax_2d = tf.nn.softmax(self.reshape_to_2d(self._logits))
       output_shape = [
-          input_shape[0], input_shape[1], input_shape[2], input_shape[3] / 2
+          input_shape[0], input_shape[1], input_shape[2], output_depth
       ]
 
       self._predictions = self.reshape_back_to_4d(softmax_2d, output_shape)

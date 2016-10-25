@@ -143,6 +143,7 @@ def make_data_feature_maps(sequences, config, encoder, start_crop_index=None):
       tf.logging.warning('Piece shorter than requested crop length.')
       continue
     seq_count += 1
+    
     if maskout_method == config.RANDOM_INSTRUMENT:
       mask = mask_tools.get_random_instrument_mask(cropped_pianoroll.shape)
     elif maskout_method == config.RANDOM_PATCHES:
@@ -160,11 +161,16 @@ def make_data_feature_maps(sequences, config, encoder, start_crop_index=None):
     elif maskout_method == config.RANDOM_MULTIPLE_INSTRUMENT_TIME:
       mask = mask_tools.get_multiple_random_instrument_time_mask(
           cropped_pianoroll.shape, maskout_border, config.num_maskout)
-    elif maskout_method == config.RANDOM_ALL_TIME_INSTRUMENT:
-      mask = mask_tools.get_random_all_time_instrument_mask(cropped_pianoroll.shape)
+    elif config.hparams.denoise_mode or maskout_method == config.RANDOM_ALL_TIME_INSTRUMENT:
+      mask = mask_tools.get_random_all_time_instrument_mask(
+          cropped_pianoroll.shape, config.hparams.corrupt_ratio)
     else:
       raise ValueError('Mask method not supported.')
-    masked_pianoroll = mask_tools.apply_mask_and_stack(cropped_pianoroll, mask)
+    
+    if config.hparams.denoise_mode:
+      masked_pianoroll = mask_tools.perturb_and_stack(cropped_pianoroll, mask)
+    else:
+      masked_pianoroll = mask_tools.apply_mask_and_stack(cropped_pianoroll, mask)
     input_data.append(masked_pianoroll)
     targets.append(cropped_pianoroll)
     assert len(input_data) == seq_count
