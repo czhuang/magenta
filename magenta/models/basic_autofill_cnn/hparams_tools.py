@@ -419,6 +419,14 @@ CHECKPOINT_HPARAMS = {
         model_name='DeepStraightConvSpecs',
         checkpoint_name='DeepResidualRandomMask_d-28_f-256-best_model.ckpt'
     ),
+    'DeepResidualRandomMaskTBF': Hyperparameters(
+        num_layers=64,
+        num_filters=128,
+        use_residual=True,
+        mask_indicates_context=True,
+        model_name='DeepStraightConvSpecs',
+        checkpoint_name='DeepStraightConvSpecs-multi_instr_depth-64_filter-128-128-best_model.ckpt'
+    ),
 
     'DeepResidualDataAug': Hyperparameters(
         num_layers=28,

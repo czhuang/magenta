@@ -183,8 +183,7 @@ def generate_gibbs_like(pianorolls, wrapped_model, config):
   generated_pianoroll = np.zeros(pianoroll_shape)
   original_pianoroll = pianorolls[config.requested_index].copy()
   context_pianoroll = np.zeros(pianoroll_shape)
-  if np.sum(original_pianoroll) > 0:
-    context_pianoroll[:, :, tuple(config.prime_voices)] = original_pianoroll[:, :, tuple(config.prime_voices)]
+  context_pianoroll[:, :, tuple(config.prime_voices)] = original_pianoroll[:, :, tuple(config.prime_voices)]
   # To check if all was regenerated
   global_check = np.ones(pianoroll_shape)
   autofill_steps = []
@@ -436,12 +435,9 @@ def generate_routine(config, output_path):
    
 def main(unused_argv):
   print '..............................main..'
-  generate_routine(GENERATION_PRESETS['GenerateGibbsLikeConfig'],
-                   FLAGS.generation_output_dir)
- 
-  #generate_routine(
-  #     GENERATION_PRESETS['RegeneratePrimePieceByGibbsOnMeasures'],
-  #     FLAGS.generation_output_dir)
+  generate_routine(
+       GENERATION_PRESETS['RegeneratePrimePieceByGibbsOnMeasures'],
+       FLAGS.generation_output_dir)
   #generate_routine(
   #    GENERATION_PRESETS['RegenerateValidationPieceVoiceByVoiceConfig'],
   #    FLAGS.generation_output_dir)
@@ -453,6 +449,8 @@ def main(unused_argv):
   #generate_routine(GENERATION_PRESETS['GenerateFromScratchVoiceByVoice'],
   #                 FLAGS.generation_output_dir)
 
+  #generate_routine(GENERATION_PRESETS['GenerateGibbsLikeConfig'],
+  #                 FLAGS.generation_output_dir)
 
 
 class GenerationConfig(object):
@@ -513,37 +511,37 @@ class GenerationConfig(object):
     config_str += ')'
     return config_str
 
-_DEFAULT_MODEL_NAME = 'DeepResidualRandomMask'
+_DEFAULT_MODEL_NAME = 'DeepResidualRandomMaskTBF'
 
 GENERATION_PRESETS = {
 
     # Configurations for generating in random instrument cross timestep order.
     'GenerateGibbsLikeConfig': GenerationConfig(
         generate_method_name='generate_gibbs_like',
-        model_name='DeepResidual',
+        model_name=_DEFAULT_MODEL_NAME, #'DeepResidual',
         start_with_empty=True,
         validation_path=FLAGS.validation_set_dir,
         voices_to_regenerate=range(4),
         sequential_order_type=RANDOM,
         num_samples=5, #5,
         requested_num_timesteps=64, #16, #128, #64,
-        num_rewrite_iterations=20, #20, #20,
+        num_rewrite_iterations=40, #20, #20,
         condition_mask_size=8, #8, #8,
         sample_extra_ratio=1, #10, #10,
         temperature=0.1,
         plot_process=False),
-    
-     'RegeneratePrimePieceByGibbsOnMeasures': GenerationConfig(
+
+    'RegeneratePrimePieceByGibbsOnMeasures': GenerationConfig(
         generate_method_name='generate_gibbs_like',
-        model_name='DeepResidual', #,_DEFAULT_MODEL_NAME
+        model_name= _DEFAULT_MODEL_NAME, #'DeepResidual',
         prime_fpath=FLAGS.prime_fpath,
         validation_path=FLAGS.validation_set_dir,
-        prime_voices=range(3),
-        voices_to_regenerate=range(3),
+        prime_voices=range(4),
+        voices_to_regenerate=range(4),
         sequential_order_type=RANDOM,
         num_samples=4,
-        requested_num_timesteps=16, #16, #128, #64,
-        num_rewrite_iterations=3, #20, #20,
+        requested_num_timesteps=24, #16, #128, #64,
+        num_rewrite_iterations=20, #20, #20,
         condition_mask_size=8, #8, #8,
         sample_extra_ratio=0, 
         temperature=0.1,
