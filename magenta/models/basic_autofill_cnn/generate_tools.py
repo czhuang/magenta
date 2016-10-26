@@ -358,7 +358,7 @@ def generate_routine(config, output_path):
       piece_name = piece_names[config.requested_index]
     print 'Piece name:', piece_name
 
-    seqs_by_ordering = defaultdict(list)
+    #seqs_by_ordering = defaultdict(list)
     # TODO(annahuang): Use consistent instrument or voice.
     instr_orderings = list(permutations(config.voices_to_regenerate))
     if config.num_samples_per_instr_ordering is not None:
@@ -371,6 +371,8 @@ def generate_routine(config, output_path):
       tf.log.warning('Should specify num_samples or num_samples_per_instr_ordering, otherwise assumes num_samples_per_instr_ordering to be 1')    
     
     for i, instr_ordering in enumerate(instr_orderings):	
+      # TODO: hack for clearing dictionary for pickle.
+      seqs_by_ordering = defaultdict(list)
       start_time = time.time()
       # Generate.
       if isinstance(instr_ordering, list):
@@ -435,9 +437,11 @@ def generate_routine(config, output_path):
    
 def main(unused_argv):
   print '..............................main..'
-  generate_routine(
-       GENERATION_PRESETS['RegeneratePrimePieceByGibbsOnMeasures'],
-       FLAGS.generation_output_dir)
+  generate_routine(GENERATION_PRESETS['GenerateGibbsLikeConfig'],
+                   FLAGS.generation_output_dir)
+  #generate_routine(
+  #     GENERATION_PRESETS['RegeneratePrimePieceByGibbsOnMeasures'],
+  #     FLAGS.generation_output_dir)
   #generate_routine(
   #    GENERATION_PRESETS['RegenerateValidationPieceVoiceByVoiceConfig'],
   #    FLAGS.generation_output_dir)
@@ -449,8 +453,6 @@ def main(unused_argv):
   #generate_routine(GENERATION_PRESETS['GenerateFromScratchVoiceByVoice'],
   #                 FLAGS.generation_output_dir)
 
-  #generate_routine(GENERATION_PRESETS['GenerateGibbsLikeConfig'],
-  #                 FLAGS.generation_output_dir)
 
 
 class GenerationConfig(object):
@@ -511,7 +513,9 @@ class GenerationConfig(object):
     config_str += ')'
     return config_str
 
-_DEFAULT_MODEL_NAME = 'DeepResidualRandomMaskTBF'
+#_DEFAULT_MODEL_NAME = 'DeepResidualRandomMaskTBF'
+_DEFAULT_MODEL_NAME = 'Denoising'
+_DEFAULT_MODEL_NAME = 'DeepResidual'
 
 GENERATION_PRESETS = {
 
@@ -523,11 +527,11 @@ GENERATION_PRESETS = {
         validation_path=FLAGS.validation_set_dir,
         voices_to_regenerate=range(4),
         sequential_order_type=RANDOM,
-        num_samples=5, #5,
-        requested_num_timesteps=64, #16, #128, #64,
-        num_rewrite_iterations=40, #20, #20,
+        num_samples=2, #5,
+        requested_num_timesteps=8, #64, #16, #128, #64,
+        num_rewrite_iterations=1, #20, #20,
         condition_mask_size=8, #8, #8,
-        sample_extra_ratio=1, #10, #10,
+        sample_extra_ratio=0, #10, #10,
         temperature=0.1,
         plot_process=False),
 
@@ -536,12 +540,12 @@ GENERATION_PRESETS = {
         model_name= _DEFAULT_MODEL_NAME, #'DeepResidual',
         prime_fpath=FLAGS.prime_fpath,
         validation_path=FLAGS.validation_set_dir,
-        prime_voices=range(4),
-        voices_to_regenerate=range(4),
+        prime_voices=range(3), 
+        voices_to_regenerate=range(3),
         sequential_order_type=RANDOM,
-        num_samples=4,
-        requested_num_timesteps=24, #16, #128, #64,
-        num_rewrite_iterations=20, #20, #20,
+	num_samples=4,
+        requested_num_timesteps=32, #16, #128, #64,
+        num_rewrite_iterations=2, #20, #20,
         condition_mask_size=8, #8, #8,
         sample_extra_ratio=0, 
         temperature=0.1,

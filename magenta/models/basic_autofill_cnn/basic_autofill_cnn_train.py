@@ -175,7 +175,7 @@ def run_epoch(supervisor,
   # Checkpoint best model so far if running validation.
   if FLAGS.log_progress and experiment_type == 'valid' and (
       best_validation_loss > run_stats['loss_%s' % experiment_type]):
-    tf.logging.info('Previous best validation loss: %.3f.' %
+    tf.logging.info('Previous best validation loss: %.4f.' %
                     (best_validation_loss))
     best_validation_loss = run_stats['loss_%s' % experiment_type]
     save_path = os.path.join(FLAGS.run_dir, config.log_subdir_str,
@@ -183,38 +183,38 @@ def run_epoch(supervisor,
     # Saving the best model thusfar checkpoint.
     best_model_saver.save(sess, save_path)
 
-    tf.logging.info('Storing best model so far with loss %.3f at %s.' %
+    tf.logging.info('Storing best model so far with loss %.4f at %s.' %
                     (best_validation_loss, save_path))
     # TODO(annahuang): Remove printouts
-    print 'Storing best model so far with loss %.3f at %s.' % (
+    print 'Storing best model so far with loss %.4f at %s.' % (
         best_validation_loss, save_path)
 
-  tf.logging.info('%s, epoch %d: perplexity, loss (mask): %.3f, %.3f, ' %
+  tf.logging.info('%s, epoch %d: perplexity, loss (mask): %.4f, %.4f, ' %
                   (experiment_type, epoch_count,
                    run_stats['perplexity_mask_%s' % experiment_type],
                    run_stats['loss_mask_%s' % experiment_type]))
-  tf.logging.info('perplexity, loss (unmask): %.3f, %.3f, ' %
+  tf.logging.info('perplexity, loss (unmask): %.4f, %.4f, ' %
                   (run_stats['perplexity_unmask_%s' % experiment_type],
                    run_stats['loss_unmask_%s' % experiment_type]))
-  tf.logging.info('perplexity, loss (total): %.3f, %.3f, ' %
+  tf.logging.info('perplexity, loss (total): %.4f, %.4f, ' %
                   (run_stats['perplexity_total_%s' % experiment_type],
                    run_stats['loss_total_%s' % experiment_type]))
-  tf.logging.info('log lr: %.3f' % np.log2(run_stats['learning_rate']))
+  tf.logging.info('log lr: %.4f' % np.log2(run_stats['learning_rate']))
   tf.logging.info('time taken: %.4f' % (time.time() - start_time))
 
   # TODO(annahuang): Remove printouts.
-  print '%s, epoch %d: perplexity, loss (mask): %.3f, %.3f, ' % (
+  print '%s, epoch %d: perplexity, loss (mask): %.4f, %.4f, ' % (
       experiment_type, epoch_count,
       run_stats['perplexity_mask_%s' % experiment_type],
       run_stats['loss_mask_%s' % experiment_type]),
-  print 'perplexity, loss (unmask): %.3f, %.3f, ' % (
+  print 'perplexity, loss (unmask): %.4f, %.4f, ' % (
       run_stats['perplexity_unmask_%s' % experiment_type],
       run_stats['loss_unmask_%s' % experiment_type]),
-  print 'perplexity, loss (total): %.3f, %.3f, ' % (
+  print 'perplexity, loss (total): %.4f, %.4f, ' % (
       run_stats['perplexity_total_%s' % experiment_type],
       run_stats['loss_total_%s' % experiment_type]),
-  print 'maskfrac: %.3f' % (mask_size/float(mask_size + unmask_size)),
-  print 'log lr: %.3f' % np.log2(run_stats['learning_rate']),
+  print 'maskfrac: %.4f' % (mask_size/float(mask_size + unmask_size)),
+  print 'log lr: %.4f' % np.log2(run_stats['learning_rate']),
   print 'time taken: %.4f' % (time.time() - start_time)
 
   return best_validation_loss

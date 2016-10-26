@@ -444,10 +444,10 @@ CHECKPOINT_HPARAMS = {
         num_filters=128,
         use_residual=True,
         mask_indicates_context=True,
+        denoise_mode=True,
         model_name='DeepStraightConvSpecs',
         checkpoint_name='DeepStraightConvSpecs_d-48_f-128_denoising_best_model.ckpt'
     ),
- 
     'DeepResidualDataAug': Hyperparameters(
         num_layers=28,
         num_filters=256,

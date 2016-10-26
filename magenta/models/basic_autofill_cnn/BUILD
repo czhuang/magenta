@@ -32,6 +32,9 @@ py_binary(
     name = "music21_corpus_to_note_sequences",
     srcs = ["music21_corpus_to_note_sequences.py"],
     deps = [
+        ":pianorolls_lib",
+        ":test_tools",
+        "//magenta/lib:midi_io",
 	"//magenta/lib:music_xml_io",
         "//magenta/lib:note_sequence_io",
     ],
@@ -179,6 +182,7 @@ py_binary(
     name = "retrieve_model_tools",
     srcs = ["retrieve_model_tools.py"],
     data = [
+        "checkpoints/DeepStraightConvSpecs_d-48_f-128_denoising_best_model.ckpt",
         "checkpoints/DeepResidualRandomMask_d-28_f-256-best_model.ckpt",
         "checkpoints/DeepStraightConvSpecs-multi_instr_depth-28_filter-256-256-best_model.ckpt",
         "checkpoints/DeepStraightConvSpecs-with_res-multi_instr_depth-28_filter-256-256-best_model.ckpt",

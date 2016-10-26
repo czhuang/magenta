@@ -7,7 +7,7 @@ from collections import OrderedDict
 import numpy as np
 
 from magenta.protobuf import music_pb2
-from magenta.models.basic_autofill_cnn import test_tools
+import test_tools
 
 WOODWIND_QUARTET_PROGRAMS = OrderedDict(
     [(74, 'flute'), (72, 'clarinet'), (69, 'oboe'), (71, 'bassoon')])
@@ -26,6 +26,24 @@ _DEFAULT_QPM=120
 class PitchOutOfEncodeRangeError(Exception):
   """Exception for when pitch of note is out of encoding range."""
   pass
+
+
+def make_note_sequence(fname='', collection_name=''):
+  # Instantiate a NoteSequence.
+  sequence = music_pb2.NoteSequence()
+  # TODO: A hack.
+  sequence.id = str(np.abs(hash(np.array_str(np.random.random((5,5))))))
+  sequence.filename = '%s' % fname
+  sequence.collection_name = collection_name
+#  sequence.source_info.source_type = source_type
+
+  tempo = sequence.tempos.add()
+  tempo.time = 0.0
+  tempo.qpm = _DEFAULT_QPM
+
+  # Using the MuseScore tick length for quarter notes.
+  sequence.ticks_per_quarter = 480
+  return sequence
 
 
 def find_shortest_duration(note_sequences):
