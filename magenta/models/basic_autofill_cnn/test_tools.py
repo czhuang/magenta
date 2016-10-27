@@ -34,7 +34,7 @@ def get_note_sequence_reader(fpath):
     yield music_pb2.NoteSequence.FromString(serialized_sequence)
 
 
-def get_note_sequences():
+def get_note_sequences_():
   fpath = '/ /is-d/home/annahuang/ttl=100d/BachChorales/instrs=4_note_sequence.tfrecord'
   return get_note_sequence_reader(fpath)
 
@@ -43,6 +43,18 @@ def get_small_bach_chorales_with_4_voices_dataset():
   fpath = os.path.join(tf.resource_loader.get_data_files_path(), 'testdata',
                        'jsb', '6_note_sequences_with_only_4_voices.tfrecord')
   return get_note_sequence_reader(fpath)
+
+
+#def get_four_part_sequences():
+#  fpath = '/u/huangche/data/bach/bach_chorale_note_sequences.tfrecord'
+#  seq_reader = get_note_sequence_reader(fpath)
+#  seqs = list(seq_reader)
+#  print '# of raw seqs', len(seqs)
+#  four_part_seqs = []
+#  for seq in seqs:
+#    if set(note.part for note in seq.notes) == 4:
+#      four_part_seqs.append(seq)
+#  return four_part_seqs
 
 
 def get_bach_chorales_with_4_voices_dataset():

@@ -437,16 +437,16 @@ def generate_routine(config, output_path):
    
 def main(unused_argv):
   print '..............................main..'
-  generate_routine(GENERATION_PRESETS['GenerateGibbsLikeConfig'],
-                   FLAGS.generation_output_dir)
+  #generate_routine(GENERATION_PRESETS['GenerateGibbsLikeConfig'],
+  #                 FLAGS.generation_output_dir)
   #generate_routine(
   #     GENERATION_PRESETS['RegeneratePrimePieceByGibbsOnMeasures'],
   #     FLAGS.generation_output_dir)
   #generate_routine(
   #    GENERATION_PRESETS['RegenerateValidationPieceVoiceByVoiceConfig'],
   #    FLAGS.generation_output_dir)
-  #generate_routine(GENERATION_PRESETS['RegeneratePrimePieceVoiceByVoiceConfig'],
-  #                 FLAGS.generation_output_dir)
+  generate_routine(GENERATION_PRESETS['RegeneratePrimePieceVoiceByVoiceConfig'],
+                   FLAGS.generation_output_dir)
   #generate_routine(
   #    GENERATION_PRESETS['GenerateAccompanimentToPrimeMelodyConfig'],
   #    FLAGS.generation_output_dir)
@@ -487,7 +487,7 @@ class GenerationConfig(object):
       num_samples=1,  # None to specify count by permuations.
       num_samples_per_instr_ordering=None,  # Only used when we care about analyzing different instrument ordering as oppose to just getting more samples.
       requested_num_timesteps=8,
-      num_rewrite_iterations=10,  # Number of times to regenerate all the voices.
+      num_rewrite_iterations=1,  # Number of times to regenerate all the voices.
       condition_mask_size=None,
       sample_extra_ratio=None,
       plot_process=False)
@@ -516,6 +516,8 @@ class GenerationConfig(object):
 #_DEFAULT_MODEL_NAME = 'DeepResidualRandomMaskTBF'
 _DEFAULT_MODEL_NAME = 'Denoising'
 _DEFAULT_MODEL_NAME = 'DeepResidual'
+_DEFAULT_MODEL_NAME = 'DeepResidual64_128'
+_DEFAULT_MODEL_NAME = 'Denoising32_256'
 
 GENERATION_PRESETS = {
 
@@ -551,6 +553,21 @@ GENERATION_PRESETS = {
         temperature=0.1,
         plot_process=False),
 
+    'RegeneratePrimePieceVoiceByVoiceConfig': GenerationConfig(
+        generate_method_name='regenerate_voice_by_voice',
+        model_name=_DEFAULT_MODEL_NAME,
+        prime_fpath=FLAGS.prime_fpath,
+        validation_path=FLAGS.validation_set_dir,
+        prime_voices=range(4),
+        voices_to_regenerate=range(4),
+        sequential_order_type=RANDOM,
+        num_samples=2, #5,
+        requested_num_timesteps=16, #16, #128, #64,
+        num_rewrite_iterations=1, #20, #20,
+        temperature=0.1,
+        plot_process=False),
+
+
     'RegenerateValidationPieceVoiceByVoiceConfig': GenerationConfig(
         generate_method_name='regenerate_voice_by_voice',
         model_name='DeepResidual',
@@ -563,21 +580,6 @@ GENERATION_PRESETS = {
         num_diff_primes=100,
         num_samples=16,
         requested_num_timesteps=32*2, #128,
-        plot_process=False),
-    'RegeneratePrimePieceVoiceByVoiceConfig': GenerationConfig(
-        generate_method_name='regenerate_voice_by_voice',
-        model_name='DeepResidual',
-        prime_fpath=FLAGS.prime_fpath,
-        validation_path=FLAGS.validation_set_dir,
-        prime_voices=range(4),
-        voices_to_regenerate=range(4),
-        sequential_order_type=RANDOM,
-        num_samples=1, #5,
-        requested_num_timesteps=16, #16, #128, #64,
-        num_rewrite_iterations=1, #20, #20,
-        condition_mask_size=4, #8, #8,
-        sample_extra_ratio=1, #10, #10,
-        temperature=0.1,
         plot_process=False),
     # Configuration for generating an accompaniment to prime melody.
     'GenerateAccompanimentToPrimeMelodyConfig': GenerationConfig(

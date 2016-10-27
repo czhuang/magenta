@@ -182,6 +182,7 @@ py_binary(
     name = "retrieve_model_tools",
     srcs = ["retrieve_model_tools.py"],
     data = [
+        "checkpoints/DeepStraightConvSpecs-multi_instr_depth-32_filter-256-256-best_model.ckpt",
         "checkpoints/DeepStraightConvSpecs_d-48_f-128_denoising_best_model.ckpt",
         "checkpoints/DeepResidualRandomMask_d-28_f-256-best_model.ckpt",
         "checkpoints/DeepStraightConvSpecs-multi_instr_depth-28_filter-256-256-best_model.ckpt",

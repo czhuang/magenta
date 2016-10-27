@@ -41,8 +41,13 @@ def concatenate_process():
   fname = '0_generate_gibbs_like-0-4.49min-2016-10-20_00:25:18-DeepResidualRandomMask-0--None.pkl' 
   #path = '/u/huangche/generated/2016-10-16_23:45:29-DeepResidual'
   #fname = '0_generate_gibbs_like-0-2016-10-16_23:45:29-DeepResidual-0--None.pkl'
+
+  path = '/Tmp/huangche/generation/best_fromScratch-64-2016-10-26_01:00:30-DeepResidual'  
+  fname = '0_generate_gibbs_like-0-285.03min-2016-10-26_01:00:30-DeepResidual-0-empty-None.pkl'
+
   run_id = fname.split('.pkl')[0]
   requested_index = int(fname.split('_')[0])  
+  print 'retrieving pickle...'
   results = retrieve_pickle(os.path.join(path, fname))
   print results.keys, type(results[None]), type(results[None][requested_index])
   seq_bundle = results[None][requested_index]
@@ -51,7 +56,6 @@ def concatenate_process():
   num_steps = len(steps)
   print '# of steps:', num_steps
   
-  #plot_num_steps = 5
   plot_indices = []
   encoder = pianorolls_lib.PianorollEncoderDecoder()
   original_pianoroll = encoder.encode(original_seq)
@@ -60,9 +64,12 @@ def concatenate_process():
   
   inspect_seqs = []
   inspect_crop_len = 16
-  #inspect_indices = range(0, num_steps, num_steps / plot_num_steps)
+  
+  synth_num_steps = 10
+  synth_indices = range(0, num_steps, num_steps // synth_num_steps)
   synth_interval = 16
   synth_indices = range(0, num_steps, synth_interval) 
+
   print '# of intermediate seqs:', len(intermediate_seqs), '# of steps:', num_steps
   for i in synth_indices:
     pianoroll = encoder.encode(intermediate_seqs[i])
@@ -74,6 +81,15 @@ def concatenate_process():
   concated_seqs = concatenate_seqs(inspect_seqs)
   output_fname = 'zaa_%s_process_concat.midi' % run_id
   sequence_proto_to_midi_file(concated_seqs, os.path.join(path, output_fname))
+  
+  # Synth each intermediate seq separately
+  synth_seqs(seqs, path, run_id)
+
+
+def synth_seqs(seqs, path, run_id):
+  for i, seq in enumerate(seqs):
+    output_fname = 'zaa_%s_synthed_step_%d' % (run_id, i)
+    sequence_proto_to_midi_file(seq, os.path.join(path, output_fname))
 
 
 def concatenate_generated_seqs():

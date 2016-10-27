@@ -448,6 +448,24 @@ CHECKPOINT_HPARAMS = {
         model_name='DeepStraightConvSpecs',
         checkpoint_name='DeepStraightConvSpecs_d-48_f-128_denoising_best_model.ckpt'
     ),
+    'DeepResidual64_128': Hyperparameters(
+        num_layers=64,
+        num_filters=128,
+        use_residual=True,
+        mask_indicates_context=True,
+        model_name='DeepStraightConvSpecs',
+        checkpoint_name='DeepStraightConvSpecs-multi_instr_depth-64_filter-128-128-best_model.ckpt' 
+    ),
+    'Denoising32_256': Hyperparameters(
+        num_layers=32,
+        num_filters=256,
+        use_residual=True,
+        mask_indicates_context=True,
+        denoise_mode=True,
+        model_name='DeepStraightConvSpecs',
+        checkpoint_name='DeepStraightConvSpecs-multi_instr_depth-32_filter-256-256-best_model.ckpt'
+    ),
+
     'DeepResidualDataAug': Hyperparameters(
         num_layers=28,
         num_filters=256,

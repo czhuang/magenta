@@ -106,36 +106,42 @@ def get_duration_hist():
 # #  print '(%d, %d)' pitches[index], counts[index]),
 #
 #
-#def check_tessitura_ordering_hist():
-#  ust checking range for now.
-#  seqs_reader ata_pipeline_tools.get_bach_chorales_with_4_voices_dataset()
-#  ordering_pairs (0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]
-#  ordering_counts efaultdict(int)
-#  ggregate tessitura for each voice across pieces.
-#  for seq in seqs_reader:
-# voices est_tools.collect_sorted_voices(seq, 'program')
-# voice_indices 74, 72, 69, 71]
-# assert set(voices.keys()) == set(voice_indices)
-#
-# tessitura efaultdict(list)
-# for part_index, notes in voices.iteritems():
-#   pitches ]
-#   durations ]
-#   for note in notes:
-#  pitches.append(note.pitch)
-#  durations.append(note.end_time ote.start_time)
-#   ggregate itch as the approximate tessitura.
-#   tessitura[part_index].append(np.ceil(
-#    np.average(pitches, weights=durations)))
-# # Check tessitura ordering.
-# for top_index, bottom_index in ordering_pairs:
-#   top_program oice_indices[top_index]
-#   bottom_program oice_indices[bottom_index]
-#   if tessitura[top_program] essitura[bottom_program]:
-#  ordering_counts[(top_index, bottom_index)] += 1
-#  rint ordering count.
-#  for ordering_pair in ordering_pairs:
-# print ordering_pair, ordering_counts[ordering_pair]
+def check_tessitura_ordering_hist():
+  print 'check_tessitura_ordering_hist'
+  seqs = get_4_voice_sequences()
+  print 'len(seqs)', len(seqs)
+  ordering_pairs = [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]
+  ordering_counts = defaultdict(int)
+  # aggregate tessitura for each voice across pieces.
+  pieces = []
+  for seq in seqs:
+    voices = test_tools.collect_sorted_voices(seq, 'part')
+    pieces.append(voices)
+
+  tessitura = defaultdict(list)
+  for voices in pieces:
+    for part_index, notes in voices.iteritems():
+      pitches = []
+      durations = []
+      for note in notes:
+        pitches.append(note.pitch)
+        durations.append(note.end_time-note.start_time)
+      #aggregate itch as the approximate tessitura.
+      tessitura[part_index].append(np.ceil(
+          np.average(pitches, weights=durations)))
+
+  for part_index, tess in tessitura.items():
+    print part_index, len(tess)
+ 
+  # Check tessitura ordering.
+  for top_index, bottom_index in ordering_pairs:
+    for piece_index in range(len(pieces)):
+      if (tessitura[top_index][piece_index] 
+        > tessitura[bottom_index][piece_index]):
+        ordering_counts[(top_index, bottom_index)] += 1
+
+  for ordering_pair in ordering_pairs:
+    print ordering_pair, ordering_counts[ordering_pair]
 #
 #
 #def check_voices():
@@ -150,7 +156,7 @@ def main(unused_argv):
   check_num_of_pieces_in_tfrecord()
   #check_tessitura_hist_per_voice()
   #check_voices()
-  #check_tessitura_ordering_hist()
+  check_tessitura_ordering_hist()
 
 
 if __name__ == '__main__':
