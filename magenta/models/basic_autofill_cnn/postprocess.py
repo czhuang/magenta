@@ -42,6 +42,7 @@ def concatenate_process():
   #path = '/u/huangche/generated/2016-10-16_23:45:29-DeepResidual'
   #fname = '0_generate_gibbs_like-0-2016-10-16_23:45:29-DeepResidual-0--None.pkl'
 
+  # # of steps: 38958 ~ 40iter *4instr *(64time_steps*4instrs) = 40*4*8 gibbs step = 1280 steps
   path = '/Tmp/huangche/generation/best_fromScratch-64-2016-10-26_01:00:30-DeepResidual'  
   fname = '0_generate_gibbs_like-0-285.03min-2016-10-26_01:00:30-DeepResidual-0-empty-None.pkl'
 
@@ -55,20 +56,24 @@ def concatenate_process():
   print 'type(steps)', type(steps)
   num_steps = len(steps)
   print '# of steps:', num_steps
-  
+  pianoroll_shape = steps[0].prediction.shape  
+
   plot_indices = []
   encoder = pianorolls_lib.PianorollEncoderDecoder()
-  original_pianoroll = encoder.encode(original_seq)
-  last_seq, intermediate_seqs = plot_steps(steps, original_pianoroll, path, run_id, 
-                                           subplots=True, subplot_step_indices=plot_indices)
+  if 'empty' in fname:
+    # TODO: encoder.encode not able to take (0, 53, 0)
+    original_pianoroll = np.zeros(pianoroll_shape)
+  else:
+    original_pianoroll = encoder.encode(original_seq)
+  last_seq, intermediate_seqs = plot_steps(steps, original_pianoroll, path, run_id, subplots=True, subplot_step_indices=plot_indices)
   
   inspect_seqs = []
-  inspect_crop_len = 16
+  inspect_crop_len = 64 
   
-  synth_num_steps = 10
+  synth_num_steps = 31 
   synth_indices = range(0, num_steps, num_steps // synth_num_steps)
-  synth_interval = 16
-  synth_indices = range(0, num_steps, synth_interval) 
+#  synth_interval = 16
+#  synth_indices = range(0, num_steps, synth_interval) 
 
   print '# of intermediate seqs:', len(intermediate_seqs), '# of steps:', num_steps
   for i in synth_indices:
@@ -83,12 +88,12 @@ def concatenate_process():
   sequence_proto_to_midi_file(concated_seqs, os.path.join(path, output_fname))
   
   # Synth each intermediate seq separately
-  synth_seqs(seqs, path, run_id)
+  synth_seqs(inspect_seqs, path, run_id)
 
 
 def synth_seqs(seqs, path, run_id):
   for i, seq in enumerate(seqs):
-    output_fname = 'zaa_%s_synthed_step_%d' % (run_id, i)
+    output_fname = 'z_summary_%s_synthed_step_%d.midi' % (run_id, i)
     sequence_proto_to_midi_file(seq, os.path.join(path, output_fname))
 
 
