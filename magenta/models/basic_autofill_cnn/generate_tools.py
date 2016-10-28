@@ -69,7 +69,9 @@ def sample_pitch(prediction, time_step, instr_idx, num_pitches, temperature):
     print 'Taking the argmax'
     pitch = np.argmax(p)
   else:
-    p = np.exp(np.log(p) / temperature)
+    tempered_log = np.log(p) / temperature 
+    tempered_log -= np.max(tempered_log)
+    p = np.exp(tempered_log)
     p /= p.sum()
     if np.isnan(p).any():
       print p
@@ -439,22 +441,25 @@ def generate_routine(config, output_path):
    
 def main(unused_argv):
   print '..............................main..'
-  #generate_routine(
-  #     GENERATION_PRESETS['RegeneratePrimePieceByGibbsOnMeasures'],
-  #     FLAGS.generation_output_dir)
+  generate_routine(
+       GENERATION_PRESETS['InpaintingConfig'],
+       FLAGS.generation_output_dir)
+
+  generate_routine(
+       GENERATION_PRESETS['RegeneratePrimePieceByGibbsOnMeasures'],
+       FLAGS.generation_output_dir)
+  #generate_routine(GENERATION_PRESETS['RegeneratePrimePieceVoiceByVoiceConfig'],
+  #                 FLAGS.generation_output_dir)
+  #generate_routine(GENERATION_PRESETS['GenerateGibbsLikeConfig'],
+  #                 FLAGS.generation_output_dir)
   #generate_routine(
   #    GENERATION_PRESETS['RegenerateValidationPieceVoiceByVoiceConfig'],
   #    FLAGS.generation_output_dir)
-  #generate_routine(GENERATION_PRESETS['RegeneratePrimePieceVoiceByVoiceConfig'],
-  #                 FLAGS.generation_output_dir)
   #generate_routine(
   #    GENERATION_PRESETS['GenerateAccompanimentToPrimeMelodyConfig'],
   #    FLAGS.generation_output_dir)
   #generate_routine(GENERATION_PRESETS['GenerateFromScratchVoiceByVoice'],
   #                 FLAGS.generation_output_dir)
-
-  generate_routine(GENERATION_PRESETS['GenerateGibbsLikeConfig'],
-                   FLAGS.generation_output_dir)
 
 
 class GenerationConfig(object):
@@ -516,6 +521,8 @@ class GenerationConfig(object):
     return config_str
 
 _DEFAULT_MODEL_NAME = 'DeepResidualRandomMask'
+_DEFAULT_MODEL_NAME = 'DeepResidual' 
+
 
 GENERATION_PRESETS = {
 
@@ -524,15 +531,53 @@ GENERATION_PRESETS = {
         model_name= _DEFAULT_MODEL_NAME, #'DeepResidual',
         prime_fpath=FLAGS.prime_fpath,
         validation_path=FLAGS.validation_set_dir,
-        prime_voices=range(3),
-        voices_to_regenerate=range(3),
+        prime_voices=range(4),
+        voices_to_regenerate=range(4),
         sequential_order_type=RANDOM,
         num_samples=4,
-        requested_num_timesteps=16, #16, #128, #64,
-        num_rewrite_iterations=10, #20, #20,
+        requested_num_timesteps=64, #16, #128, #64,
+        num_rewrite_iterations=1, #20, #20,
         condition_mask_size=8, #8, #8,
         sample_extra_ratio=0, 
-        temperature=1,
+        temperature=0.01,
+        plot_process=False),
+    
+    'RegeneratePrimePieceVoiceByVoiceConfig': GenerationConfig(
+        generate_method_name='regenerate_voice_by_voice',
+        model_name=_DEFAULT_MODEL_NAME,
+        prime_fpath=FLAGS.prime_fpath,
+        validation_path=FLAGS.validation_set_dir,
+        prime_voices=range(4),
+        voices_to_regenerate=range(4),
+        sequential_order_type=RANDOM,
+        num_samples=5, #5,
+        requested_num_timesteps=64, #16, #128, #64,
+        num_rewrite_iterations=1, #20, #20,
+        temperature=0.01,
+        plot_process=False),
+
+    # Configurations for generating in random instrument cross timestep order.
+    'InpaintingConfig': GenerationConfig(
+        generate_method_name='regenerate_voice_by_voice',
+        model_name=_DEFAULT_MODEL_NAME,
+        validation_path=FLAGS.validation_set_dir,
+        voices_to_regenerate=[0],
+        sequential_order_type=RANDOM,
+        num_samples=2,
+        requested_num_timesteps=16,
+        num_rewrite_iterations=1,
+        temperature=0.01),
+
+    # Configurations for generating in random instrument cross timestep order.
+    'InpaintingGibbsConfig': GenerationConfig(
+        generate_method_name='generate_gibbs_like',
+        model_name='DeepResidual',
+        validation_path=FLAGS.validation_set_dir,
+        voices_to_regenerate=None, # Does not apply to this setting, because just fill in all that's empty
+        sequential_order_type=RANDOM,
+        num_samples=2,
+        requested_num_timesteps=16,
+        num_rewrite_iterations=2,
         plot_process=False),
 
     'RegenerateValidationPieceVoiceByVoiceConfig': GenerationConfig(
@@ -547,21 +592,6 @@ GENERATION_PRESETS = {
         num_diff_primes=100,
         num_samples=16,
         requested_num_timesteps=32*2, #128,
-        plot_process=False),
-    'RegeneratePrimePieceVoiceByVoiceConfig': GenerationConfig(
-        generate_method_name='regenerate_voice_by_voice',
-        model_name='DeepResidual',
-        prime_fpath=FLAGS.prime_fpath,
-        validation_path=FLAGS.validation_set_dir,
-        prime_voices=range(4),
-        voices_to_regenerate=range(4),
-        sequential_order_type=RANDOM,
-        num_samples=1, #5,
-        requested_num_timesteps=16, #16, #128, #64,
-        num_rewrite_iterations=1, #20, #20,
-        condition_mask_size=4, #8, #8,
-        sample_extra_ratio=1, #10, #10,
-        temperature=0.1,
         plot_process=False),
     # Configuration for generating an accompaniment to prime melody.
     'GenerateAccompanimentToPrimeMelodyConfig': GenerationConfig(
@@ -605,19 +635,6 @@ GENERATION_PRESETS = {
         sample_extra_ratio=0, #10, #10,
         temperature=0.1,
         plot_process=False),
-    # Configurations for generating in random instrument cross timestep order.
-    'InpaintingConfig': GenerationConfig(
-        generate_method_name='generate_gibbs_like',
-        model_name='DeepResidual',
-        start_with_empty=False,
-        prime_fpath=FLAGS.prime_fpath,
-        validation_path=FLAGS.validation_set_dir,
-        voices_to_regenerate=None, # Does not apply to this setting, because just fill in all that's empty
-        sequential_order_type=RANDOM,
-        num_samples=2,
-        requested_num_timesteps=4,
-        num_rewrite_iterations=2,
-        plot_process=False)
 }
 
 if __name__ == '__main__':
