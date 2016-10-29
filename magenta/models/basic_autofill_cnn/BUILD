@@ -182,14 +182,13 @@ py_binary(
     name = "retrieve_model_tools",
     srcs = ["retrieve_model_tools.py"],
     data = [
-        "checkpoints/DeepStraightConvSpecs-multi_instr_depth-32_filter-256-256-best_model.ckpt",
-        "checkpoints/DeepStraightConvSpecs_d-48_f-128_denoising_best_model.ckpt",
-        "checkpoints/DeepResidualRandomMask_d-28_f-256-best_model.ckpt",
+        "checkpoints/denoising_d-64_f-128.ckpt",
+        "checkpoints/DeepStraightConvSpecs_d-32_f-256_best_model.ckpt",
+        "checkpoints/DeepStraightConvSpecs_d-64_f-128_best_model.ckpt",
         "checkpoints/DeepStraightConvSpecs-multi_instr_depth-28_filter-256-256-best_model.ckpt",
         "checkpoints/DeepStraightConvSpecs-with_res-multi_instr_depth-28_filter-256-256-best_model.ckpt",
         "checkpoints/DeepStraightConvSpecs-with_res-with_aug-multi_instr_depth-28_filter-256-256-best_model.ckpt",
         "checkpoints/PitchFullyConnected-multi_instr_depth-29_filter-256-256-best_model.ckpt",
-        "checkpoints/DeepStraightConvSpecs-multi_instr_depth-64_filter-128-128-best_model.ckpt",
     ],
     deps = [
         ":basic_autofill_cnn_graph",

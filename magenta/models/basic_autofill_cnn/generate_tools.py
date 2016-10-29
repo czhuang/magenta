@@ -64,14 +64,21 @@ ARGMAX, SAMPLE = range(2)
 def sample_pitch(prediction, time_step, instr_idx, num_pitches, temperature):
   # At the randomly choosen timestep, sample pitch.
   p = prediction[time_step, :, instr_idx]
+  if np.isnan(p).any():
+    print 'nans in prediction'
+    print p
   #print 'temperature', temperature
   if temperature == 0.:
     print 'Taking the argmax'
     pitch = np.argmax(p)
   else:
-    p = np.exp(np.log(p) / temperature)
+    #p = np.exp(np.log(p) / temperature)
+    tempered_log = np.log(p) / temperature 
+    tempered_log -= np.max(tempered_log)
+    p = np.exp(tempered_log)
     p /= p.sum()
     if np.isnan(p).any():
+      print 'nans after tempering'
       print p
     pitch = np.random.choice(range(num_pitches), p=p)
   return pitch
@@ -517,9 +524,26 @@ class GenerationConfig(object):
 _DEFAULT_MODEL_NAME = 'Denoising'
 _DEFAULT_MODEL_NAME = 'DeepResidual'
 _DEFAULT_MODEL_NAME = 'DeepResidual64_128'
-_DEFAULT_MODEL_NAME = 'Denoising32_256'
+_DEFAULT_MODEL_NAME = 'DeepResidual32_256'
+_DEFAULT_MODEL_NAME = 'DeepResidual64_128'
+_DEFAULT_MODEL_NAME = 'Denoising64_128'
+
 
 GENERATION_PRESETS = {
+
+    'RegeneratePrimePieceVoiceByVoiceConfig': GenerationConfig(
+        generate_method_name='regenerate_voice_by_voice',
+        model_name=_DEFAULT_MODEL_NAME,
+        prime_fpath=FLAGS.prime_fpath,
+        validation_path=FLAGS.validation_set_dir,
+        prime_voices=range(4),
+        voices_to_regenerate=range(4),
+        sequential_order_type=RANDOM,
+        num_samples=3, #5,
+        requested_num_timesteps=64, #16, #128, #64,
+        num_rewrite_iterations=1, #20, #20,
+        temperature=0.01,
+        plot_process=False),
 
     # Configurations for generating in random instrument cross timestep order.
     'GenerateGibbsLikeConfig': GenerationConfig(
@@ -550,20 +574,6 @@ GENERATION_PRESETS = {
         num_rewrite_iterations=2, #20, #20,
         condition_mask_size=8, #8, #8,
         sample_extra_ratio=0, 
-        temperature=0.1,
-        plot_process=False),
-
-    'RegeneratePrimePieceVoiceByVoiceConfig': GenerationConfig(
-        generate_method_name='regenerate_voice_by_voice',
-        model_name=_DEFAULT_MODEL_NAME,
-        prime_fpath=FLAGS.prime_fpath,
-        validation_path=FLAGS.validation_set_dir,
-        prime_voices=range(4),
-        voices_to_regenerate=range(4),
-        sequential_order_type=RANDOM,
-        num_samples=2, #5,
-        requested_num_timesteps=16, #16, #128, #64,
-        num_rewrite_iterations=1, #20, #20,
         temperature=0.1,
         plot_process=False),
 
