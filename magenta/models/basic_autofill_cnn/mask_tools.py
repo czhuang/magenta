@@ -94,7 +94,7 @@ def perturb_and_stack(pianoroll, mask):
   num_timesteps, num_pitches, num_instrs = pianoroll.shape
   categorical_pianoroll = np.random.randint(num_pitches, size=(num_timesteps, num_instrs))
   onehot_pianoroll = np.transpose(np.eye(num_pitches)[categorical_pianoroll], axes=[0, 2, 1])
-  masked_pianoroll = (1 - mask * pianoroll) + (mask * onehot_pianoroll)
+  masked_pianoroll = (1 - mask) * pianoroll + mask * onehot_pianoroll
   # Check to make sure monophonic.  
   num_notes_on = np.unique(np.sum(pianoroll, axis=1))
   #print 'pianoroll shape', pianoroll.shape
