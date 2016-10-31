@@ -130,7 +130,6 @@ def make_data_feature_maps(sequences, config, encoder, start_crop_index=None):
   input_data = []
   targets = []
   maskout_border = config.maskout_border
-  batch_size = config.hparams.batch_size
   seq_count = 0
   for sequence in sequences:
     pianoroll = random_double_or_halftime_pianoroll_from_note_sequence(
@@ -183,8 +182,6 @@ def make_data_feature_maps(sequences, config, encoder, start_crop_index=None):
     targets.append(cropped_pianoroll)
     assert len(input_data) == seq_count
     assert len(input_data) == len(targets)
-    #if len(input_data) == batch_size:
-    #  break
 
   input_data = np.asarray(input_data)
   targets = np.asarray(targets)
