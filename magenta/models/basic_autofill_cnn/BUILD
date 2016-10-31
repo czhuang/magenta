@@ -70,6 +70,7 @@ py_binary(
         ":pianorolls_lib",
         ":seed_tools",
 	":plot_tools",
+        ":retrieve_model_tools",
         "//magenta/lib:midi_io",
     ],
 )
