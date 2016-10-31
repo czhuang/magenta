@@ -66,7 +66,8 @@ tf.app.flags.DEFINE_string('maskout_method', 'random_multiple_instrument_time',
                            "The choices include: 'random_all_time_instrument', "
                            "'random_patches', 'random_pitch_range',"
                            'random_time_range, random_multiple_instrument_time, '
-                           'random_multiple_instrument_time.')
+                           'random_multiple_instrument_time,'
+                           'chronological_ti, chronological_it, fixed_order, balanced.')
 tf.app.flags.DEFINE_bool('separate_instruments', True,
                          'Separate instruments into different input feature'
                          'maps or not.')
@@ -128,12 +129,12 @@ def run_epoch(supervisor,
     # Evaluate the graph and run back propagation.
     results = sess.run([m.predictions, m.loss, m.loss_total, m.loss_mask,
                         m.mask_size, m.mask, m.loss_unmask, m.unmask_size,
-                        m.learning_rate,
+                        m.learning_rate, m._lossmask,
                         eval_op], {m.input_data: x,
                                    m.targets: y})
 
     (predictions, loss, loss_total, loss_mask, mask_size, mask, loss_unmask,
-     unmask_size, learning_rate, _) = results
+     unmask_size, learning_rate, lossmask, _) = results
 
     # Aggregate performances.
     losses_total.add(loss_total, 1)
@@ -206,8 +207,8 @@ def run_epoch(supervisor,
   tf.logging.info('time taken: %.4f' % (time.time() - start_time))
 
   # TODO(annahuang): Remove printouts.
-  print '%s, epoch %d: perplexity, loss (mask): %.4f, %.4f, ' % (
-      experiment_type, epoch_count,
+  print '%s, epoch %d: real loss %.4f perplexity, loss (mask): %.4f, %.4f, ' % (
+      experiment_type, epoch_count, run_stats['loss_%s' % experiment_type],
       run_stats['perplexity_mask_%s' % experiment_type],
       run_stats['loss_mask_%s' % experiment_type]),
   print 'perplexity, loss (unmask): %.4f, %.4f, ' % (
@@ -216,7 +217,6 @@ def run_epoch(supervisor,
   print 'perplexity, loss (total): %.4f, %.4f, ' % (
       run_stats['perplexity_total_%s' % experiment_type],
       run_stats['loss_total_%s' % experiment_type]),
-  print 'maskfrac: %.4f' % (mask_size/float(mask_size + unmask_size)),
   print 'log lr: %.4f' % np.log2(run_stats['learning_rate']),
   print 'time taken: %.4f' % (time.time() - start_time)
 

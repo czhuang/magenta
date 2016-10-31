@@ -164,6 +164,14 @@ def make_data_feature_maps(sequences, config, encoder, start_crop_index=None):
     elif config.hparams.denoise_mode or maskout_method == config.RANDOM_ALL_TIME_INSTRUMENT:
       mask = mask_tools.get_random_all_time_instrument_mask(
           cropped_pianoroll.shape, config.hparams.corrupt_ratio)
+    elif maskout_method == config.CHRONOLOGICAL_TI:
+      mask = mask_tools.get_chronological_ti_mask(cropped_pianoroll.shape)
+    elif maskout_method == config.CHRONOLOGICAL_IT:
+      mask = mask_tools.get_chronological_it_mask(cropped_pianoroll.shape)
+    elif maskout_method == config.FIXED_ORDER:
+      mask = mask_tools.get_fixed_order_mask(cropped_pianoroll.shape)
+    elif maskout_method == config.BALANCED:
+      mask = mask_tools.get_balanced_mask(cropped_pianoroll.shape)
     else:
       raise ValueError('Mask method not supported.')
     

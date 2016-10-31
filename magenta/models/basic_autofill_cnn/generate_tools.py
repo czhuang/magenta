@@ -8,7 +8,7 @@ Example usage:
 from collections import namedtuple
 from collections import defaultdict
 from itertools import permutations
-import os
+import os, sys
 import copy
 import time
 
@@ -82,6 +82,144 @@ def sample_pitch(prediction, time_step, instr_idx, num_pitches, temperature):
       print p
     pitch = np.random.choice(range(num_pitches), p=p)
   return pitch
+
+
+def regenerate_chronological_ti(pianorolls, wrapped_model, config):
+  return regenerate_chronological(pianorolls, wrapped_model, config, order="ti")
+
+def regenerate_chronological_it(pianorolls, wrapped_model, config):
+  return regenerate_chronological(pianorolls, wrapped_model, config, order="it")
+
+def regenerate_chronological(pianorolls, wrapped_model, config, order="ti"):
+  model = wrapped_model.model
+  batch_size, num_timesteps, num_pitches, num_instruments = pianorolls.shape
+
+  generated_pianoroll = np.zeros(pianorolls[0].shape)
+  original_pianoroll = pianorolls[config.requested_index].copy()
+  autofill_steps = []
+
+  mask_for_generation = np.zeros(pianorolls[0].shape)
+  # mask generator for the rest of the batch
+  batch_mask_function = getattr(mask_tools, "get_random_chronological_%s_mask" % order)
+
+  for j in range(num_timesteps * num_instruments):
+    if order == "ti":
+      time_step = j // num_instruments
+      instr_indx = j % num_instruments
+    elif order == "it":
+      instr_indx = j // num_timesteps
+      time_step = j % num_timesteps
+    else:
+      assert False
+
+    input_data = np.asarray([
+        mask_tools.apply_mask_and_stack(pianorolls[i],
+                                        mask_for_generation if i == config.requested_index else
+                                        batch_mask_function(pianorolls[i].shape))
+        for i in range(batch_size)])
+
+    raw_prediction = wrapped_model.sess.run(model.predictions, {model.input_data: input_data})
+    prediction = raw_prediction[config.requested_index]
+    pitch = sample_pitch(prediction, time_step, instr_indx, num_pitches, config.temperature)
+
+    generated_pianoroll[time_step, pitch, instr_indx] = 1
+    mask_for_generation[time_step, :, instr_indx] = 0
+
+    step = AutofillStep(prediction, ((time_step, pitch, instr_indx), 1),
+                        generated_pianoroll.copy())
+    autofill_steps.append(step)
+
+    sys.stderr.write(".")
+    sys.stderr.flush()
+  sys.stderr.write("\n")
+  print np.sum(generated_pianoroll), num_timesteps * num_instruments
+  assert np.sum(generated_pianoroll) == num_timesteps * num_instruments
+  return generated_pianoroll, autofill_steps, original_pianoroll, None
+
+
+def regenerate_random_order(pianorolls, wrapped_model, config):
+  model = wrapped_model.model
+  batch_size, num_timesteps, num_pitches, num_instruments = pianorolls.shape
+
+  generated_pianoroll = np.zeros(pianorolls[0].shape)
+  original_pianoroll = pianorolls[config.requested_index].copy()
+  autofill_steps = []
+
+  mask_for_generation = np.zeros(pianorolls[0].shape)
+  # mask generator for the rest of the batch
+  batch_mask_function = getattr(mask_tools, "get_fixed_order_mask")
+
+  order = np.arange(num_timesteps * num_instruments)
+  np.random.shuffle(order)
+
+  for j in order:
+    time_step = j // num_instruments
+    instr_indx = j % num_instruments
+
+    input_data = np.asarray([
+        mask_tools.apply_mask_and_stack(pianorolls[i],
+                                        mask_for_generation if i == config.requested_index else
+                                        batch_mask_function(pianorolls[i].shape))
+        for i in range(batch_size)])
+  
+    raw_prediction = wrapped_model.sess.run(model.predictions, {model.input_data: input_data})
+    prediction = raw_prediction[config.requested_index]
+    pitch = sample_pitch(prediction, time_step, instr_indx, num_pitches, config.temperature)
+  
+    generated_pianoroll[time_step, pitch, instr_indx] = 1
+    mask_for_generation[time_step, :, instr_indx] = 0
+  
+    step = AutofillStep(prediction, ((time_step, pitch, instr_indx), 1),
+                        generated_pianoroll.copy())
+    autofill_steps.append(step)
+  
+    sys.stderr.write(".")
+    sys.stderr.flush()
+  sys.stderr.write("\n")
+  print np.sum(generated_pianoroll), num_timesteps * num_instruments
+  assert np.sum(generated_pianoroll) == num_timesteps * num_instruments
+  return generated_pianoroll, autofill_steps, original_pianoroll, None
+
+
+def regenerate_fixed_order(pianorolls, wrapped_model, config):
+  model = wrapped_model.model
+  batch_size, num_timesteps, num_pitches, num_instruments = pianorolls.shape
+
+  generated_pianoroll = np.zeros(pianorolls[0].shape)
+  original_pianoroll = pianorolls[config.requested_index].copy()
+  autofill_steps = []
+
+  mask_for_generation = np.zeros(pianorolls[0].shape)
+  # mask generator for the rest of the batch
+  batch_mask_function = getattr(mask_tools, "get_fixed_order_mask")
+
+  order = mask_tools.get_fixed_order_order(num_timesteps)
+
+  for time_step in order:
+    for instr_indx in range(num_instruments):
+      input_data = np.asarray([
+          mask_tools.apply_mask_and_stack(pianorolls[i],
+                                          mask_for_generation if i == config.requested_index else
+                                          batch_mask_function(pianorolls[i].shape))
+          for i in range(batch_size)])
+  
+      raw_prediction = wrapped_model.sess.run(model.predictions, {model.input_data: input_data})
+      prediction = raw_prediction[config.requested_index]
+      pitch = sample_pitch(prediction, time_step, instr_indx, num_pitches, config.temperature)
+  
+      generated_pianoroll[time_step, pitch, instr_indx] = 1
+      mask_for_generation[time_step, :, instr_indx] = 0
+  
+      step = AutofillStep(prediction, ((time_step, pitch, instr_indx), 1),
+                          generated_pianoroll.copy())
+      autofill_steps.append(step)
+  
+      sys.stderr.write(".")
+      sys.stderr.flush()
+  sys.stderr.write("\n")
+  print np.sum(generated_pianoroll), num_timesteps * num_instruments
+  assert np.sum(generated_pianoroll) == num_timesteps * num_instruments
+  return generated_pianoroll, autofill_steps, original_pianoroll, None
 
 
 def regenerate_voice_by_voice(pianorolls, wrapped_model, config):
@@ -469,8 +607,10 @@ def main(unused_argv):
   #generate_routine(
   #    GENERATION_PRESETS['RegenerateValidationPieceVoiceByVoiceConfig'],
   #    FLAGS.generation_output_dir)
-#  generate_routine(GENERATION_PRESETS['RegeneratePrimePieceVoiceByVoiceConfig'],
-#                   FLAGS.generation_output_dir)
+  #generate_routine(GENERATION_PRESETS['RegeneratePrimePieceVoiceByVoiceConfig'],
+  #                 FLAGS.generation_output_dir)
+  #generate_routine(GENERATION_PRESETS['RegeneratePrimePieceFixedOrderConfig'],
+  #                 FLAGS.generation_output_dir)
   #generate_routine(
   #    GENERATION_PRESETS['GenerateAccompanimentToPrimeMelodyConfig'],
   #    FLAGS.generation_output_dir)
@@ -551,47 +691,32 @@ _DEFAULT_MODEL_NAME = 'Denoising64_128'
 
 GENERATION_PRESETS = {
 
-    'RegeneratePrimePieceVoiceByVoiceConfig': GenerationConfig(
-        generate_method_name='regenerate_voice_by_voice',
-        model_name=_DEFAULT_MODEL_NAME,
-        prime_fpath=FLAGS.prime_fpath,
-        validation_path=FLAGS.validation_set_dir,
-        prime_voices=range(4),
-        voices_to_regenerate=range(4),
-        sequential_order_type=RANDOM,
-        num_samples=3, #5,
-        requested_num_timesteps=64, #16, #128, #64,
-        num_rewrite_iterations=1, #20, #20,
-        temperature=0.01,
-        plot_process=False),
-
-    'GenerateGibbsLikeFromRandomConfig': GenerationConfig(
-        generate_method_name='generate_gibbs_like',
-        model_name=_DEFAULT_MODEL_NAME, #'DeepResidual',
-        start_with_random=True,
-        prime_voices=range(4),
-        voices_to_regenerate=range(4),
-        num_samples=2, #5,
-        requested_num_timesteps=32, #64, #16, #128, #64,
-        num_rewrite_iterations=10, #20, #20,
-        condition_mask_size=8, #8, #8,
-        sample_extra_ratio=0, #10, #10,
-        temperature=0.01),
-
-    # Configurations for generating in random instrument cross timestep order.
-    'GenerateGibbsLikeConfig': GenerationConfig(
-        generate_method_name='generate_gibbs_like',
-        model_name=_DEFAULT_MODEL_NAME, #'DeepResidual',
+    'GenerateRandomOrderConfig': GenerationConfig(
+        generate_method_name='regenerate_random_order',
+        model_name='balanced_fc_mask_only',
         start_with_empty=True,
         validation_path=FLAGS.validation_set_dir,
         voices_to_regenerate=range(4),
         sequential_order_type=RANDOM,
-        num_samples=2, #5,
-        requested_num_timesteps=8, #64, #16, #128, #64,
-        num_rewrite_iterations=1, #20, #20,
+        num_samples=10, #5,
+        requested_num_timesteps=64, #16, #128, #64,
+        temperature=0.01,
+        plot_process=False),
+    
+    # Configurations for generating in random instrument cross timestep order.
+    'GenerateGibbsLikeConfig': GenerationConfig(
+        generate_method_name='generate_gibbs_like',
+        model_name='balanced',
+        start_with_empty=True,
+        validation_path=FLAGS.validation_set_dir,
+        voices_to_regenerate=range(4),
+        sequential_order_type=RANDOM,
+        num_samples=5, #5,
+        requested_num_timesteps=64, #16, #128, #64,
+        num_rewrite_iterations=10, #20, #20,
         condition_mask_size=8, #8, #8,
         sample_extra_ratio=0, #10, #10,
-        temperature=0.1,
+        temperature=0.01,
         plot_process=False),
 
     'RegeneratePrimePieceByGibbsOnMeasures': GenerationConfig(
@@ -602,28 +727,67 @@ GENERATION_PRESETS = {
         prime_voices=range(3), 
         voices_to_regenerate=range(3),
         sequential_order_type=RANDOM,
-	num_samples=4,
+	    num_samples=4,
         requested_num_timesteps=32, #16, #128, #64,
         num_rewrite_iterations=2, #20, #20,
         condition_mask_size=8, #8, #8,
         sample_extra_ratio=0, 
         temperature=0.1,
         plot_process=False),
-
-
-    'RegenerateValidationPieceVoiceByVoiceConfig': GenerationConfig(
+    
+    'RegeneratePrimePieceVoiceByVoiceConfig': GenerationConfig(
         generate_method_name='regenerate_voice_by_voice',
-        model_name='DeepResidual',
+        model_name='random_medium',
+        prime_fpath=FLAGS.prime_fpath,
         validation_path=FLAGS.validation_set_dir,
-        #requested_validation_piece_name='bwv103.6.mxl',
-        requested_validation_piece_name=None,
         prime_voices=range(4),
         voices_to_regenerate=range(4),
         sequential_order_type=RANDOM,
-        num_diff_primes=100,
-        num_samples=16,
-        requested_num_timesteps=32*2, #128,
+        num_samples=2,
+        requested_num_timesteps=64, #16, #128, #64,
+        temperature=0,
+        num_rewrite_iterations=1,
         plot_process=False),
+
+    # sequential generation
+    'RegeneratePrimePieceChronologicalTIConfig': GenerationConfig(
+        generate_method_name='regenerate_chronological_ti',
+        model_name='chronological_ti',
+        prime_fpath=FLAGS.prime_fpath,
+        validation_path=FLAGS.validation_set_dir,
+        prime_voices=range(4),
+        voices_to_regenerate=range(4),
+        num_samples=5,
+        requested_num_timesteps=64, #16, #128, #64,
+        temperature=0.01,
+        num_rewrite_iterations=1,
+        plot_process=False),
+
+    'RegeneratePrimePieceChronologicalITConfig': GenerationConfig(
+        generate_method_name='regenerate_chronological_it',
+        model_name='chronological_it',
+        prime_fpath=FLAGS.prime_fpath,
+        validation_path=FLAGS.validation_set_dir,
+        prime_voices=range(4),
+        voices_to_regenerate=range(4),
+        num_samples=5,
+        requested_num_timesteps=64, #16, #128, #64,
+        temperature=0.01,
+        num_rewrite_iterations=1,
+        plot_process=False),
+    'RegeneratePrimePieceFixedOrderConfig': GenerationConfig(
+        generate_method_name='regenerate_fixed_order',
+        model_name='fixed_order_64-128',
+        prime_fpath=FLAGS.prime_fpath,
+        validation_path=FLAGS.validation_set_dir,
+        prime_voices=range(4),
+        voices_to_regenerate=range(4),
+        num_samples=5,
+        requested_num_timesteps=64, #16, #128, #64,
+        temperature=0.01,
+        num_rewrite_iterations=1,
+        plot_process=False),
+
     # Configuration for generating an accompaniment to prime melody.
     'GenerateAccompanimentToPrimeMelodyConfig': GenerationConfig(
         generate_method_name='regenerate_voice_by_voice',
@@ -640,15 +804,15 @@ GENERATION_PRESETS = {
     # Configurations for generating in random instrument cross timestep order.
     'GenerateFromScratchVoiceByVoice': GenerationConfig(
         generate_method_name='regenerate_voice_by_voice',
-        model_name='DeepResidual',
+        model_name='random_medium',
         start_with_empty=True,
         validation_path=FLAGS.validation_set_dir,
         voices_to_regenerate=range(4),
         sequential_order_type=RANDOM, 
-        num_samples=3,
-        requested_num_timesteps=32, #32, #64, #16,
+        num_samples=5,
+        requested_num_timesteps=64, #32, #64, #16,
         num_rewrite_iterations=5,
-        temperature=0, #0.1, #0.5, #1 # It seems forward requires a higher temperature, with 0.1 its holding on to same notes.
+        temperature=0.01, #0.1, #0.5, #1 # It seems forward requires a higher temperature, with 0.1 its holding on to same notes.
         plot_process=False),
     # Configurations for generating in random instrument cross timestep order.
     'InpaintingConfig': GenerationConfig(
