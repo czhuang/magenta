@@ -81,6 +81,7 @@ tf.app.flags.DEFINE_integer('augment_by_halfing_doubling_durations', 0, 'If '
                             'go outside of the original set of durations.')
 
 tf.app.flags.DEFINE_bool('mask_indicates_context', True, 'Feed inverted mask into convnet so that zero-padding makes sense')
+tf.app.flags.DEFINE_bool('optimize_mask_only', True, 'optimize masked predictions only')
 
 tf.app.flags.DEFINE_bool('denoise_mode', True, 'Instead of blankout, randomly add perturb noise.  Hence instead of inpainting, model learns to denoise.')
 
@@ -241,6 +242,7 @@ def main(unused_argv):
       mask_indicates_context=FLAGS.mask_indicates_context,
       denoise_mode=FLAGS.denoise_mode,
       corrupt_ratio=FLAGS.corrupt_ratio,
+      optimize_mask_only=FLAGS.optimize_mask_only,
       augment_by_transposing=FLAGS.augment_by_transposing,
       augment_by_halfing_doubling_durations=FLAGS.
       augment_by_halfing_doubling_durations)
