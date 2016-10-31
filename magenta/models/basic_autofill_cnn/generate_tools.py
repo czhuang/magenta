@@ -348,7 +348,8 @@ def generate_gibbs_like(pianorolls, wrapped_model, config):
   #mask_border = config.condition_mask_size / 2
   num_maskout = 4
   #print mask_border, 'num_maskout', num_maskout
-  mask_func = mask_tools.get_multiple_random_instrument_time_mask_by_mask_size
+  #mask_func = mask_tools.get_multiple_random_instrument_time_mask_by_mask_size
+  mask_func = lambda shape, *_: mask_tools.get_random_all_time_instrument_mask(shape)
 
   # TODO: for debug
   counter = 0
