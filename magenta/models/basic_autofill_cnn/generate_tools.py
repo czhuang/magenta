@@ -69,18 +69,20 @@ def sample_pitch(prediction, time_step, instr_idx, num_pitches, temperature):
     print p
   #print 'temperature', temperature
   if temperature == 0.:
-    print 'Taking the argmax'
     pitch = np.argmax(p)
   else:
-    #p = np.exp(np.log(p) / temperature)
-    tempered_log = np.log(p) / temperature 
-    tempered_log -= np.max(tempered_log)
-    p = np.exp(tempered_log)
+    oldp = p
+    logp = np.log(p)
+    logp /= temperature
+    logp -= logp.max()
+    p = np.exp(logp)
     p /= p.sum()
     if np.isnan(p).any():
-      print 'nans after tempering'
-      print p
-    pitch = np.random.choice(range(num_pitches), p=p)
+      import pdb; pdb.set_trace()
+    try:
+      pitch = np.random.choice(range(num_pitches), p=p)
+    except:
+      import pdb; pdb.set_trace()
   return pitch
 
 
