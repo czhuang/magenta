@@ -135,20 +135,29 @@ def get_instrument_mask(pianoroll_shape, instr_idx):
   return mask
 
 
-def get_random_all_time_instrument_mask(pianoroll_shape, blankout_ratio):
+def get_random_all_time_instrument_mask(pianoroll_shape, blankout_ratio=0.5):
   """
-
   Returns:
     A 3D binary mask.
   """
   if len(pianoroll_shape) != 3:
     raise ValueError(
         'Shape needs to of 3 dimensional, time, pitch, and instrument.')
-  mask = np.random.random(
-      [pianoroll_shape[0], 1, pianoroll_shape[2]]) > (1 - blankout_ratio)
+  T, P, I = pianoroll_shape
+  mask = np.random.random([T, 1, I]) < blankout_ratio
   mask = mask.astype(np.float32)
   mask = np.tile(mask, [1, pianoroll_shape[1], 1])
   return mask
+
+
+def get_random_easy_mask(pianoroll_shape):
+  return get_random_all_time_instrument_mask(pianoroll_shape, p=0.25)
+
+def get_random_medium_mask(pianoroll_shape):
+  return get_random_all_time_instrument_mask(pianoroll_shape, p=0.5)
+
+def get_random_hard_mask(pianoroll_shape):
+  return get_random_all_time_instrument_mask(pianoroll_shape, p=0.75)
 
 
 def get_chronological_ti_mask(pianoroll_shape):

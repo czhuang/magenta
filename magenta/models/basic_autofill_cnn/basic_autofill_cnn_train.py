@@ -67,6 +67,7 @@ tf.app.flags.DEFINE_string('maskout_method', 'random_multiple_instrument_time',
                            "'random_patches', 'random_pitch_range',"
                            'random_time_range, random_multiple_instrument_time, '
                            'random_multiple_instrument_time,'
+                           'random_easy, random_medium, random_hard,'
                            'chronological_ti, chronological_it, fixed_order, balanced.')
 tf.app.flags.DEFINE_bool('separate_instruments', True,
                          'Separate instruments into different input feature'
