@@ -202,11 +202,10 @@ class PitchFullyConnectedConvSpecs(ConvArchitecture):
     super(PitchFullyConnectedConvSpecs, self).__init__()
     bottom = [dict(filters=[3, 3, input_depth, num_filters])]
     middle = []
-    for i in range(num_layers - 3):
+    for i in range(num_layers - 2):
       middle.append(dict(filters=[3, 3, num_filters, num_filters]))
     top = [dict(change_to_pitch_fully_connected=1, activation=lambda x: x),
-           dict(filters=[1, 1, num_pitches * num_filters,     num_pitches * num_instruments]),
-           dict(filters=[3, 1, num_pitches * num_instruments, num_pitches * num_instruments],
+           dict(filters=[1, 1, num_pitches * num_filters, num_pitches * num_instruments],
                 activation=lambda x: x),
            dict(change_to_pitch_fully_connected=-1, activation=lambda x: x)]
     self.condensed_specs = bottom + middle + top
