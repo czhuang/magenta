@@ -11,8 +11,10 @@ import tensorflow as tf
 from magenta.models.basic_autofill_cnn import data_tools
 #from magenta.models.basic_autofill_cnn import data_pipeline_tools
 from magenta.models.basic_autofill_cnn import test_tools
+from magenta.models.basic_autofill_cnn import pianorolls_lib
 
 from magenta.lib.note_sequence_io import note_sequence_record_iterator
+from magenta.lib.midi_io import sequence_proto_to_midi_file
 
 
 def get_note_sequences():
@@ -53,6 +55,17 @@ def get_4_voice_sequences(seqs=None):
       four_voice_seqs.append(seq)
   return four_voice_seqs
 
+
+def synth_start_of_note_sequences():
+  path = '/data/lisatmp4/huangche/data/bach/midi/'
+  seqs = get_4_voice_sequences()
+  encoder = pianorolls_lib.PianorollEncoderDecoder()
+  synth_timesteps = 32
+  short_seqs = []
+  for seq in seqs:
+    pianoroll = encoder.encode(seq)
+    short_seq = encoder.decode(pianoroll[:synth_timesteps])
+    fpath = os.path.join(path, seq.filename)
     
 def get_duration_hist():
   seqs = get_note_sequences()
@@ -152,12 +165,12 @@ def check_tessitura_ordering_hist():
 
 
 def main(unused_argv):
-  get_duration_hist()
-  check_num_of_pieces_in_tfrecord()
+  #get_duration_hist()
+  #check_num_of_pieces_in_tfrecord()
   #check_tessitura_hist_per_voice()
   #check_voices()
-  check_tessitura_ordering_hist()
-
+  #check_tessitura_ordering_hist()
+  synth_start_of_note_sequences()
 
 if __name__ == '__main__':
   tf.app.run()

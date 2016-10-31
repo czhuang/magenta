@@ -189,6 +189,7 @@ def generate_gibbs_like(pianorolls, wrapped_model, config):
 
   generated_pianoroll = np.zeros(pianoroll_shape)
   original_pianoroll = pianorolls[config.requested_index].copy()
+  print 'original_pianoroll', original_pianoroll.shape
   context_pianoroll = np.zeros(pianoroll_shape)
   context_pianoroll[:, :, tuple(config.prime_voices)] = original_pianoroll[:, :, tuple(config.prime_voices)]
   # To check if all was regenerated
@@ -253,21 +254,29 @@ def generate_gibbs_like(pianorolls, wrapped_model, config):
       # Update the context with recently generated note. 
       context_pianoroll += generated_pianoroll
       context_pianoroll = np.clip(context_pianoroll, 0, 1)
-      
+ 
       # Stack all pieces to create a batch.
       input_datas = []
       for data_index in range(batch_size):
         # The piece being generated.
         if data_index == config.requested_index:
-          input_data = mask_tools.apply_mask_and_stack(context_pianoroll,
-                                                       condition_mask)
+          # For denoising case.
+          if config.start_with_random: 
+            input_data = np.concatenate((context_pianoroll, condition_mask), 2)
+          else:
+            input_data = mask_tools.apply_mask_and_stack(context_pianoroll,
+                                                         condition_mask)
         # The other pieces for batch statistics.
         else:
           # TODO: Maybe need to change this mask to match the mask used for generation.
           #mask = mask_tools.get_random_instrument_mask(pianoroll_shape)
           mask = mask_func(pianoroll_shape, config.condition_mask_size, num_maskout)
-          input_data = mask_tools.apply_mask_and_stack(pianorolls[data_index],
-                                                       mask)
+          if config.start_with_random:
+            input_data = mask_tools.perturb_and_stack(pianorolls[data_index], mask)
+          else:
+            input_data = mask_tools.apply_mask_and_stack(pianorolls[data_index],
+                                                         mask)
+         
         input_datas.append(input_data)
       input_datas = np.asarray(input_datas)
       #print 'sess.run...' 
@@ -303,8 +312,9 @@ def generate_routine(config, output_path):
     raise ValueError(
         'Either prime generation with melody or piece from validation set.')
   start_with_empty = config.start_with_empty
-  if start_with_empty and (prime_fpath is not None or
-                           requested_validation_piece_name is not None):
+  start_with_random = config.start_with_random
+  if (start_with_empty or start_with_random) and (
+      prime_fpath is not None or requested_validation_piece_name is not None):
     raise ValueError(
         'Generate from empty initialization requested but prime given.')
 
@@ -340,6 +350,9 @@ def generate_routine(config, output_path):
     if start_with_empty:
       pianorolls = seeder.get_random_batch_with_empty_as_first()
       piece_name = 'empty'
+    if start_with_random:
+      pianorolls = seeder.get_random_batch_with_random_as_first()
+      piece_name = 'random'
     elif prime_fpath is not None:
       pianorolls = seeder.get_random_batch_with_prime(
           prime_fpath, config.prime_voices, config.prime_duration_ratio)
@@ -446,14 +459,18 @@ def main(unused_argv):
   print '..............................main..'
   #generate_routine(GENERATION_PRESETS['GenerateGibbsLikeConfig'],
   #                 FLAGS.generation_output_dir)
+
+  generate_routine(GENERATION_PRESETS['GenerateGibbsLikeFromRandomConfig'],
+                   FLAGS.generation_output_dir)
+
   #generate_routine(
   #     GENERATION_PRESETS['RegeneratePrimePieceByGibbsOnMeasures'],
   #     FLAGS.generation_output_dir)
   #generate_routine(
   #    GENERATION_PRESETS['RegenerateValidationPieceVoiceByVoiceConfig'],
   #    FLAGS.generation_output_dir)
-  generate_routine(GENERATION_PRESETS['RegeneratePrimePieceVoiceByVoiceConfig'],
-                   FLAGS.generation_output_dir)
+#  generate_routine(GENERATION_PRESETS['RegeneratePrimePieceVoiceByVoiceConfig'],
+#                   FLAGS.generation_output_dir)
   #generate_routine(
   #    GENERATION_PRESETS['GenerateAccompanimentToPrimeMelodyConfig'],
   #    FLAGS.generation_output_dir)
@@ -474,12 +491,15 @@ class GenerationConfig(object):
       run_description=None,
       generate_method_name='regenerate_voice_by_voice',
       model_name='DeepResidual',
+
+      # Prime setup.
       prime_fpath=None,
       prime_duration_ratio=1,
-      validation_path=None,
+      validation_path=FLAGS.validation_set_dir,
       requested_validation_piece_name=None,
       start_with_empty=False,
-
+      start_with_random=False,  
+ 
       # Request index in batch.
       requested_index=0,
 
@@ -544,6 +564,19 @@ GENERATION_PRESETS = {
         num_rewrite_iterations=1, #20, #20,
         temperature=0.01,
         plot_process=False),
+
+    'GenerateGibbsLikeFromRandomConfig': GenerationConfig(
+        generate_method_name='generate_gibbs_like',
+        model_name=_DEFAULT_MODEL_NAME, #'DeepResidual',
+        start_with_random=True,
+        prime_voices=range(4),
+        voices_to_regenerate=range(4),
+        num_samples=2, #5,
+        requested_num_timesteps=32, #64, #16, #128, #64,
+        num_rewrite_iterations=10, #20, #20,
+        condition_mask_size=8, #8, #8,
+        sample_extra_ratio=0, #10, #10,
+        temperature=0.01),
 
     # Configurations for generating in random instrument cross timestep order.
     'GenerateGibbsLikeConfig': GenerationConfig(

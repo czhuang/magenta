@@ -45,6 +45,12 @@ def concatenate_process():
   # # of steps: 38958 ~ 40iter *4instr *(64time_steps*4instrs) = 40*4*8 gibbs step = 1280 steps
   path = '/Tmp/huangche/generation/best_fromScratch-64-2016-10-26_01:00:30-DeepResidual'  
   fname = '0_generate_gibbs_like-0-285.03min-2016-10-26_01:00:30-DeepResidual-0-empty-None.pkl'
+  output_path = path
+
+  path = '/Tmp/cooijmat/autofill/generate/2016-10-30_13:49:29-balanced'
+  fname = '0_generate_gibbs_like-0-253.44min-2016-10-30_13:49:29-balanced-0-empty-None.pkl'
+  output_path = '/data/lisatmp4/huangche/TBF_generated'
+
 
   run_id = fname.split('.pkl')[0]
   requested_index = int(fname.split('_')[0])  
@@ -65,12 +71,13 @@ def concatenate_process():
     original_pianoroll = np.zeros(pianoroll_shape)
   else:
     original_pianoroll = encoder.encode(original_seq)
-  last_seq, intermediate_seqs = plot_steps(steps, original_pianoroll, path, run_id, subplots=True, subplot_step_indices=plot_indices)
+  last_seq, intermediate_seqs = plot_steps(
+      steps, original_pianoroll, output_path, run_id, subplots=True, subplot_step_indices=plot_indices)
   
   inspect_seqs = []
   inspect_crop_len = 64 
   
-  synth_num_steps = 31 
+  synth_num_steps = 15 
   synth_indices = range(0, num_steps, num_steps // synth_num_steps)
 #  synth_interval = 16
 #  synth_indices = range(0, num_steps, synth_interval) 
@@ -85,10 +92,10 @@ def concatenate_process():
     inspect_seqs.append(seq)
   concated_seqs = concatenate_seqs(inspect_seqs)
   output_fname = 'zaa_%s_process_concat.midi' % run_id
-  sequence_proto_to_midi_file(concated_seqs, os.path.join(path, output_fname))
+  sequence_proto_to_midi_file(concated_seqs, os.path.join(output_path, output_fname))
   
   # Synth each intermediate seq separately
-  synth_seqs(inspect_seqs, path, run_id)
+  synth_seqs(inspect_seqs, output_path, run_id)
 
 
 def synth_seqs(seqs, path, run_id):

@@ -55,7 +55,7 @@ def apply_mask_and_stack(pianoroll, mask):
   return np.concatenate([masked_pianoroll, mask], 2)
 
 
-def perturb_and_stack(pianoroll, mask):
+def perturb_and_stack_alt(pianoroll, mask):
   """Alternative implementation."""
   if pianoroll.ndim != 3:
     raise ValueError(
@@ -96,9 +96,9 @@ def perturb_and_stack(pianoroll, mask):
   onehot_pianoroll = np.transpose(np.eye(num_pitches)[categorical_pianoroll], axes=[0, 2, 1])
   masked_pianoroll = (1 - mask) * pianoroll + mask * onehot_pianoroll
   # Check to make sure monophonic.  
-  num_notes_on = np.unique(np.sum(pianoroll, axis=1))
-  #print 'pianoroll shape', pianoroll.shape
-  #print 'num_notes_on', num_notes_on
+  num_notes_on = np.unique(np.sum(masked_pianoroll, axis=1))
+  print 'pianoroll shape', masked_pianoroll.shape
+  print 'num_notes_on', num_notes_on
   assert np.allclose(num_notes_on, np.arange(2)) or (
       np.allclose(num_notes_on, np.array([1.])))
   # Check that every timestep has no more than 1 pitch.  Can use the check from pianorolls_lib

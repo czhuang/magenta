@@ -129,6 +129,14 @@ class SeedPianoroll(object):
   def get_empty_pianoroll(self):
     return np.zeros(self.get_pianoroll_shape())[None, :, :, :]
 
+  def get_random_pianoroll(self):
+    all_mask = np.ones((self.get_pianoroll_shape()))
+    temp_pianoroll = np.zeros((self.get_pianoroll_shape()))
+    random_pianoroll_and_mask = mask_tools.perturb_and_stack(temp_pianoroll, all_mask)
+    random_pianoroll = np.split(random_pianoroll_and_mask, 2, axis=2)[0]
+    assert np.sum(random_pianoroll) == np.product(self.get_pianoroll_shape()[0::2]) 
+    return random_pianoroll[None, :, :, :]
+
   def get_prime_pianoroll(self, fpath, prime_voices, prime_duration_ratio=1):
     fpath = os.path.join(tf.resource_loader.get_data_files_path(), 'testdata',
                          fpath)
@@ -237,6 +245,16 @@ class SeedPianoroll(object):
     print batch_minus_one.shape
     return np.concatenate((requested_piece_crop, batch_minus_one), 0)
 
+  def get_random_batch_with_random_as_first(self):
+    return self.get_random_batch_and_replace_first(self.get_random_pianoroll())
+
+  def get_random_batch_and_replace_first(self, pianoroll_to_replace_first):
+    batch = self.get_random_batch()
+    batch_minus_one = np.delete(batch, 0, 0)
+    print batch_minus_one.shape
+    return np.concatenate((pianoroll_to_replace_first, batch_minus_one), 0)
+   
+  
   def get_random_batch_with_prime(self, fpath, prime_voices, prime_duration_ratio):
     requested_piece_crop = self.get_prime_pianoroll(fpath, prime_voices, prime_duration_ratio)
     print 'primed size:', requested_piece_crop.shape
