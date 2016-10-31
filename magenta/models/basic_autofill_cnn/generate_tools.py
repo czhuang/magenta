@@ -518,7 +518,6 @@ def generate_routine(config, output_path):
       piece_name = piece_names[config.requested_index]
     print 'Piece name:', piece_name
 
-    #seqs_by_ordering = defaultdict(list)
     # TODO(annahuang): Use consistent instrument or voice.
     instr_orderings = list(permutations(config.voices_to_regenerate))
     if config.num_samples_per_instr_ordering is not None:
@@ -530,8 +529,8 @@ def generate_routine(config, output_path):
     else:
       tf.log.warning('Should specify num_samples or num_samples_per_instr_ordering, otherwise assumes num_samples_per_instr_ordering to be 1')    
     
-    for i, instr_ordering in enumerate(instr_orderings):	
-      # TODO: hack for clearing dictionary for pickle.
+    for i, instr_ordering in enumerate(instr_orderings):
+      # TODO(annahuang) hack for clearing dictionary for pickle
       seqs_by_ordering = defaultdict(list)
       start_time = time.time()
       # Generate.
