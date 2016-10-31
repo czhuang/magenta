@@ -106,7 +106,7 @@ class Hyperparameters(object):
         'prediction_threshold', 'optimize_mask_only', 'conv_arch',
         'augment_by_halfing_doubling_durations', 'augment_by_transposing',
     ]
-    return ("maskout_prob=0.75," +
+    return ("maskout_prob=0.5," +
             ','.join('%s=%s' % (key, self.__dict__[key]) for key in sorted_keys
                      if key not in keys_to_filter_out))
 
