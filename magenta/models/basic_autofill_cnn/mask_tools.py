@@ -135,19 +135,103 @@ def get_instrument_mask(pianoroll_shape, instr_idx):
   return mask
 
 
-def get_random_all_time_instrument_mask(pianoroll_shape, blankout_ratio):
+def get_random_all_time_instrument_mask(pianoroll_shape, blankout_ratio=0.5):
   """
-
   Returns:
     A 3D binary mask.
   """
   if len(pianoroll_shape) != 3:
     raise ValueError(
         'Shape needs to of 3 dimensional, time, pitch, and instrument.')
-  mask = np.random.random(
-      [pianoroll_shape[0], 1, pianoroll_shape[2]]) > (1 - blankout_ratio)
+  T, P, I = pianoroll_shape
+  mask = np.random.random([T, 1, I]) < blankout_ratio
   mask = mask.astype(np.float32)
   mask = np.tile(mask, [1, pianoroll_shape[1], 1])
+  return mask
+
+
+def get_random_easy_mask(pianoroll_shape):
+  return get_random_all_time_instrument_mask(pianoroll_shape, p=0.25)
+
+def get_random_medium_mask(pianoroll_shape):
+  return get_random_all_time_instrument_mask(pianoroll_shape, p=0.5)
+
+def get_random_hard_mask(pianoroll_shape):
+  return get_random_all_time_instrument_mask(pianoroll_shape, p=0.75)
+
+
+def get_chronological_ti_mask(pianoroll_shape):
+  # ti means the class of masks corresponds to the time-major ordering
+  # over the time/instrument matrix, i.e. s1a1t1b1s2a2t2b2s3a3t3b3
+  T, P, I = pianoroll_shape
+  mask = np.ones([T * I]).astype(np.float32)
+  j = np.random.randint(len(mask))
+  mask[:j] = 0.
+  mask = mask.reshape([T, 1, I])
+  mask = np.tile(mask, [1, P, 1])
+  return mask
+
+
+def get_chronological_it_mask(pianoroll_shape):
+  # it means the class of masks corresponds to the instrument-major
+  # ordering over the time/instrument matrix,
+  # i.e. s1s2s3s4...a1a2a3a4...t1t2t3t4...b1b2b3b4
+  T, P, I = pianoroll_shape
+  mask = np.ones([T * I]).astype(np.float32)
+  j = np.random.randint(len(mask))
+  mask[:j] = 0.
+  mask = mask.reshape([I, 1, T])
+  mask = mask.T
+  mask = np.tile(mask, [1, P, 1])
+  return mask
+
+
+def get_fixed_order_order(num_timesteps):
+  order = []
+  for step in reversed(range(int(np.log2(num_timesteps)))):
+    for j in reversed(range(0, num_timesteps, 2**step)):
+      if j not in order:
+        order.append(j)
+  assert len(order) == num_timesteps
+  return order
+
+
+def get_fixed_order_mask(pianoroll_shape):
+  T, P, I = pianoroll_shape
+  order = get_fixed_order_order(T)
+  t = np.random.randint(T)
+  i = np.random.randint(I)
+  mask = np.ones(pianoroll_shape)
+  mask[order[:t]] = 0.
+  mask[order[t], :, :i] = 0.
+  return mask
+
+
+def print_mask(mask):
+  # assert mask is constant across pitch
+  assert np.equal(mask, mask[:, 0, :][:, None, :]).all()
+  # get rid of pitch dimension and transpose to get landscape orientation
+  mask = mask[:, 0, :].T
+  print "\n".join("".join(str({True: 1, False: 0}[z]) for z in y) for y in mask)
+
+
+def get_balanced_mask(pianoroll_shape):
+  T, P, I = pianoroll_shape
+
+  d = T * I
+  coeffs = np.zeros(T * I + 1, dtype=np.float32)
+  coeffs[1:] = 1. / np.arange(1, d + 1)
+  pk = coeffs / np.sum(coeffs)
+
+  # sample a mask size
+  k = np.random.choice(d + 1, p=pk)
+  # sample a mask of size k
+  i = np.random.choice(d, size=k, replace=False)
+
+  mask = np.zeros(T * I, dtype=np.float32)
+  mask[i] = 1.
+  mask = mask.reshape((T, 1, I))
+  mask = np.tile(mask, [1, P, 1])
   return mask
 
 

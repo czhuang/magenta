@@ -230,6 +230,36 @@ class BasicAutofillCNNGraph(object):
     else:
       self._loss = self._loss_total
 
+    if "chronological" in hparams.maskout_method or "fixed_order" in hparams.maskout_method:
+      _, mask = tf.split(3, 2, self._input_data)
+      flat_prediction_index = tf.to_int32(tf.reduce_sum(1 - mask[:, :, 0, :],
+                                                        reduction_indices=(1, 2)))
+
+      if "fixed_order" in hparams.maskout_method:
+        num_instruments = 4
+        import mask_tools, numpy as np
+        time_order = mask_tools.get_fixed_order_order(hparams.crop_piece_len)
+        flat_order = num_instruments * np.array(time_order)[:, None] + np.arange(num_instruments)[None, :]
+        flat_order = flat_order.ravel()
+        flat_prediction_index = tf.gather(flat_order, flat_prediction_index)
+
+      lossmask = tf.one_hot(flat_prediction_index, depth=tf.shape(mask)[1] * tf.shape(mask)[3])
+      # reduce_mean over pitch to be consistent with above
+      loss3d = tf.reduce_mean(self._cross_entropy, reduction_indices=2)
+
+      if hparams.maskout_method.endswith("_ti") or "fixed_order" in hparams.maskout_method:
+        pass
+      elif hparams.maskout_method.endswith("_it"):
+        loss3d = tf.transpose(loss3d, perm=[0, 2, 1])
+      else:
+        print hparams.maskout_method
+        assert False
+      self._lossmask = lossmask
+      flatloss = tf.reshape(loss3d, (tf.shape(mask)[0], tf.shape(mask)[1] * tf.shape(mask)[3]))
+      self._loss = tf.reduce_sum(lossmask * flatloss) / tf.to_float(tf.shape(mask)[0])
+    else:
+      self._lossmask = tf.no_op()
+
     self.learning_rate = tf.Variable(hparams.learning_rate, name="learning_rate", trainable=False, dtype=tf.float32)
 
     # If not training, don't need to add optimizer to the graph.

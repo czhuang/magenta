@@ -34,12 +34,20 @@ class PipelineConfig(object):
   maskout_method_strs = ['random_instrument', 'random_patches',
                          'random_pitch_range', 'random_time_range',
                          'random_multiple_instrument_time',
-                         'random_all_time_instrument']
+                         'random_all_time_instrument',
+                         'chronological_ti',
+                         'chronological_it',
+                         'fixed_order', 'balanced',
+                           ]
   RANDOM_INSTRUMENT, RANDOM_PATCHES, RANDOM_PITCH_RANGE = range(3)
   RANDOM_TIME_RANGE, RANDOM_MULTIPLE_INSTRUMENT_TIME = range(3, 5)
   RANDOM_ALL_TIME_INSTRUMENT = 5
+  CHRONOLOGICAL_TI = 6
+  CHRONOLOGICAL_IT = 7
+  FIXED_ORDER = 8
+  BALANCED = 9
   # Run time configurations.
-  eval_freq = 10
+  eval_freq = 5
 
   # A identifier for each run.
   run_id = get_current_time_as_str()
@@ -59,6 +67,8 @@ class PipelineConfig(object):
     # Update maskout method related settings.
     print 'maskout_method_str', maskout_method_str
     self.maskout_method = maskout_method_str
+    # make this available on hparams too
+    hparams.maskout_method = maskout_method_str
     # Maskout border needs to be smaller for random patches so that won't mask
     # out the entire pianoroll.
     if self.maskout_method == self.RANDOM_PATCHES:

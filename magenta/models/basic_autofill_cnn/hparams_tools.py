@@ -102,12 +102,11 @@ class Hyperparameters(object):
         'batch_size', 'use_softmax_loss', ' instr_sep', 'border', 'num_layers',
         'input_depth', 'output_depth', 'model_name',
         'batch_norm_variance_epsilon', 'batch_norm_gamma', 'batch_norm',
-        'init_scale', 'maskout_method', 'learning_rate',
+        'init_scale', 'crop_piece_len', 'learning_rate',
         'prediction_threshold', 'optimize_mask_only', 'conv_arch',
         'augment_by_halfing_doubling_durations', 'augment_by_transposing',
     ]
-    return ("maskout_prob=0.75," +
-            ','.join('%s=%s' % (key, self.__dict__[key]) for key in sorted_keys
+    return (','.join('%s=%s' % (key, self.__dict__[key]) for key in sorted_keys
                      if key not in keys_to_filter_out))
 
   def get_conv_arch(self):
@@ -202,11 +201,10 @@ class PitchFullyConnectedConvSpecs(ConvArchitecture):
     super(PitchFullyConnectedConvSpecs, self).__init__()
     bottom = [dict(filters=[3, 3, input_depth, num_filters])]
     middle = []
-    for i in range(num_layers - 3):
+    for i in range(num_layers - 2):
       middle.append(dict(filters=[3, 3, num_filters, num_filters]))
     top = [dict(change_to_pitch_fully_connected=1, activation=lambda x: x),
-           dict(filters=[1, 1, num_pitches * num_filters,     num_pitches * num_instruments]),
-           dict(filters=[3, 1, num_pitches * num_instruments, num_pitches * num_instruments],
+           dict(filters=[1, 1, num_pitches * num_filters, num_pitches * num_instruments],
                 activation=lambda x: x),
            dict(change_to_pitch_fully_connected=-1, activation=lambda x: x)]
     self.condensed_specs = bottom + middle + top

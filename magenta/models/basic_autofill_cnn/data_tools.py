@@ -130,7 +130,6 @@ def make_data_feature_maps(sequences, config, encoder, start_crop_index=None):
   input_data = []
   targets = []
   maskout_border = config.maskout_border
-  batch_size = config.hparams.batch_size
   seq_count = 0
   for sequence in sequences:
     pianoroll = random_double_or_halftime_pianoroll_from_note_sequence(
@@ -164,6 +163,20 @@ def make_data_feature_maps(sequences, config, encoder, start_crop_index=None):
     elif config.hparams.denoise_mode or maskout_method == config.RANDOM_ALL_TIME_INSTRUMENT:
       mask = mask_tools.get_random_all_time_instrument_mask(
           cropped_pianoroll.shape, config.hparams.corrupt_ratio)
+    elif maskout_method == config.RANDOM_EASY:
+      mask = mask_tools.get_random_easy_mask(cropped_pianoroll.shape)
+    elif maskout_method == config.RANDOM_MEDIUM:
+      mask = mask_tools.get_random_medium_mask(cropped_pianoroll.shape)
+    elif maskout_method == config.RANDOM_HARD:
+      mask = mask_tools.get_random_hard_mask(cropped_pianoroll.shape)
+    elif maskout_method == config.CHRONOLOGICAL_TI:
+      mask = mask_tools.get_chronological_ti_mask(cropped_pianoroll.shape)
+    elif maskout_method == config.CHRONOLOGICAL_IT:
+      mask = mask_tools.get_chronological_it_mask(cropped_pianoroll.shape)
+    elif maskout_method == config.FIXED_ORDER:
+      mask = mask_tools.get_fixed_order_mask(cropped_pianoroll.shape)
+    elif maskout_method == config.BALANCED:
+      mask = mask_tools.get_balanced_mask(cropped_pianoroll.shape)
     else:
       raise ValueError('Mask method not supported.')
     
@@ -175,8 +188,6 @@ def make_data_feature_maps(sequences, config, encoder, start_crop_index=None):
     targets.append(cropped_pianoroll)
     assert len(input_data) == seq_count
     assert len(input_data) == len(targets)
-    #if len(input_data) == batch_size:
-    #  break
 
   input_data = np.asarray(input_data)
   targets = np.asarray(targets)
