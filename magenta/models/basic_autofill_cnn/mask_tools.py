@@ -341,7 +341,6 @@ def get_random_instrument_time_mask(pianoroll_shape, timesteps, voices_for_mask_
   for time_idx in range(random_start_idx, end_idx):
     time_idx %= time_range
     mask[time_idx, :, instr_idx] = 1
-  assert np.sum(mask) != timesteps
   return mask
 
 

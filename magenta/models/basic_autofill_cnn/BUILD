@@ -14,7 +14,9 @@ py_binary(
     deps = [
         ":data_tools",
         ":test_tools",
+        ":seed_tools",
         "//magenta/lib:note_sequence_io",
+        "//magenta/lib:midi_io",
     ],
 )
 
@@ -183,6 +185,7 @@ py_binary(
     name = "retrieve_model_tools",
     srcs = ["retrieve_model_tools.py"],
     data = [
+        "checkpoints/balanced_64-128_fc_mask_only.ckpt",
         "checkpoints/denoising_d-64_f-128.ckpt",
         "checkpoints/DeepStraightConvSpecs_d-32_f-256_best_model.ckpt",
         "checkpoints/DeepStraightConvSpecs_d-64_f-128_best_model.ckpt",

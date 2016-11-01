@@ -9,6 +9,7 @@ import numpy as np
 import tensorflow as tf
 
 from magenta.models.basic_autofill_cnn import data_tools
+from magenta.models.basic_autofill_cnn import seed_tools
 #from magenta.models.basic_autofill_cnn import data_pipeline_tools
 from magenta.models.basic_autofill_cnn import test_tools
 from magenta.models.basic_autofill_cnn import pianorolls_lib
@@ -65,8 +66,38 @@ def synth_start_of_note_sequences():
   for seq in seqs:
     pianoroll = encoder.encode(seq)
     short_seq = encoder.decode(pianoroll[:synth_timesteps])
-    fpath = os.path.join(path, seq.filename)
-    
+    fpath = os.path.join(path, seq.filename.split('.mxl')[0] + '.midi')
+    sequence_proto_to_midi_file(short_seq, fpath) 
+
+
+def synth_random_crop_from_valid():
+  path = '/data/lisatmp4/huangche/data/bach/random_crops'
+ # valid_data = list(data_tools.get_note_sequence_data(FLAGS.input_dir, 'valid'))
+ # print '# of valid_data:', len(valid_data)
+ # encoder = pianorolls_lib.PianorollEncoderDecoder()
+ # synth_timesteps = 32
+ # short_seqs = []
+ # config.hparams.batch_size = 4
+ # input_data, targets = data_tools.make_data_feature_maps(
+ #     valid_data, config, encoder)
+ 
+  # Gets data.
+  validation_path = '/Tmp/huangche/data/bach/qbm120/instrs=4_duration=0.125_sep=True'
+  model_name = 'DeepResidual64_128'
+  seeder = seed_tools.get_seeder(validation_path, model_name)
+  seeder.crop_piece_len = 32 
+  pianorolls, piece_names = seeder.get_random_batch(
+     0 , return_names=True)
+  encoder = pianorolls_lib.PianorollEncoderDecoder()
+  # skip first one since starts from beginning.
+  for i, target in enumerate(pianorolls[1:5]):
+    print target.shape
+    assert target.shape == (32, 53, 4)
+    decoded_seq = encoder.decode(target)
+    fpath = os.path.join(path, piece_names[i].split('.mxl')[0] + '.midi')
+    sequence_proto_to_midi_file(decoded_seq, fpath)
+
+
 def get_duration_hist():
   seqs = get_note_sequences()
   get_num_of_voices_hist(seqs)
@@ -170,7 +201,8 @@ def main(unused_argv):
   #check_tessitura_hist_per_voice()
   #check_voices()
   #check_tessitura_ordering_hist()
-  synth_start_of_note_sequences()
+  synth_random_crop_from_valid()
+#  synth_start_of_note_sequences()
 
 if __name__ == '__main__':
   tf.app.run()
