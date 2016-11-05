@@ -14,13 +14,17 @@ WOODWIND_QUARTET_PROGRAMS = OrderedDict(
 
 # In order to have 4 different instruments, not including second violin,
 # and adding in double bass.
+#STRING_QUARTET_PROGRAMS = OrderedDict(
+#    [(41, 'violin'), (42, 'viola'), (43, 'cello'), (44, 'contrabass')])
 STRING_QUARTET_PROGRAMS = OrderedDict(
-    [(41, 'violin'), (42, 'viola'), (43, 'cello'), (44, 'contrabass')])
+    [(41, 'violin'), (41, 'violin'), (42, 'viola'), (43, 'cello')])
+#STRING_QUARTET_PROGRAMS = OrderedDict(
+#    [(43, 'violin'), (43, 'violin'), (42, 'viola'), (41, 'cello')])
 
 CHANNEL_START_INDEXS = OrderedDict([('original_context', 0),
                                     ('generated_in_mask', 3), ('silence', -4)])
 
-_DEFAULT_QPM=120
+_DEFAULT_QPM=60  #120
 
 
 class PitchOutOfEncodeRangeError(Exception):
@@ -137,7 +141,7 @@ class PianorollEncoderDecoder(object):
     separate_instruments: A boolean to indicate whether to encode one instrument
         per pianoroll.
   """
-  velocity = 60
+  velocity = 85
   velocity_in_mask = 127
 
   def __init__(self,
@@ -254,6 +258,10 @@ class PianorollEncoderDecoder(object):
     if pianoroll_to_program_map is None:
       pianoroll_to_program_map = get_pianoroll_to_program_assignment(
           range(num_instruments))
+    else:
+      pianoroll_to_program_map = get_pianoroll_to_program_assignment(
+          range(num_instruments), pianoroll_to_program_map)
+      
     if velocity is None:
       velocity = self.velocity
 
@@ -287,7 +295,8 @@ class PianorollEncoderDecoder(object):
               previously_off(time_step, note_number, part_index)):
             note = sequence.notes.add()
             note.pitch = note_number + self.min_pitch
-            note.start_time = time_step * self.shortest_duration
+            # TODO: hack
+            note.start_time = time_step * self.shortest_duration * 2
 
             # Count how many contiguous time_steps are on.
             on_duration = self.shortest_duration
@@ -296,7 +305,8 @@ class PianorollEncoderDecoder(object):
                 break
               else:
                 on_duration += self.shortest_duration
-            note.end_time = note.start_time + on_duration
+            # TODO: hack
+            note.end_time = note.start_time + on_duration * 2
             if note.end_time > total_time:
               total_time = note.end_time
             note.velocity = velocity
