@@ -54,7 +54,8 @@ def get_validation_batch():
   return seeder.get_random_batch()
 
 
-def get_seeder(validation_path, model_name=None):
+def get_seeder(validation_path, model_name=None, 
+               maskout_method_str='random_multiple_instrument_time'):
   config = config_tools.get_checkpoint_config(model_name=model_name)
   seeder = SeedPianoroll(config, validation_path)
   return seeder
@@ -63,7 +64,7 @@ def get_seeder(validation_path, model_name=None):
 class SeedPianoroll(object):
   """Produces a pianoroll with maskouts to seed generation."""
 
-  def __init__(self, config, path, maskout_method_str='random_instrument'):
+  def __init__(self, config, path, maskout_method_str='random_multiple_instrument_time'):
     # Only use validation (unseen) data to seed the generation.
     self._sequences = list(data_tools.get_note_sequence_data(path, 'valid'))
     self._num_pieces = len(self._sequences)

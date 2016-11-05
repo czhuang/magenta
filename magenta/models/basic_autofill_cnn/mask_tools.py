@@ -105,6 +105,10 @@ def perturb_and_stack(pianoroll, mask):
   return np.concatenate([masked_pianoroll, mask], 2)
 
 
+def get_no_mask(pianoroll_shape):
+  return np.zeros((painoroll_shape))
+
+
 def get_random_instrument_mask(pianoroll_shape):
   """Creates a mask to mask out a random instrument.
 
