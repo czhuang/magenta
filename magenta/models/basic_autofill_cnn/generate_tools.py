@@ -50,7 +50,7 @@ tf.app.flags.DEFINE_string(
 #    'generation_output_dir', '/Tmp/huangche/generation',
 #    'generation_output_dir', '/data/lisatmp4/huangche/new_generated',
 tf.app.flags.DEFINE_string(
-    'generation_output_dir', '/Tmp/huangche/generation/for_study',
+    'generation_output_dir', '/Tmp/huangche/new_generation/',
     'Output directory for storing the generated Midi.')
 
 AutofillStep = namedtuple('AutofillStep', ['prediction', 'change_to_context',
@@ -669,57 +669,57 @@ def main(unused_argv):
 #        FLAGS.generation_output_dir)
 
 
-  for model_name in "DeepResidual32_256 DeepResidual64_128 Denoising64_128".split():
-    import gc
-    gc.collect()
-    generate_routine(GenerationConfig(
-        generate_method_name='regenerate_random_order',
-        model_name=model_name,
-        start_with_empty=True,
-        validation_path=FLAGS.validation_set_dir,
-        voices_to_regenerate=range(4),
-        sequential_order_type=RANDOM,
-        num_samples=4, #5,
-        requested_num_timesteps=32, #16, #128, #64,
-        temperature=0.00001),
-        FLAGS.generation_output_dir)
-
-    generate_routine(GenerationConfig(
-        generate_method_name='regenerate_voice_by_voice',
-        model_name=model_name,
-        prime_fpath=FLAGS.prime_fpath,
-        validation_path=FLAGS.validation_set_dir,
-        prime_voices=range(4),
-        voices_to_regenerate=range(4),
-        sequential_order_type=RANDOM,
-        num_samples=4,
-        requested_num_timesteps=32, #16, #128, #64,
-        temperature=0.00001,
-        num_rewrite_iterations=1),
-        FLAGS.generation_output_dir)
-  return
-
-  for model_name, method_name in {"chronological_ti":
-"regenerate_chronological_ti",
-                                  "chronological_it":
-"regenerate_chronological_it",
-                                  "fixed_order_64-128":
-"regenerate_fixed_order"}:
-    generate_routine(GenerationConfig(
-        generate_method_name='regenerate_chronological_ti',
-        model_name='chronological_ti',
-        prime_fpath=FLAGS.prime_fpath,
-        validation_path=FLAGS.validation_set_dir,
-        prime_voices=range(4),
-        voices_to_regenerate=range(4),
-        num_samples=4,
-        requested_num_timesteps=64, #16, #128, #64,
-        temperature=0.00001,
-        num_rewrite_iterations=1),
-        FLAGS.generation_output_dir)
-
-  return
-  for model_name in "balanced random_medium".split():
+#  for model_name in "DeepResidual32_256 DeepResidual64_128 Denoising64_128".split():
+#    import gc
+#    gc.collect()
+#    generate_routine(GenerationConfig(
+#        generate_method_name='regenerate_random_order',
+#        model_name=model_name,
+#        start_with_empty=True,
+#        validation_path=FLAGS.validation_set_dir,
+#        voices_to_regenerate=range(4),
+#        sequential_order_type=RANDOM,
+#        num_samples=4, #5,
+#        requested_num_timesteps=32, #16, #128, #64,
+#        temperature=0.00001),
+#        FLAGS.generation_output_dir)
+#
+#    generate_routine(GenerationConfig(
+#        generate_method_name='regenerate_voice_by_voice',
+#        model_name=model_name,
+#        prime_fpath=FLAGS.prime_fpath,
+#        validation_path=FLAGS.validation_set_dir,
+#        prime_voices=range(4),
+#        voices_to_regenerate=range(4),
+#        sequential_order_type=RANDOM,
+#        num_samples=4,
+#        requested_num_timesteps=32, #16, #128, #64,
+#        temperature=0.00001,
+#        num_rewrite_iterations=1),
+#        FLAGS.generation_output_dir)
+#  return
+#
+#  for model_name, method_name in {"chronological_ti":
+#"regenerate_chronological_ti",
+#                                  "chronological_it":
+#"regenerate_chronological_it",
+#                                  "fixed_order_64-128":
+#"regenerate_fixed_order"}:
+#    generate_routine(GenerationConfig(
+#        generate_method_name='regenerate_chronological_ti',
+#        model_name='chronological_ti',
+#        prime_fpath=FLAGS.prime_fpath,
+#        validation_path=FLAGS.validation_set_dir,
+#        prime_voices=range(4),
+#        voices_to_regenerate=range(4),
+#        num_samples=4,
+#        requested_num_timesteps=64, #16, #128, #64,
+#        temperature=0.00001,
+#        num_rewrite_iterations=1),
+#        FLAGS.generation_output_dir)
+#
+#  return
+  for model_name in "random_medium".split():
     import gc
     gc.collect()
     generate_routine(GenerationConfig(
@@ -729,12 +729,12 @@ def main(unused_argv):
         validation_path=FLAGS.validation_set_dir,
         voices_to_regenerate=range(4),
         sequential_order_type=RANDOM,
-        num_samples=4, #5,
-        requested_num_timesteps=32, #16, #128, #64,
+        num_samples=3, #5,
+        requested_num_timesteps=64, #16, #128, #64,
         condition_mask_size=8, #8, #8,
-        num_rewrite_iterations=5, #20, #20,
+        num_rewrite_iterations=10, #20, #20,
         sample_extra_ratio=0,
-        temperature=0.00001),
+        temperature=0.01),
         FLAGS.generation_output_dir)
 
 
