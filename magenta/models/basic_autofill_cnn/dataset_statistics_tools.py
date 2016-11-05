@@ -14,8 +14,8 @@ from magenta.models.basic_autofill_cnn import seed_tools
 from magenta.models.basic_autofill_cnn import test_tools
 from magenta.models.basic_autofill_cnn import pianorolls_lib
 
-from magenta.lib.note_sequence_io import note_sequence_record_iterator
-from magenta.lib.midi_io import sequence_proto_to_midi_file
+from magenta.lib.note_sequence_io import note_sequence_record_iterator, NoteSequenceRecordWriter
+from magenta.lib.midi_io import sequence_proto_to_midi_file, midi_to_sequence_proto
 
 
 def get_note_sequences():
