@@ -57,6 +57,140 @@ def get_4_voice_sequences(seqs=None):
   return four_voice_seqs
 
 
+
+# nicolas dataset
+# set, # of pieces, min pch, max pch
+# train, 229, 43, 96
+# valid, 76, 48, 96
+# test, 77, 45, 96
+# global min and max, 43, 96
+
+# music21 dataset
+# 36, 88
+
+# min and max across both datasets
+# 36, 96
+MIN_PCH = 36
+MAX_PCH = 96
+# in nichola's, a piece is a list of list
+
+
+def get_min_max_in_list_of_list(lll):
+  min_max = [f(l) for ll in lll for l in ll for f in (min, max) if len(l)>0]
+  return min(min_max), max(min_max)
+
+
+def get_piece_min_max(ll):
+  min_max = [f(l) for l in ll for f in (min, max) if len(l)>0]
+  return min(min_max), max(min_max)
+
+
+def get_piece_tensor(ll):
+  min_, max_ = get_piece_min_max(ll)
+  pch_range = max_ - min_ + 1
+  condensed_pianoroll = np.zeros((len(ll), pch_range, 4))
+  for t, l in enumerate(ll):
+    transposed_pitches = np.array(l) - min_
+    condensed_pianoroll[t, :, :len(l)] = np.transpose(np.eye(pch_range)[transposed_pitches], axes=[1, 0])
+  return np.repeat(condensed_pianoroll, 4, axis=0)
+
+
+def test_get_piece_tensor():
+  ll = [[1,2], [0,2]]
+  tensor = get_piece_tensor(ll)
+  print tensor
+
+
+def diff_piece_patch(piece, patch):
+  assert piece.ndim == 3 and patch.ndim == 3
+  diff_pitch_range = piece.shape[1] - patch.shape[1]
+  assert piece.shape[1] < patch.shape[1]
+  # check ordering if instrs, if soprano of piece is lower than bass of patch
+  assert piece[0, :,0] > np.nonzero
+  for i in range(8):
+    pass 
+
+
+def retrieve_nicolas_bach_pickle():
+  path = '/data/lisatmp4/huangche/data/JSB Chorales.pickle'
+  import cPickle as pickle
+  with open(path, 'rb') as p:
+    data = pickle.load(p)
+  print len(data)
+  piece_counts = np.array([float(len(dd)) for dd in data.values()])
+  print 'split %', piece_counts/np.sum(piece_counts)  
+
+  lengths = []
+  num_voices_list = []
+  piece_count = 0
+  dataset_min_pch = 127
+  dataset_max_pch = 0
+  for k, dd in data.items():
+    print k, len(dd)
+    piece_count += len(dd) 
+    print 'min, max', get_min_max_in_list_of_list(dd)
+    for d in dd:
+      lengths.append(len(d))
+      num_voices = np.max([len(ch) for ch in d])
+      num_voices_list.append(num_voices)
+  print sorted(list(set(lengths)))
+  print sorted(list(set(num_voices_list)))
+  print '# of pieces:', piece_count
+  print 'min, max', datset_min_pch, dataset_max_pch
+  
+  return data
+
+def match_dataset_split():
+  data_split = retrieve_nicolas_bach_pickle()
+  print '---'
+  seqs = get_4_voice_sequences()
+  print len(seqs)
+  encoder = pianorolls_lib.PianorollEncoderDecoder(
+    min_pitch=MIN_PCH, max_pitch=MAX_PCH)
+  lengths = []
+  pianorolls = []
+  for seq in seqs:
+    pianoroll = encoder.encode(seq)
+    pianorolls.append(pianoroll)
+    length = pianoroll.shape[0]
+    lengths.append(length)
+  print sorted(list(set(lengths)))
+
+  matches = {}  # from nicolas's to music21's index here
+  no_matches_nicolas = []
+  for key, pieces in data_split.items():
+    for i, piece in enumerate(pieces):
+      # match by length
+      candidates = []
+      for j, pianoroll in enumerate(pianorolls):
+        #print len(piece) * 4, pianoroll.shape[0]
+        if abs(len(piece)*4 - pianoroll.shape[0]) < 5:
+          candidates.append(j)
+      #print '# of candidates:', len(candidates)
+      assert len(candidates) != 0
+      # if matched by length
+      if len(candidates) == 1:
+        matches[(key, i)] = candidates[0]
+      else: 
+        # if didn't match by length then match pitch distribution
+        for c in candidates:
+          pianoroll = pianorolls[c]
+          pdist = np.sum(pianoroll, axis=(0, 2))
+          assert pdist.size == 53
+          pdist /= np.sum(pdist)
+
+        # make one hot by 
+ 
+       
+        no_matches_nicolas.append((key, i))        
+#  print len(no_matches_nicolas), 'no_match', no_matches_nicolas
+  print len(matches), 'matched', matches
+
+
+def compute_pitch_dist_given_list_of_list(ll):
+  np.eye()
+
+
 def synth_start_of_note_sequences():
   path = '/data/lisatmp4/huangche/data/bach/midi/'
   seqs = get_4_voice_sequences()
