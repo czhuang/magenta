@@ -187,10 +187,6 @@ def match_dataset_split():
   print len(matches), 'matched', matches
 
 
-def compute_pitch_dist_given_list_of_list(ll):
-  np.eye()
-
-
 def synth_start_of_note_sequences():
   path = '/data/lisatmp4/huangche/data/bach/midi/'
   seqs = get_4_voice_sequences()
