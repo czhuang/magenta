@@ -466,6 +466,15 @@ CHECKPOINT_HPARAMS = {
         checkpoint_name='',
     ),
 
+   'random_medium': Hyperparameters(
+        num_layers=64,
+        num_filters=128,
+        use_residual=True,
+        mask_indicates_context=True,
+        model_name='DeepStraightConvSpecs',
+        checkpoint_name="random_64-128_0.5.ckpt",
+    ),
+
     'balanced_fc_mask_only': Hyperparameters(
         num_layers=64,
         num_filters=128,
