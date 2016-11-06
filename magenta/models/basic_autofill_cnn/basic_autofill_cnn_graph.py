@@ -1,5 +1,4 @@
 """Defines the graph for a convolutional net designed for music autofill."""
-
 import tensorflow as tf, numpy as np
 from tensorflow.python.framework.function import Defun
 
@@ -92,6 +91,8 @@ class BasicAutofillCNNGraph(object):
     if hparams.denoise_mode:
       output = tf.split(3, 2, output)[0]
       input_shape = tf.shape(output)
+
+    self._hiddens = []
 
     output_for_residual = None
     residual_counter = -1
@@ -191,6 +192,8 @@ class BasicAutofillCNNGraph(object):
               ksize=[1, pooling[0], pooling[1], 1],
               strides=[1, pooling[0], pooling[1], 1],
               padding=specs['pool_pad'])
+
+        self._hiddens.append(output)
 
     # Compute total loss.
     self._logits = output
