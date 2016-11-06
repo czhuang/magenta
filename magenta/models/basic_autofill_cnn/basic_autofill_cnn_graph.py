@@ -210,18 +210,31 @@ class BasicAutofillCNNGraph(object):
       self._cross_entropy = tf.nn.sigmoid_cross_entropy_with_logits(
           self._logits, self._targets)
 
-    self._loss_total = tf.reduce_mean(self._cross_entropy)
+    self._unreduced_loss = self._cross_entropy
+
+    if hparams.maskout_method == "balanced_by_scaling":
+      def compute_scale():
+        shape = tf.shape(self._targets)
+        mask = tf.split(3, 2, self._input_data)[1]
+        # #timesteps * #instruments
+        D = tf.to_float(shape[1] * shape[3])
+        # #masked out variables
+        Dmdp1 = tf.reduce_sum(mask, reduction_indices=[1, 3], keep_dims=True)
+        return D / Dmdp1
+      self._unreduced_loss *= compute_scale()
+
+    self._loss_total = tf.reduce_mean(self._unreduced_loss)
 
     # Compute loss for masked portion.
     self._mask = tf.split(3, 2, self._input_data)[1]
     self._mask_size = tf.reduce_sum(self._mask)
-    self._loss_mask = tf.reduce_sum(self._mask * self._cross_entropy) / (
+    self._loss_mask = tf.reduce_sum(self._mask * self._unreduced_loss) / (
         self._mask_size)
 
     # Compute loss for out-of-mask (unmask) portion.
     self._unmask = 1 - self._mask
     self._unmask_size = tf.reduce_sum(self._unmask)
-    self._loss_unmask = tf.reduce_sum(self._unmask * self._cross_entropy) / (
+    self._loss_unmask = tf.reduce_sum(self._unmask * self._unreduced_loss) / (
         self._unmask_size)
 
     # Check which loss to use as objective function.
@@ -245,7 +258,7 @@ class BasicAutofillCNNGraph(object):
 
       lossmask = tf.one_hot(flat_prediction_index, depth=tf.shape(mask)[1] * tf.shape(mask)[3])
       # reduce_mean over pitch to be consistent with above
-      loss3d = tf.reduce_mean(self._cross_entropy, reduction_indices=2)
+      loss3d = tf.reduce_mean(self._unreduced_loss, reduction_indices=2)
 
       if hparams.maskout_method.endswith("_ti") or "fixed_order" in hparams.maskout_method:
         pass
