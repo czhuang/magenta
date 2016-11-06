@@ -11,7 +11,7 @@ from magenta.models.basic_autofill_cnn import basic_autofill_cnn_graph
 from magenta.models.basic_autofill_cnn import config_tools
 
 
-def retrieve_model(wrapped_model=None, model_name='DeepResidual'):
+def retrieve_model(wrapped_model=None, model_name='DeepResidual', placeholders=None):
   """Builds graph, retrieves checkpoint, and returns wrapped model.
 
   This function either takes a basic_autofill_cnn_graph.TFModelWrapper object
@@ -31,13 +31,11 @@ def retrieve_model(wrapped_model=None, model_name='DeepResidual'):
   """
   if wrapped_model is None:
     config = config_tools.get_checkpoint_config(model_name=model_name)
-    wrapped_model = basic_autofill_cnn_graph.build_graph(
-        is_training=False, config=config)
   else:
     config = wrapped_model.config
 
   wrapped_model = basic_autofill_cnn_graph.build_graph(
-      is_training=False, config=config)
+      is_training=False, config=config, placeholders=placeholders)
   with wrapped_model.graph.as_default():
     saver = tf.train.Saver()
     sess = tf.Session()

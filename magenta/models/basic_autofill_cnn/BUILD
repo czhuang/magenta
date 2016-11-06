@@ -62,6 +62,22 @@ py_binary(
 )
 
 py_binary(
+    name = "evaluation_tools",
+    srcs = ["evaluation_tools.py"],
+    data = [
+    ],
+    deps = [
+        ":config_tools",
+        ":mask_tools",
+        ":data_tools",
+        ":pianorolls_lib",
+        ":seed_tools",
+        ":retrieve_model_tools",
+        "//magenta/lib:midi_io",
+    ],
+)
+
+py_binary(
     name = "generate_tools",
     srcs = ["generate_tools.py"],
     data = [
@@ -82,6 +98,7 @@ py_binary(
     srcs = ["pianorolls_lib.py"],
     deps = [
         ":test_tools",
+        "//magenta/lib:midi_io",
     ],
 )
 

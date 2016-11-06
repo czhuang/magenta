@@ -37,8 +37,9 @@ class PipelineConfig(object):
                          'random_all_time_instrument',
                          'chronological_ti',
                          'chronological_it',
-                         'fixed_order', 'balanced',
+                         'fixed_order', 'balanced', 'balanced_by_scaling',
                          'no_mask']
+                           ]
   RANDOM_INSTRUMENT, RANDOM_PATCHES, RANDOM_PITCH_RANGE = range(3)
   RANDOM_TIME_RANGE, RANDOM_MULTIPLE_INSTRUMENT_TIME = range(3, 5)
   RANDOM_ALL_TIME_INSTRUMENT = 5
@@ -46,7 +47,8 @@ class PipelineConfig(object):
   CHRONOLOGICAL_IT = 7
   FIXED_ORDER = 8
   BALANCED = 9
-  NO_MASK = 10
+  BALANCED_BY_SCALING = 10
+  NO_MASK = 11
   # Run time configurations.
   eval_freq = 5
 

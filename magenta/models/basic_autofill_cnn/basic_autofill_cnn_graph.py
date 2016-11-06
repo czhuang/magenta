@@ -1,5 +1,4 @@
 """Defines the graph for a convolutional net designed for music autofill."""
-
 import tensorflow as tf, numpy as np
 from tensorflow.python.framework.function import Defun
 
@@ -92,6 +91,8 @@ class BasicAutofillCNNGraph(object):
     if hparams.denoise_mode:
       output = tf.split(3, 2, output)[0]
       input_shape = tf.shape(output)
+
+    self._hiddens = []
 
     output_for_residual = None
     residual_counter = -1
@@ -192,6 +193,8 @@ class BasicAutofillCNNGraph(object):
               strides=[1, pooling[0], pooling[1], 1],
               padding=specs['pool_pad'])
 
+        self._hiddens.append(output)
+
     # Compute total loss.
     self._logits = output
 
@@ -210,18 +213,31 @@ class BasicAutofillCNNGraph(object):
       self._cross_entropy = tf.nn.sigmoid_cross_entropy_with_logits(
           self._logits, self._targets)
 
-    self._loss_total = tf.reduce_mean(self._cross_entropy)
+    self._unreduced_loss = self._cross_entropy
+
+    if hparams.maskout_method == "balanced_by_scaling":
+      def compute_scale():
+        shape = tf.shape(self._targets)
+        mask = tf.split(3, 2, self._input_data)[1]
+        # #timesteps * #instruments
+        D = tf.to_float(shape[1] * shape[3])
+        # #masked out variables
+        Dmdp1 = tf.reduce_sum(mask, reduction_indices=[1, 3], keep_dims=True)
+        return D / Dmdp1
+      self._unreduced_loss *= compute_scale()
+
+    self._loss_total = tf.reduce_mean(self._unreduced_loss)
 
     # Compute loss for masked portion.
     self._mask = tf.split(3, 2, self._input_data)[1]
     self._mask_size = tf.reduce_sum(self._mask)
-    self._loss_mask = tf.reduce_sum(self._mask * self._cross_entropy) / (
+    self._loss_mask = tf.reduce_sum(self._mask * self._unreduced_loss) / (
         self._mask_size)
 
     # Compute loss for out-of-mask (unmask) portion.
     self._unmask = 1 - self._mask
     self._unmask_size = tf.reduce_sum(self._unmask)
-    self._loss_unmask = tf.reduce_sum(self._unmask * self._cross_entropy) / (
+    self._loss_unmask = tf.reduce_sum(self._unmask * self._unreduced_loss) / (
         self._unmask_size)
 
     # Check which loss to use as objective function.
@@ -245,7 +261,7 @@ class BasicAutofillCNNGraph(object):
 
       lossmask = tf.one_hot(flat_prediction_index, depth=tf.shape(mask)[1] * tf.shape(mask)[3])
       # reduce_mean over pitch to be consistent with above
-      loss3d = tf.reduce_mean(self._cross_entropy, reduction_indices=2)
+      loss3d = tf.reduce_mean(self._unreduced_loss, reduction_indices=2)
 
       if hparams.maskout_method.endswith("_ti") or "fixed_order" in hparams.maskout_method:
         pass
@@ -339,14 +355,16 @@ class BasicAutofillCNNGraph(object):
   def loss(self):
     return self._loss
 
-
-def build_placeholders_initializers_graph(is_training, hparams):
-  """Builds input and target placeholders, initializer, and training graph."""
+def get_placeholders(hparams):
   # NOTE: fixed batch_size because einstein sum can only deal with up to 1 unknown dimension
-  input_data = tf.placeholder(tf.float32, [hparams.batch_size, None, hparams.num_pitches,
-                                           hparams.input_depth])
-  targets = tf.placeholder(tf.float32, [hparams.batch_size, None, hparams.num_pitches,
-                                        hparams.input_depth / 2])
+  P, D = hparams.num_pitches, hparams.input_depth
+  return dict(input_data=tf.placeholder(tf.float32, [None, None, P, D]),
+              targets=tf.placeholder(tf.float32, [None, None, P, D // 2]))
+
+def build_placeholders_initializers_graph(is_training, hparams, placeholders=None):
+  """Builds input and target placeholders, initializer, and training graph."""
+  if placeholders is None:
+    placeholders = get_placeholders(hparams)
 
   # Setup initializer.
   initializer = tf.random_uniform_initializer(-hparams.init_scale,
@@ -356,9 +374,8 @@ def build_placeholders_initializers_graph(is_training, hparams):
     train_model = BasicAutofillCNNGraph(
         is_training=is_training,
         hparams=hparams,
-        input_data=input_data,
-        targets=targets)
-  return input_data, targets, initializer, train_model
+        **placeholders)
+  return placeholders["input_data"], placeholders["targets"], initializer, train_model
 
 
 class TFModelWrapper(object):
@@ -379,10 +396,10 @@ class TFModelWrapper(object):
     self._sess = sess
 
 
-def build_graph(is_training, config):
+def build_graph(is_training, config, placeholders=None):
   """Build BasicAutofillCNNGraph, input output placeholders, and initializer."""
   graph = tf.Graph()
   with graph.as_default() as graph:
     _, _, _, model = build_placeholders_initializers_graph(
-        is_training, config.hparams)
+        is_training, config.hparams, placeholders=placeholders)
   return TFModelWrapper(model, graph, config)
