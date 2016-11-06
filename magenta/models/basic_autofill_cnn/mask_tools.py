@@ -154,16 +154,6 @@ def get_random_all_time_instrument_mask(pianoroll_shape, blankout_ratio=0.5):
   return mask
 
 
-def get_random_easy_mask(pianoroll_shape):
-  return get_random_all_time_instrument_mask(pianoroll_shape, p=0.25)
-
-def get_random_medium_mask(pianoroll_shape):
-  return get_random_all_time_instrument_mask(pianoroll_shape, p=0.5)
-
-def get_random_hard_mask(pianoroll_shape):
-  return get_random_all_time_instrument_mask(pianoroll_shape, p=0.75)
-
-
 def get_chronological_ti_mask(pianoroll_shape):
   # ti means the class of masks corresponds to the time-major ordering
   # over the time/instrument matrix, i.e. s1a1t1b1s2a2t2b2s3a3t3b3
@@ -229,6 +219,22 @@ def get_balanced_mask(pianoroll_shape):
 
   # sample a mask size
   k = np.random.choice(d + 1, p=pk)
+  # sample a mask of size k
+  i = np.random.choice(d, size=k, replace=False)
+
+  mask = np.zeros(T * I, dtype=np.float32)
+  mask[i] = 1.
+  mask = mask.reshape((T, 1, I))
+  mask = np.tile(mask, [1, P, 1])
+  return mask
+
+
+def get_balanced_by_scaling_mask(pianoroll_shape):
+  T, P, I = pianoroll_shape
+
+  d = T * I
+  # sample a mask size
+  k = np.random.choice(d) + 1
   # sample a mask of size k
   i = np.random.choice(d, size=k, replace=False)
 
@@ -334,7 +340,7 @@ def get_random_instrument_time_mask(pianoroll_shape, timesteps, voices_for_mask_
     raise ValueError(
         'Shape needs to of 3 dimensional, time, pitch, and instrument.')
   mask = np.zeros(pianoroll_shape)
-  time_range, _, num_instruments = pianoroll_shape
+  time_range, num_pitches, num_instruments = pianoroll_shape
   # Mask out only one intrument.
   if voices_for_mask_candidate is None:
     voices_for_mask_candidate = range(num_instruments)
@@ -345,6 +351,7 @@ def get_random_instrument_time_mask(pianoroll_shape, timesteps, voices_for_mask_
   for time_idx in range(random_start_idx, end_idx):
     time_idx %= time_range
     mask[time_idx, :, instr_idx] = 1
+  assert np.sum(mask) == timesteps * num_pitches
   return mask
 
 

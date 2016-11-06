@@ -163,12 +163,6 @@ def make_data_feature_maps(sequences, config, encoder, start_crop_index=None):
     elif config.hparams.denoise_mode or maskout_method == config.RANDOM_ALL_TIME_INSTRUMENT:
       mask = mask_tools.get_random_all_time_instrument_mask(
           cropped_pianoroll.shape, config.hparams.corrupt_ratio)
-    elif maskout_method == config.RANDOM_EASY:
-      mask = mask_tools.get_random_easy_mask(cropped_pianoroll.shape)
-    elif maskout_method == config.RANDOM_MEDIUM:
-      mask = mask_tools.get_random_medium_mask(cropped_pianoroll.shape)
-    elif maskout_method == config.RANDOM_HARD:
-      mask = mask_tools.get_random_hard_mask(cropped_pianoroll.shape)
     elif maskout_method == config.CHRONOLOGICAL_TI:
       mask = mask_tools.get_chronological_ti_mask(cropped_pianoroll.shape)
     elif maskout_method == config.CHRONOLOGICAL_IT:
@@ -179,6 +173,8 @@ def make_data_feature_maps(sequences, config, encoder, start_crop_index=None):
       mask = mask_tools.get_balanced_mask(cropped_pianoroll.shape)
     elif maskout_method == config.NO_MASK:
       mask = mask_tools.get_no_mask(cropped_pianoroll.shape)
+    elif maskout_method == config.BALANCED_BY_SCALING:
+      mask = mask_tools.get_balanced_by_scaling_mask(cropped_pianoroll.shape)
     else:
       raise ValueError('Mask method not supported.')
     

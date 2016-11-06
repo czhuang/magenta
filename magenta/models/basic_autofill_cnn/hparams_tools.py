@@ -105,6 +105,7 @@ class Hyperparameters(object):
         'init_scale', 'crop_piece_len', 'learning_rate',
         'prediction_threshold', 'optimize_mask_only', 'conv_arch',
         'augment_by_halfing_doubling_durations', 'augment_by_transposing',
+        'mask_indicates_context',
     ]
     return (','.join('%s=%s' % (key, self.__dict__[key]) for key in sorted_keys
                      if key not in keys_to_filter_out))
