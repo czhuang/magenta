@@ -355,14 +355,16 @@ class BasicAutofillCNNGraph(object):
   def loss(self):
     return self._loss
 
-
-def build_placeholders_initializers_graph(is_training, hparams):
-  """Builds input and target placeholders, initializer, and training graph."""
+def get_placeholders(hparams):
   # NOTE: fixed batch_size because einstein sum can only deal with up to 1 unknown dimension
-  input_data = tf.placeholder(tf.float32, [hparams.batch_size, None, hparams.num_pitches,
-                                           hparams.input_depth])
-  targets = tf.placeholder(tf.float32, [hparams.batch_size, None, hparams.num_pitches,
-                                        hparams.input_depth / 2])
+  P, D = hparams.num_pitches, hparams.input_depth
+  return dict(input_data=tf.placeholder(tf.float32, [None, None, P, D]),
+              targets=tf.placeholder(tf.float32, [None, None, P, D // 2]))
+
+def build_placeholders_initializers_graph(is_training, hparams, placeholders=None):
+  """Builds input and target placeholders, initializer, and training graph."""
+  if placeholders is None:
+    placeholders = get_placeholders(hparams)
 
   # Setup initializer.
   initializer = tf.random_uniform_initializer(-hparams.init_scale,
@@ -372,9 +374,8 @@ def build_placeholders_initializers_graph(is_training, hparams):
     train_model = BasicAutofillCNNGraph(
         is_training=is_training,
         hparams=hparams,
-        input_data=input_data,
-        targets=targets)
-  return input_data, targets, initializer, train_model
+        **placeholders)
+  return placeholders["input_data"], placeholders["targets"], initializer, train_model
 
 
 class TFModelWrapper(object):
@@ -395,10 +396,10 @@ class TFModelWrapper(object):
     self._sess = sess
 
 
-def build_graph(is_training, config):
+def build_graph(is_training, config, placeholders=None):
   """Build BasicAutofillCNNGraph, input output placeholders, and initializer."""
   graph = tf.Graph()
   with graph.as_default() as graph:
     _, _, _, model = build_placeholders_initializers_graph(
-        is_training, config.hparams)
+        is_training, config.hparams, placeholders=placeholders)
   return TFModelWrapper(model, graph, config)
