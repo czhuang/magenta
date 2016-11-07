@@ -24,7 +24,12 @@ STRING_QUARTET_PROGRAMS = OrderedDict(
 CHANNEL_START_INDEXS = OrderedDict([('original_context', 0),
                                     ('generated_in_mask', 3), ('silence', -4)])
 
-_DEFAULT_QPM=60  #120
+
+SYNTH_MODE = False
+if SYNTH_MODE:
+  _DEFAULT_QPM = 60 
+else:
+  _DEFAULT_QPM = 120
 
 
 class PitchOutOfEncodeRangeError(Exception):
@@ -295,8 +300,9 @@ class PianorollEncoderDecoder(object):
               previously_off(time_step, note_number, part_index)):
             note = sequence.notes.add()
             note.pitch = note_number + self.min_pitch
-            # TODO: hack
-            note.start_time = time_step * self.shortest_duration * 2
+            note.start_time = time_step * self.shortest_duration
+            if SYNTH_MODE:
+              note.start_time *= 2
 
             # Count how many contiguous time_steps are on.
             on_duration = self.shortest_duration
@@ -305,8 +311,9 @@ class PianorollEncoderDecoder(object):
                 break
               else:
                 on_duration += self.shortest_duration
-            # TODO: hack
-            note.end_time = note.start_time + on_duration * 2
+            note.end_time = note.start_time + on_duration
+            if SYNTH_MODE:
+              note.end_time = note.start_time + on_duration * 2
             if note.end_time > total_time:
               total_time = note.end_time
             note.velocity = velocity
