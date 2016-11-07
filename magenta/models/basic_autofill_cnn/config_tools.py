@@ -39,7 +39,7 @@ class PipelineConfig(object):
                          'chronological_it',
                          'fixed_order', 'balanced', 'balanced_by_scaling',
                          'no_mask']
-                           ]
+                           
   RANDOM_INSTRUMENT, RANDOM_PATCHES, RANDOM_PITCH_RANGE = range(3)
   RANDOM_TIME_RANGE, RANDOM_MULTIPLE_INSTRUMENT_TIME = range(3, 5)
   RANDOM_ALL_TIME_INSTRUMENT = 5
