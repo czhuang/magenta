@@ -25,12 +25,12 @@ tf.app.flags.DEFINE_integer(
     'number of random crops to consider')
 
 
-def compute_chordwise_loss(model_name, fold):
+def compute_chordwise_loss(model_name, piano_rolls): #fold):
   wrapped_model = retrieve_model_tools.retrieve_model(model_name=model_name)
   config = wrapped_model.config
   model = wrapped_model.model
   session = wrapped_model.sess
-  sequences = list(data_tools.get_note_sequence_data(FLAGS.input_dir, fold))
+#  sequences = list(data_tools.get_note_sequence_data(FLAGS.input_dir, fold))
   encoder = pianorolls_lib.PianorollEncoderDecoder()
   piano_rolls = [encoder.encode(sequence) for sequence in sequences]
 
@@ -97,14 +97,14 @@ def compute_chordwise_loss(model_name, fold):
   sys.stdout.write("\n")
   print "%s done" % model_name
 
-def compute_notewise_loss(model_name, fold):
-  wrapped_model = retrieve_model_tools.retrieve_model(model_name=model_name)
+def compute_notewise_loss(wrapped_model, piano_rolls, model_name):
+#  wrapped_model = retrieve_model_tools.retrieve_model(model_name=model_name)
   config = wrapped_model.config
   model = wrapped_model.model
   session = wrapped_model.sess
-  sequences = list(data_tools.get_note_sequence_data(FLAGS.input_dir, fold))
-  encoder = pianorolls_lib.PianorollEncoderDecoder()
-  piano_rolls = [encoder.encode(sequence) for sequence in sequences]
+#  sequences = list(data_tools.get_note_sequence_data(FLAGS.input_dir, fold))
+#  encoder = pianorolls_lib.PianorollEncoderDecoder()
+#  piano_rolls = [encoder.encode(sequence) for sequence in sequences]
 
   losses = []
   def report():
@@ -150,13 +150,22 @@ def compute_notewise_loss(model_name, fold):
     report()
   sys.stdout.write("\n")
   print "%s done" % model_name
+  return losses
+
 
 def main(argv):
   try:
     print FLAGS.model_name, FLAGS.fold, FLAGS.kind
     fn = dict(notewise=compute_notewise_loss,
               chordwise=compute_chordwise_loss)[FLAGS.kind]
-    fn(FLAGS.model_name, FLAGS.fold)
+    sequences = list(data_tools.get_note_sequence_data(FLAGS.input_dir, FLAGS.fold))
+    encoder = pianorolls_lib.PianorollEncoderDecoder()
+    piano_rolls = [encoder.encode(sequence) for sequence in sequences]
+    wrapped_model = retrieve_model_tools.retrieve_model(model_name=FLAGS.model_name)
+    print 'model_name', wrapped_mode.hparams.model_name
+    # TODO: model_name in hparams is the conv spec class name, not retrieve model_name
+    #assert wrapped_model.config.hparams.model_name == FLAGS.model_name
+    fn(wrapped_model, piano_rolls, FLAGS.model_name)
   except:
     exc_type, exc_value, exc_traceback = sys.exc_info()
     if not isinstance(exc_value, KeyboardInterrupt):
