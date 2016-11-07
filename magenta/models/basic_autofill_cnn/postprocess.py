@@ -15,9 +15,19 @@ from magenta.models.basic_autofill_cnn import pianorolls_lib
 
 
 def retrieve_pickle(fpath):
+  print '\nLoading pickle:', fpath
   with open(fpath, 'rb') as p:
     results = pickle.load(p)
   return results
+
+
+def retrieve_generation_bundle(fpath):
+  results = retrieve_pickle(fpath)
+  requested_index = 0
+  print results.keys(), type(results[None]), requested_index, type(results[None][requested_index])
+  seq_bundle = results[None][requested_index]
+  generated_seq, steps, original_seq, _ = seq_bundle 
+  return generated_seq, steps, original_seq
 
 
 def concatenate_seqs(seqs, gap_in_seconds=1.5):

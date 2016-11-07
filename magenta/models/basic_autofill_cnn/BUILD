@@ -1,3 +1,17 @@
+
+
+py_binary(
+    name = "evaluate_gibbs_tools",
+    srcs = ["evaluate_gibbs_tools.py"],
+    deps = [
+        ":postprocess",
+	":evaluation_tools",
+        ":retrieve_model_tools",
+        ":pianorolls_lib", 
+    ],
+)
+
+
 py_binary(
     name = "create_dataset_and_generate",
     srcs = ["create_dataset_and_generate.py"],
