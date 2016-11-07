@@ -621,9 +621,23 @@ def generate_routine(config, output_path):
         pickle_fname = '%s_' % str(instr_ordering)
       else:
         pickle_fname = ''
-      pickle_fname += '%s-%s.pkl' % (generate_method_name, run_local_id)
-      with open(os.path.join(output_path, pickle_fname), 'wb') as p:
-        pickle.dump(seqs_by_ordering, p)
+      npz_fname = pickle_fname + '%s-%s.npz' % (generate_method_name, run_local_id)
+      npz_fpath = os.path.join(output_path, npz_fname)
+      generated_pianorolls = [step.generated_piece for step in autofill_steps]
+      print '# of pianorolls', len(generated_pianorolls)
+      np.savez_compressed(npz_fpath, np.asarray(generated_pianorolls))
+      print 'NPZ written to', npz_fpath
+
+      # check pickle content
+      if config.save_pickle:
+        print 'check pickle'
+        print seqs_by_ordering[None][0][1][0].prediction.shape
+        print seeder.encoder.encode(generated_seq).shape
+        pickle_fname += '%s-%s.pkl' % (generate_method_name, run_local_id)
+        pickle_fpath = os.path.join(output_path, pickle_fname) 
+        with open(pickle_fpath, 'wb') as p:
+          pickle.dump(seqs_by_ordering, p)
+        print 'Pickle written to', pickle_fpath
 
    
 def main(unused_argv):
@@ -777,7 +791,8 @@ class GenerationConfig(object):
       num_rewrite_iterations=1,  # Number of times to regenerate all the voices.
       condition_mask_size=None,
       sample_extra_ratio=None,
-      plot_process=False)
+      plot_process=False,
+      save_pickle=False)
 
   def __init__(self, *args, **init_hparams):
     unknown_params = set(init_hparams) - set(GenerationConfig._defaults)
