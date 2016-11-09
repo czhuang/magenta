@@ -484,7 +484,14 @@ CHECKPOINT_HPARAMS = {
         model_name='PitchFullyConnectedConvSpecs',
         checkpoint_name="balanced_64-128_fc_mask_only.ckpt",
     ),
-
+    'balanced_by_scaling': Hyperparameters(
+       num_layers=64,
+       num_filters=128,
+       use_residual=True,
+       mask_indicates_context=True,
+       model_name='DeepStraightConvSpecs',
+       checkpoint_name="balanced_by_scaling_64-128.ckpt",
+    ),
     'DeepResidualDataAug': Hyperparameters(
         num_layers=28,
         num_filters=256,

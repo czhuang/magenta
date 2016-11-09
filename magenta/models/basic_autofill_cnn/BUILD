@@ -216,6 +216,7 @@ py_binary(
     name = "retrieve_model_tools",
     srcs = ["retrieve_model_tools.py"],
     data = [
+        "checkpoints/balanced_by_scaling_64-128.ckpt",
         "checkpoints/random_64-128_0.5.ckpt",
         "checkpoints/balanced_64-128_fc_mask_only.ckpt",
         "checkpoints/denoising_d-64_f-128.ckpt",
