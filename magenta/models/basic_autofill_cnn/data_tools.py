@@ -28,21 +28,19 @@ def random_double_or_halftime_pianoroll_from_note_sequence(
 
   durations = set(note.end_time - note.start_time for note in sequence.notes)
   longest_to_double = 4
-  shortest_to_half = 0.5
+  shortest_to_half = 0.25
   duration_augmentation_type = np.random.randint(3)
   if duration_augmentation_type == KEEP_ORIGINAL_DURATIONS:
     return encoder.encode(sequence)
   elif duration_augmentation_type == HALF_TIME:
     # Half time.
-    for duration in list(durations):
-      if duration < shortest_to_half:
-        return encoder.encode(sequence)
+    if any(duration < shortest_to_half for duration in durations):
+      return encoder.encode(sequence)
     #print sequence.filename, sequence.id, sequence.collection_name
     return encoder.encode(sequence, duration_ratio=0.5)
   else:
-    for duration in list(durations):
-      if duration > longest_to_double:
-        return encoder.encode(sequence)
+    if any(duration > longest_to_double for duration in durations):
+      return encoder.encode(sequence)
     return encoder.encode(sequence, duration_ratio=2)
 
 
