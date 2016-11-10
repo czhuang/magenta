@@ -69,24 +69,57 @@ def sample_pitch(prediction, time_step, instr_idx, num_pitches, temperature):
   if np.isnan(p).any():
     print 'nans in prediction'
     print p
-  #print 'temperature', temperature
+  p = softmax(p, temperature=temperature)
+  try:
+    pitch = np.random.choice(range(num_pitches), p=p)
+  except:
+    import pdb; pdb.set_trace()
+  return pitch
+
+def softmax(p, axis=None, temperature=1):
+  if axis is None:
+    axis = p.ndim - 1
   if temperature == 0.:
-    pitch = np.argmax(p)
+    # NOTE: may have multiple equal maxima, normalized below
+    p = p == np.max(p, axis=axis, keepdims=True)
   else:
     oldp = p
     logp = np.log(p)
     logp /= temperature
-    logp -= logp.max()
+    logp -= logp.max(axis=axis, keepdims=True)
     p = np.exp(logp)
-    p /= p.sum()
-    if np.isnan(p).any():
-      import pdb; pdb.set_trace()
-    try:
-      pitch = np.random.choice(range(num_pitches), p=p)
-    except:
-      import pdb; pdb.set_trace()
-  return pitch
+  p /= p.sum(axis=axis, keepdims=True)
+  if np.isnan(p).any():
+    import pdb; pdb.set_trace()
+  return p
 
+def sample_onehot(p, axis=None, temperature=1):
+  if axis is None:
+    axis = p.ndim - 1
+
+  p = softmax(p, axis=axis, temperature=temperature)
+
+  # temporary transpose/reshape to matrix
+  if axis != p.ndim - 1:
+    permutation = list(range(0, axis)) + list(range(axis + 1, p.ndim)) + [axis]
+    p = np.transpose(p, permutation)
+  pshape = p.shape
+  p = p.reshape([-1, p.shape[-1]])
+
+  assert np.allclose(p.sum(axis=1), 1)
+
+  # sample in a loop i guess -_-
+  x = np.zeros(p.shape, dtype=np.float32)
+  for i in range(p.shape[0]):
+    x[i, np.random.choice(p.shape[1], p=p[i])] = 1.
+  
+  # transpose/reshape back
+  x = x.reshape(pshape)
+  if axis != x.ndim - 1:
+    x = np.transpose(x, permutation)
+
+  assert np.allclose(x.sum(axis=axis), 1)
+  return x
 
 def regenerate_chronological_ti(pianorolls, wrapped_model, config):
   return regenerate_chronological(pianorolls, wrapped_model, config, order="ti")
@@ -139,6 +172,50 @@ def regenerate_chronological(pianorolls, wrapped_model, config, order="ti"):
   print np.sum(generated_pianoroll), num_timesteps * num_instruments
   assert np.sum(generated_pianoroll) == num_timesteps * num_instruments
   return generated_pianoroll, autofill_steps, original_pianoroll, None
+
+
+def generate_annealed_gibbs(wrapped_model, temperature=1, num_steps=None):
+  # NOTE: incompatible with "generate_routine"
+  assert num_steps is not None
+
+  B, T, P, I = [20, 32, 53, 4]
+  pianorolls = sample_onehot(1 + np.random.rand(B, T, P, I), axis=2)
+  masks = np.ones(pianorolls.shape, dtype=np.float32)
+
+  intermediates = dict(pianorolls=[pianorolls.copy()],
+                       masks=[masks.copy()])
+
+  model = wrapped_model.model
+
+  pm_max = 0.9
+  pm_min = 0.1
+  alpha = 0.7
+  S = num_steps
+
+  for s in range(S):
+    wat = (pm_max - pm_min) / alpha * s / S
+    pm = max(pm_min, pm_max - wat)
+
+    masks = np.array([mask_tools.get_random_all_time_instrument_mask(pianoroll.shape, pm)
+                      for pianoroll in pianorolls])
+    input_data = np.asarray([
+        mask_tools.apply_mask_and_stack(pianoroll, mask)
+        for pianoroll, mask in zip(pianorolls, masks)])
+
+    predictions = wrapped_model.sess.run(model.predictions, {model.input_data: input_data})
+    samples = sample_onehot(predictions, axis=2, temperature=temperature)
+    pianorolls = np.where(masks, samples, pianorolls)
+
+    intermediates["pianorolls"].append(pianorolls.copy())
+    intermediates["masks"].append(masks.copy())
+
+    print pm
+  
+    sys.stderr.write(".")
+    sys.stderr.flush()
+  sys.stderr.write("\n")
+
+  return intermediates
 
 
 def regenerate_random_order(pianorolls, wrapped_model, config):
@@ -642,6 +719,22 @@ def generate_routine(config, output_path):
    
 def main(unused_argv):
   print '..............................main..'
+  wrapped_model = retrieve_model_tools.retrieve_model(
+      model_name='balanced_by_scaling')
+  for _ in range(4):
+    from datetime import datetime
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    start_time = time.time()
+    intermediates = generate_annealed_gibbs(
+        wrapped_model=wrapped_model,
+        num_steps=100,#2000,
+        temperature=0.01)
+    time_taken = (time.time() - start_time) / 60.0 #  In minutes.
+    run_local_id = 'annealed_gibbs_scratch_%s-%.2fmin' % (timestamp, time_taken)
+    np.savez_compressed(os.path.join(FLAGS.generation_output_dir, run_local_id + '.npz'),
+                        **intermediates)
+  return
+
   #generate_routine(GENERATION_PRESETS['GenerateGibbsLikeConfig'],
   #                 FLAGS.generation_output_dir)
 
