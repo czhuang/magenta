@@ -554,16 +554,20 @@ def generate_gibbs_like(pianorolls, wrapped_model, config):
 
 def generate_routine(config, output_path):
   prime_fpath = config.prime_fpath
+  if prime_fpath is None:
+    prime_fpath = []
+  elif isinstance(prime_fpath, basestring):
+    prime_fpath = [prime_fpath]
   requested_validation_piece_name = config.requested_validation_piece_name
 
   # Checks if there are inconsistencies in the types of priming requested.
-  if prime_fpath is not None and requested_validation_piece_name is not None:
+  if prime_fpath and requested_validation_piece_name is not None:
     raise ValueError(
         'Either prime generation with melody or piece from validation set.')
   start_with_empty = config.start_with_empty
   start_with_random = config.start_with_random
   if (start_with_empty or start_with_random) and (
-      prime_fpath is not None or requested_validation_piece_name is not None):
+      prime_fpath or requested_validation_piece_name is not None):
     raise ValueError(
         'Generate from empty initialization requested but prime given.')
 
@@ -602,11 +606,11 @@ def generate_routine(config, output_path):
     elif start_with_random:
       pianorolls = seeder.get_random_batch_with_random_as_first()
       piece_name = 'random'
-    elif prime_fpath is not None:
+    elif prime_fpath:
       pianorolls = seeder.get_random_batch_with_prime(
-          prime_fpath, config.prime_voices, config.prime_duration_ratio)
+          prime_fpath[prime_idx], config.prime_voices, config.prime_duration_ratio)
       #piece_name = 'magenta_theme'
-      piece_name = os.path.split(os.path.basename(prime_fpath))[0]
+      piece_name = os.path.split(os.path.basename(prime_fpath[prime_idx]))[0]
     elif requested_validation_piece_name is not None:
       pianorolls = seeder.get_batch_with_piece_as_first(
           requested_validation_piece_name, 0)
@@ -636,7 +640,7 @@ def generate_routine(config, output_path):
       instr_orderings = range(config.num_samples)
       #instr_orderings = instr_orderings[:config.num_samples]
     else:
-      tf.log.warning('Should specify num_samples or num_samples_per_instr_ordering, otherwise assumes num_samples_per_instr_ordering to be 1')    
+      tf.log.warning('Should specify num_samples or num_samples_per_instr_ordering, otherwise assumes num_samples_per_instr_ordering to be 1')
     
     for i, instr_ordering in enumerate(instr_orderings):
       # TODO(annahuang) hack for clearing dictionary for pickle
@@ -682,7 +686,7 @@ def generate_routine(config, output_path):
       sequence_proto_to_midi_file(generated_seq, fpath)
       tfrecord_fpath = os.path.splitext(fpath)[0] + '.tfrecord'
       writer = NoteSequenceRecordWriter(tfrecord_fpath)     
-      writer.write(generated_seq)    
+      writer.write(generated_seq)
 
       seqs_by_ordering[instr_ordering_str].append([
           generated_seq, autofill_steps, original_seq, instr_ordering_str])
