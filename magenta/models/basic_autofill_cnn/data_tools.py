@@ -187,8 +187,6 @@ def make_data_feature_maps(sequences, config, encoder, start_crop_index=None):
 
   input_data = np.asarray(input_data)
   targets = np.asarray(targets)
-  print '# of input_data', input_data.shape[0]
-  print '# of targets', targets.shape[0]
   if not (input_data.ndim == 4 and targets.ndim == 4):
     print input_data.ndim, targets.ndim
     raise DataProcessingError('Input data or target dimensions incorrect.')
