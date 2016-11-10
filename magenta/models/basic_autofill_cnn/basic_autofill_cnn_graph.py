@@ -398,8 +398,6 @@ class TFModelWrapper(object):
 
 def build_graph(is_training, config, placeholders=None):
   """Build BasicAutofillCNNGraph, input output placeholders, and initializer."""
-  graph = tf.Graph()
-  with graph.as_default() as graph:
-    _, _, _, model = build_placeholders_initializers_graph(
-        is_training, config.hparams, placeholders=placeholders)
-  return TFModelWrapper(model, graph, config)
+  _, _, _, model = build_placeholders_initializers_graph(
+      is_training, config.hparams, placeholders=placeholders)
+  return TFModelWrapper(model, model.loss.graph, config)
