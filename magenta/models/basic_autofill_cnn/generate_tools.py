@@ -135,7 +135,7 @@ def regenerate_chronological(pianorolls, wrapped_model, config, order="ti"):
   original_pianoroll = pianorolls[config.requested_index].copy()
   autofill_steps = []
 
-  mask_for_generation = np.zeros(pianorolls[0].shape)
+  mask_for_generation = np.ones(pianorolls[0].shape)
   # mask generator for the rest of the batch
   batch_mask_function = getattr(mask_tools, "get_random_chronological_%s_mask" % order)
 
@@ -226,7 +226,7 @@ def regenerate_random_order(pianorolls, wrapped_model, config):
   original_pianoroll = pianorolls[config.requested_index].copy()
   autofill_steps = []
 
-  mask_for_generation = np.zeros(pianorolls[0].shape)
+  mask_for_generation = np.ones(pianorolls[0].shape)
   # mask generator for the rest of the batch
   batch_mask_function = getattr(mask_tools, "get_fixed_order_mask")
 
