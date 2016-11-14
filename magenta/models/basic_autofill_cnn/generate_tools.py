@@ -679,16 +679,17 @@ def main(unused_argv):
     generate_routine(GenerationConfig(
         generate_method_name='regenerate_voice_by_voice',
         model_name=model_name,
-        start_with_empty=True,
+        prime_fpath=FLAGS.prime_fpath,
+        prime_voices=range(4), 
         validation_path=FLAGS.validation_set_dir,
         voices_to_regenerate=range(4),
         sequential_order_type=RANDOM,
-        num_samples=1, #5,
-        requested_num_timesteps=8, #16, #128, #64,
+        num_samples=4, #5,
+        requested_num_timesteps=128, #16, #128, #64,
         #condition_mask_size=8, #8, #8,
         num_rewrite_iterations=1, #20, #20,
         sample_extra_ratio=0,
-        temperature=0.0001),
+        temperature=0.01),
         FLAGS.generation_output_dir)
 
 #  wrapped_model = retrieve_model_tools.retrieve_model(
