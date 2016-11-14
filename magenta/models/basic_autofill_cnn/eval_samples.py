@@ -7,40 +7,59 @@ from magenta.models.basic_autofill_cnn import retrieve_model_tools
 
 
 TEST_MODE = False
+NOTEWISE = False
 
 def get_fpath_wrapper(fname_tag='', file_type='png'):
   source_fpath = '/Tmp/huangche/compare_sampling/'
   fpath = os.path.join(source_fpath, 
                        '%s.%s' % (fname_tag, file_type))
   return fpath
-
-# 5 sets of samples, need to collect npz
-base_path_sequential = '/Tmp/huangche/compare_sampling/gibbs_2016111223_100steps_unzip/2016111223_100steps/sequential'
-base_path_nade = '/Tmp/huangche/compare_sampling/nade_unzip/20161112215554_nade'
-
-base_path ='/Tmp/huangche/compare_sampling/20161112_100steps_505799_unzip/20161112_100steps_505799'
-sampling_methods = ['0-5', '0-75', '0-99']
-
-paths = [base_path_sequential] + [base_path]*3 + [base_path_nade]
-fname_tag = [None] + sampling_methods + [None]
+#
+## 5 sets of samples, need to collect npz
+#base_path_sequential = '/Tmp/huangche/compare_sampling/gibbs_2016111223_100steps_unzip/2016111223_100steps/sequential'
+#base_path_nade = '/Tmp/huangche/compare_sampling/nade_unzip/20161112215554_nade'
+#
+#base_path ='/Tmp/huangche/compare_sampling/20161112_100steps_505799_unzip/20161112_100steps_505799'
+#sampling_methods = ['0-5', '0-75', '0-99']
+#
+#paths = [base_path_sequential] + [base_path]*3 + [base_path_nade]
+#fname_tag = [None] + sampling_methods + [None]
+#
+#model_name = 'balanced_by_scaling'
+#set_names = ['sequential', '50', '75', '99', 'nade'] 
+#fpaths = dict()
+## retrieve the fnames of the npz
+#for i, path in enumerate(paths):
+#  fnames = os.listdir(path)
+#  npz_matching_fnames = []
+#  for fname in fnames:
+#    if '.npz' in fname and (fname_tag[i] is None or fname_tag[i] in fname):
+#      npz_matching_fnames.append(fname)
+#  assert len(npz_matching_fnames) == 1
+#  assert model_name in npz_matching_fnames[0] 
+#  fpaths[set_names[i]] = os.path.join(path, npz_matching_fnames[0])
+#
+#print '.....check that this is right'
+#for name in set_names:
+#  print name, fpaths[name]    
+#
 
 model_name = 'balanced_by_scaling'
 set_names = ['sequential', '50', '75', '99', 'nade'] 
-fpaths = dict()
-# retrieve the fnames of the npz
-for i, path in enumerate(paths):
-  fnames = os.listdir(path)
-  npz_matching_fnames = []
-  for fname in fnames:
-    if '.npz' in fname and (fname_tag[i] is None or fname_tag[i] in fname):
-      npz_matching_fnames.append(fname)
-  assert len(npz_matching_fnames) == 1
-  assert model_name in npz_matching_fnames[0] 
-  fpaths[set_names[i]] = os.path.join(path, npz_matching_fnames[0])
+basepath = '/data/lisatmp4/huangche/compare_sampling/collect_npz'
+fpaths = {'sequential':'fromscratch_balanced_by_scaling_init=independent_Gibbs-num-steps-100--masker-ContiguousMasker----schedule-ConstantSchedule-0-5---sampler-SequentialSampler-temperature-1e-05--_20161112185008_284.97min.npz',
+          '50':'fromscratch_balanced_by_scaling_init=independent_Gibbs-num-steps-100--masker-BernoulliMasker----schedule-ConstantSchedule-0-5---sampler-SequentialSampler-temperature-1e-05--_20161112230525_251.30min.npz',
+          '75':'fromscratch_balanced_by_scaling_init=independent_Gibbs-num-steps-100--masker-BernoulliMasker----schedule-ConstantSchedule-0-75---sampler-SequentialSampler-temperature-1e-05--_20161113031711_364.67min.npz',
+          '99':'fromscratch_balanced_by_scaling_init=independent_Gibbs-num-steps-100--masker-BernoulliMasker----schedule-ConstantSchedule-0-99---sampler-SequentialSampler-temperature-1e-05--_20161113092212_488.05min.npz',
+          'nade':'fromscratch_balanced_by_scaling_init=nade_Gibbs-num-steps-0--masker-BernoulliMasker----schedule-ConstantSchedule-1-0---sampler-SequentialSampler-temperature-1e-05--_20161112215554_5.05min.npz'}
+
+for name, path in fpaths.items():
+  fpaths[name] = os.path.join(basepath, path)
 
 print '.....check that this is right'
 for name in set_names:
   print name, fpaths[name]    
+
 
 pianorolls_set = dict()
 for name in set_names:
@@ -64,7 +83,10 @@ if TEST_MODE:
  
 for name, pianorolls in pianorolls_set.items():
   print name
-  losses = evaluation_tools.compute_notewise_loss(wrapped_model, pianorolls)
+  if NOTEWISE:
+    losses = evaluation_tools.compute_notewise_loss(wrapped_model, pianorolls)
+  else:
+    losses = evaluation_tools.compute_chordwise_loss(wrapped_model, pianorolls)
   losses = np.asarray(losses)
   mean_losses = np.mean(losses)
   print 'losses.shape', losses.shape
