@@ -314,30 +314,38 @@ def regenerate_voice_by_voice(pianorolls, wrapped_model, config):
   # Only allow the regenerate to overlap when it is a full rewrite.
   if config.prime_voices == config.voices_to_regenerate and len(config.prime_voices) != 4:
     raise ValueError('In rewriting mode, all voices must be rewritten.')
+  if config.prime_voices is None and not config.start_with_empty:
+    raise ValueError('If no prime voices, then should be start with empty.')
+  if config.prime_voices is None and len(config.voices_to_regenerate) != 4:
+    raise ValueError('If not primed, must rewrite all voices.')
   # For inpainting mode
-  if (config.prime_voices != config.voices_to_regenerate) and (len(config.prime_voices) + len(config.voices_to_regenerate) != 4):
+  if config.prime_voices is not None and (config.prime_voices != config.voices_to_regenerate) and (len(config.prime_voices) + len(config.voices_to_regenerate) != 4):
     raise ValueError('In inpainting mode, prime and regenerate voices must add up to 4 and not overlap')
     if set(config.prime_voices + config.voices_to_regenerate) != set(range(4)):
       raise ValueError('In inpainting mode, prime and regenerate must cover all 4 voices.')
-
-  model = wrapped_model.model
 
   # Gets shapes.
   batch_size, num_timesteps, num_pitches, num_instruments = pianorolls.shape
   pianoroll_shape = pianorolls[0].shape
 
   generated_pianoroll = np.zeros(pianoroll_shape)
-  original_pianoroll = pianorolls[config.requested_index].copy()
-  if original_pianoroll.ndim != 3:
-    raise ValueError('Pianoroll should be 3 dimensions, time, pitch, instruments.')
-  context_pianoroll = np.zeros(pianoroll_shape)
-  context_pianoroll[:, :, tuple(config.prime_voices)] = (
-      original_pianoroll[:, :, tuple(config.prime_voices)].copy())
+  if config.start_with_empty:
+    original_pianoroll = np.zeros(pianoroll_shape)
+    context_pianoroll = np.zeros(pianoroll_shape)
+  else:
+    original_pianoroll = pianorolls[config.requested_index].copy()
+    if original_pianoroll.ndim != 3:
+      raise ValueError('Pianoroll should be 3 dimensions, time, pitch, instruments.')
+    context_pianoroll[:, :, tuple(config.prime_voices)] = (
+        original_pianoroll[:, :, tuple(config.prime_voices)].copy())
 
-  expected_num_ons = len(config.prime_voices) * num_timesteps
-  print 'expected_num_ons', expected_num_ons
-  if expected_num_ons != np.sum(context_pianoroll):
-    raise ValueError('Mismatch in amount of prime expected. %.2f, %.2f' % (expected_num_ons, np.sum(context_pianoroll)))
+    expected_num_ons = len(config.prime_voices) * num_timesteps
+    print 'expected_num_ons', expected_num_ons
+    if expected_num_ons != np.sum(context_pianoroll):
+      raise ValueError('Mismatch in amount of prime expected. %.2f, %.2f' % (expected_num_ons, np.sum(context_pianoroll)))
+
+
+  model = wrapped_model.model
   autofill_steps = []
 
   # Generate instrument by instrument.
@@ -643,8 +651,6 @@ def generate_routine(config, output_path):
       tf.log.warning('Should specify num_samples or num_samples_per_instr_ordering, otherwise assumes num_samples_per_instr_ordering to be 1')
     
     for i, instr_ordering in enumerate(instr_orderings):
-      # TODO(annahuang) hack for clearing dictionary for pickle
-      seqs_by_ordering = defaultdict(list)
       start_time = time.time()
       # Generate.
       if isinstance(instr_ordering, list):
@@ -688,56 +694,69 @@ def generate_routine(config, output_path):
       writer = NoteSequenceRecordWriter(tfrecord_fpath)     
       writer.write(generated_seq)
 
-      seqs_by_ordering[instr_ordering_str].append([
-          generated_seq, autofill_steps, original_seq, instr_ordering_str])
-
       if config.plot_process:
         plot_path = os.path.join(output_path, 'plots')
         if not os.path.exists(plot_path):
           os.mkdir(plot_path)
         plot_tools.plot_steps(autofill_steps, original_pianoroll, plot_path, run_local_id)
 
-      # Pickle every sample for this prime's generated sequences.
+      # Save generated pianorolls in steps.
+      fname_prefix = ''
       if not isinstance(instr_ordering, list):
-        pickle_fname = '%s_' % str(instr_ordering)
-      else:
-        pickle_fname = ''
-      npz_fname = pickle_fname + '%s-%s.npz' % (generate_method_name, run_local_id)
-      npz_fpath = os.path.join(output_path, npz_fname)
-      generated_pianorolls = [step.generated_piece for step in autofill_steps]
-      print '# of pianorolls', len(generated_pianorolls)
-      np.savez_compressed(npz_fpath, np.asarray(generated_pianorolls))
-      print 'NPZ written to', npz_fpath
+        fname_prefix= '%s_' % str(instr_ordering)
+      fname_prefix += '%s-%s' % (generate_method_name, run_local_id)
+      save_steps(autofill_steps, original_pianoroll, output_path, fname_prefix)
 
-      # check pickle content
-      if config.save_pickle:
-        print 'check pickle'
-        print seqs_by_ordering[None][0][1][0].prediction.shape
-        print seeder.encoder.encode(generated_seq).shape
-        pickle_fname += '%s-%s.pkl' % (generate_method_name, run_local_id)
-        pickle_fpath = os.path.join(output_path, pickle_fname) 
-        with open(pickle_fpath, 'wb') as p:
-          pickle.dump(seqs_by_ordering, p)
-        print 'Pickle written to', pickle_fpath
+
+def save_steps(steps, original_pianoroll, output_path, fname_prefix):
+  # Save generated pianorolls in steps.
+  print '# of steps', len(steps)
+  generated_pianorolls = [step.generated_piece for step in steps]
+  predictions = [step.prediction for step in steps]
+  step_indices = [step.change_to_context[0] for step in steps]
+ 
+  npz_fpath = os.path.join(output_path, fname_prefix + '.npz')
+  np.savez_compressed(npz_fpath, generated_pianorolls=generated_pianorolls,
+                      predictions=predictions, step_indices=step_indices,
+                      original_pianoroll=original_pianoroll)
+  print 'NPZ written to', npz_fpath
 
    
 def main(unused_argv):
   print '..............................main..'
-  wrapped_model = retrieve_model_tools.retrieve_model(
-      model_name='balanced_by_scaling')
-  for _ in range(4):
-    from datetime import datetime
-    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-    start_time = time.time()
-    intermediates = generate_annealed_gibbs(
-        wrapped_model=wrapped_model,
-        num_steps=100,#2000,
-        temperature=0.01)
-    time_taken = (time.time() - start_time) / 60.0 #  In minutes.
-    run_local_id = 'annealed_gibbs_scratch_%s-%.2fmin' % (timestamp, time_taken)
-    np.savez_compressed(os.path.join(FLAGS.generation_output_dir, run_local_id + '.npz'),
-                        **intermediates)
-  return
+  for model_name in "balanced_by_scaling".split():
+    import gc
+    gc.collect()
+    generate_routine(GenerationConfig(
+        generate_method_name='regenerate_voice_by_voice',
+        model_name=model_name,
+        start_with_empty=True,
+        validation_path=FLAGS.validation_set_dir,
+        voices_to_regenerate=range(4),
+        sequential_order_type=RANDOM,
+        num_samples=1, #5,
+        requested_num_timesteps=8, #16, #128, #64,
+        #condition_mask_size=8, #8, #8,
+        num_rewrite_iterations=1, #20, #20,
+        sample_extra_ratio=0,
+        temperature=0.0001),
+        FLAGS.generation_output_dir)
+
+#  wrapped_model = retrieve_model_tools.retrieve_model(
+#      model_name='balanced_by_scaling')
+#  for _ in range(4):
+#    from datetime import datetime
+#    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+#    start_time = time.time()
+#    intermediates = generate_annealed_gibbs(
+#        wrapped_model=wrapped_model,
+#        num_steps=100,#2000,
+#        temperature=0.01)
+#    time_taken = (time.time() - start_time) / 60.0 #  In minutes.
+#    run_local_id = 'annealed_gibbs_scratch_%s-%.2fmin' % (timestamp, time_taken)
+#    np.savez_compressed(os.path.join(FLAGS.generation_output_dir, run_local_id + '.npz'),
+#                        **intermediates)
+#  return
 
   #generate_routine(GENERATION_PRESETS['GenerateGibbsLikeConfig'],
   #                 FLAGS.generation_output_dir)
@@ -830,23 +849,24 @@ def main(unused_argv):
 #        FLAGS.generation_output_dir)
 #
 #  return
-  for model_name in "random_medium".split():
-    import gc
-    gc.collect()
-    generate_routine(GenerationConfig(
-        generate_method_name='generate_gibbs_like',
-        model_name=model_name,
-        start_with_empty=True,
-        validation_path=FLAGS.validation_set_dir,
-        voices_to_regenerate=range(4),
-        sequential_order_type=RANDOM,
-        num_samples=3, #5,
-        requested_num_timesteps=64, #16, #128, #64,
-        condition_mask_size=8, #8, #8,
-        num_rewrite_iterations=10, #20, #20,
-        sample_extra_ratio=0,
-        temperature=0.01),
-        FLAGS.generation_output_dir)
+#  for model_name in "random_medium".split():
+#    import gc
+#    gc.collect()
+#    generate_routine(GenerationConfig(
+#        generate_method_name='generate_gibbs_like',
+#        model_name=model_name,
+#        start_with_empty=True,
+#        validation_path=FLAGS.validation_set_dir,
+#        voices_to_regenerate=range(4),
+#        sequential_order_type=RANDOM,
+#        num_samples=3, #5,
+#        requested_num_timesteps=64, #16, #128, #64,
+#        condition_mask_size=8, #8, #8,
+#        num_rewrite_iterations=10, #20, #20,
+#        sample_extra_ratio=0,
+#        temperature=0.01),
+#        FLAGS.generation_output_dir)
+
 
 
 
@@ -888,8 +908,7 @@ class GenerationConfig(object):
       num_rewrite_iterations=1,  # Number of times to regenerate all the voices.
       condition_mask_size=None,
       sample_extra_ratio=None,
-      plot_process=False,
-      save_pickle=False)
+      plot_process=False)
 
   def __init__(self, *args, **init_hparams):
     unknown_params = set(init_hparams) - set(GenerationConfig._defaults)

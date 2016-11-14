@@ -200,20 +200,25 @@ def plot_blankout():
   plt.close()
 
 
-def plot_steps(steps, original_pianoroll, output_path, run_id, 
+def plot_steps(steps_bundle, output_path, run_id, 
                subplot_step_indices=None, subplots=False):
   if subplots and subplot_step_indices is None:
     raise ValueError('Need to provide subplot_step_indices')
+  
+  predictions, step_indices, generated_pianorolls, original_pianoroll = steps_bundle
   maskedout_instr_indices = set()
-  shape = steps[0].prediction.shape
+  shape = predictions[0].shape
+  print 'shape', shape
   num_timesteps, num_pitches, num_instrs = shape
   
   # TODO: just for debugging
-  num_regen_iterations = len(steps) / (num_timesteps * num_instrs)
+  num_regen_iterations = len(steps_indices) / (num_timesteps * num_instrs)
   print 'num_regen_iterations', num_regen_iterations 
   
   already_generated_pianoroll = np.zeros(shape)
   previous_already_generated_pianoroll = already_generated_pianoroll.copy()
+  context_pianoroll = original_pianoroll.copy()
+
   history_generated_pianoroll = np.zeros(shape)
   previous_change_index = None
   num_steps = len(steps)
@@ -224,27 +229,27 @@ def plot_steps(steps, original_pianoroll, output_path, run_id,
   if not os.path.exists(output_path):
     os.mkdir(output_path)
  
-  # Crop heatmap to save space:
-  pitch_lb, pitch_ub = None, None
-
-  pitch_lb = 60 # which is 59 on plot axes
+  pitch_lb = 36 # which is 59 on plot axes
   pitch_ub = 89 
-  print 'shape', shape
-  # The matrices for plotting is tranposed, where the first dimension is pitch.
-  # Lambda function for cropping the region for plotting.
-  crop_matrix_for_plot = lambda x: x  #x[:plot_pitch_start_index, :]
-  shift_pitch_for_plot = lambda x: x  #x - plot_pitch_start_index
  
-  for i, step in enumerate(steps):
+  for i, step in enumerate(step_indices):
     # Update change.
-    change_index = step.change_to_context[0]
     time_step, pitch, instr_idx = change_index
     maskedout_instr_indices.add(instr_idx)
-    
-    # Since there might be multiple regenerations, need to blank out the pianoroll before adding.
+
     history_generated_pianoroll[time_step, :, instr_idx] += already_generated_pianoroll[time_step, :, instr_idx]
+    # In Gibbs blankout, there will be multiple timesteps blanked out
+    if i > 0:
+      mask = generated_pianorolls[i] - generated_pianorolls[-1] < 0
+      print i, 'blankout size', mask.sum()
+      mask = mask.sum(axis=1)
+      mask = np.title(mask, [1, num_pitches, 1])
+      already_generated_pianoroll[mask] = 0 
+    
+    # Since multiple regenerations, blank out the relevant step in pianoroll before adding.
     already_generated_pianoroll[time_step, :, instr_idx] = 0
     already_generated_pianoroll[change_index] = 1
+
   
     if subplots and i not in subplot_step_indices:
       current_seq = encoder.decode(already_generated_pianoroll)
@@ -272,12 +277,12 @@ def plot_steps(steps, original_pianoroll, output_path, run_id,
     original_context = np.delete(original_pianoroll, list(maskedout_instr_indices), 2)
     print original_pianoroll.shape
 
-    for t, p in zip(*np.where(crop_matrix_for_plot(original_context.sum(axis=2)))):
+    for t, p in zip(*np.where(original_context.sum(axis=2))):
       axis.add_patch(Rectangle((t, p-.5), 1, 1,
            facecolor="lawngreen", edgecolor='none'))
    
     # Prediction for mask outs of current instrument.
-    prediction_for_masked = step.prediction[:, :, instr_idx].T 
+    prediction_for_masked = predictions[i][:, :, instr_idx].T 
     # 1 (previous_already_generated_pianoroll[:, :, instr_idx].T)
     #plt.imshow(prediction_for_masked, origin='lower',
     #   nterpolation='none', aspect='auto', cmap='summer')
@@ -285,7 +290,7 @@ def plot_steps(steps, original_pianoroll, output_path, run_id,
     # Trying log scale.
     #im = axis.imshow(20*np.log(prediction_for_masked+1), origin='lower',
     #   interpolation='none', aspect='auto', cmap='Greys') #cmap='summer')
-    im = axis.imshow(crop_matrix_for_plot(prediction_for_masked), origin='lower',
+    im = axis.imshow(prediction_for_masked, origin='lower',
       interpolation='none', aspect='equal', cmap='Greys', vmin=0, vmax=1) #cmap='summer')
    
     # Prediction on the current context.
@@ -311,18 +316,18 @@ def plot_steps(steps, original_pianoroll, output_path, run_id,
     if instr_idx < original_pianoroll.shape[-1]:
       current_context = original_pianoroll[:, :, instr_idx]
       print current_context.shape
-      for t, p in zip(*np.where(crop_matrix_for_plot(current_context))):
+      for t, p in zip(*np.where(current_context)):
         axis.add_patch(Rectangle((t, p-.5), 1, 1,
              fill=None, edgecolor="lawngreen"))
    
     # Marks the current change.
-    axis.add_patch(Rectangle((time_step, shift_pitch_for_plot(pitch-.5)), 1, 1,
+    axis.add_patch(Rectangle((time_step, pitch-.5), 1, 1,
            fill=None, edgecolor="darkturquoise", linewidth='2'))
    
     # Mark the previous change, adds a thicker border to it.
     if previous_change_index is not None:
       axis.add_patch(
-          Rectangle((previous_change_index[0], shift_pitch_for_plot(previous_change_index[1]-.5)), 1, 1,
+          Rectangle((previous_change_index[0], previous_change_index[1]-.5), 1, 1,
           fill=None, edgecolor="darkturquoise", linewidth='1'))
 
     # Setting axes styles.  

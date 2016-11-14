@@ -30,6 +30,59 @@ def retrieve_generation_bundle(fpath):
   return generated_seq, steps, original_seq
 
 
+def get_fpath():
+  fpath = '/Tmp/huangche/new_generation/2016-11-10_17:50:25-balanced_by_scaling/0_regenerate_voice_by_voice-0-0.05min-2016-11-10_17:50:25-balanced_by_scaling-0-empty-3_2_0_1.npz'
+  return fpath
+
+
+def get_fpath_wrapper(fname_tag='', file_type='png'):
+  source_fpath = get_fpath()
+  dirname = os.path.dirname(source_fpath)
+  fname = os.path.basename(source_fpath).split('.')[0]
+  fpath = os.path.join(dirname, 
+                       '%s%s.%s' % (fname_tag, fname, file_type))
+  return fpath
+
+
+def retrieve_process_npz(fpath):
+  print '\nLoading NPZ:', fpath
+  with open(fpath, 'rb') as p:
+    np_dict = np.load(p)
+    generated_pianorolls = np_dict['generated_pianorolls']
+    predictions = np_dict['predictions']
+    step_indices = np_dict['step_indices']
+    original_pianoroll = np_dict['original_pianoroll']
+  return predictions, step_indices, generated_pianorolls, original_pianoroll
+
+
+def check_retrieve_process_npz():
+  bundle = retrieve_process_npz(get_fpath())
+  for item in bundle:
+    print item.shape
+
+
+def plot_process():
+  fpath = get_fpath()
+  path = os.path.dirname(fpath)
+  steps_bundle = retrieve_process_npz(fpath)
+  #predictions, step_indices, generated_pianorolls, original_pianoroll = steps_bundle
+  #num_timesteps, num_pitches, num_instruments = prediction_shape[1:]
+
+  plot_output_path = os.path.join(path, 'plots')
+  last_pianoroll, intermediate_seqs = plot_steps(steps_bundle, plot_output_path, '',
+      subplot_step_indices=None, subplots=False)
+  
+  # Synth last pianoroll.  
+  encoder = pianorolls_lib.PianorollEncoderDecoder()
+  generated_seq = encoder.decode(last_pianoroll)
+  print 'last_pianoroll', np.sum(last_pianoroll), last_pianoroll.shape
+  print 'generated_seq', generated_seq.total_time, len(generated_seq.notes)
+  
+  midi_fpath = os.path.join(path, 'plots', 'z_last_step_%s.midi' % seq_key) 
+  sequence_proto_to_midi_file(generated_seq, midi_fpath)
+  return last_pianoroll, intermediate_seqs
+
+
 def concatenate_seqs(seqs, gap_in_seconds=1.5):
   time_offset = 0
   concatenated_seq = music_pb2.NoteSequence()
@@ -191,12 +244,12 @@ def get_seq_bundle():
   return seq_bundle, subplot_step_indices, path
 
 
-def plot_process_main():
+def plot_process_main_for_pickle():
   seq_bundle, subplot_step_indices, path = get_seq_bundle()
-  plot_process(seq_bundle, subplot_step_indices, path)
+  plot_process_for_pickle(seq_bundle, subplot_step_indices, path)
 
 
-def plot_process(seq_bundle, subplot_step_indices, path):
+def plot_process_for_pickle(seq_bundle, subplot_step_indices, path):
   steps = seq_bundle[1]
   original_seq = seq_bundle[2]
   prediction_shape = steps[0].prediction.shape
@@ -281,7 +334,9 @@ def main(unused_args):
   #plot_process()
   #save_last_prediction_as_tfrecord()
   try:
-    concatenate_process()
+    plot_process()
+    #check_retrieve_process_npz()
+    #concatenate_process()
   except:
     import sys
     rahh = sys.exc_info()
