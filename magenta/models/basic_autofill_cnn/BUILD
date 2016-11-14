@@ -1,4 +1,12 @@
 
+py_binary(
+    name = "eval_samples",
+    srcs = ["eval_samples.py"],
+    deps = [
+	":evaluation_tools",
+        ":retrieve_model_tools",
+    ],
+)
 
 py_binary(
     name = "evaluate_gibbs_tools",

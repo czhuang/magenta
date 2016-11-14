@@ -9,7 +9,7 @@ from magenta.models.basic_autofill_cnn import mask_tools, retrieve_model_tools, 
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string(
-    'input_dir', os.environ["JSB_TFRECORDS_DIR"],
+    'input_dir', None,
     'Path to the directory that holds the train, valid, test TFRecords.')
 tf.app.flags.DEFINE_string('model_name', None, 'name of the model to evaluate')
 tf.app.flags.DEFINE_string('fold', None, 'data fold on which to evaluate (valid or test)')
@@ -141,6 +141,7 @@ def compute_chordwise_loss(wrapped_model, piano_rolls):
     assert np.allclose(mask, 0)
     report()
   sys.stdout.write("\n")
+  return losses
 
 def compute_notewise_loss(wrapped_model, piano_rolls):
   config = wrapped_model.config
