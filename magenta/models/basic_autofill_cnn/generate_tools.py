@@ -327,11 +327,10 @@ def regenerate_voice_by_voice(pianorolls, wrapped_model, config):
   # Gets shapes.
   batch_size, num_timesteps, num_pitches, num_instruments = pianorolls.shape
   pianoroll_shape = pianorolls[0].shape
-
+  context_pianoroll = np.zeros(pianoroll_shape)
   generated_pianoroll = np.zeros(pianoroll_shape)
   if config.start_with_empty:
     original_pianoroll = np.zeros(pianoroll_shape)
-    context_pianoroll = np.zeros(pianoroll_shape)
   else:
     original_pianoroll = pianorolls[config.requested_index].copy()
     if original_pianoroll.ndim != 3:
