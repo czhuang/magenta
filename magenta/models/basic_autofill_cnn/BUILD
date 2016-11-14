@@ -108,6 +108,17 @@ py_binary(
 )
 
 py_binary(
+    name = "gibbs",
+    srcs = ["gibbs.py"],
+    deps = [
+        ":config_tools",
+        ":mask_tools",
+        ":retrieve_model_tools",
+	":generate_tools",
+    ],
+)
+
+py_binary(
     name = "pianorolls_lib",
     srcs = ["pianorolls_lib.py"],
     deps = [

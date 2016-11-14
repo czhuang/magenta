@@ -172,50 +172,6 @@ def regenerate_chronological(pianorolls, wrapped_model, config, order="ti"):
   return generated_pianoroll, autofill_steps, original_pianoroll, None
 
 
-def generate_annealed_gibbs(wrapped_model, temperature=1, num_steps=None):
-  # NOTE: incompatible with "generate_routine"
-  assert num_steps is not None
-
-  B, T, P, I = [20, 32, 53, 4]
-  pianorolls = sample_onehot(1 + np.random.rand(B, T, P, I), axis=2)
-  masks = np.ones(pianorolls.shape, dtype=np.float32)
-
-  intermediates = dict(pianorolls=[pianorolls.copy()],
-                       masks=[masks.copy()])
-
-  model = wrapped_model.model
-
-  pm_max = 0.9
-  pm_min = 0.1
-  alpha = 0.7
-  S = num_steps
-
-  for s in range(S):
-    wat = (pm_max - pm_min) / alpha * s / S
-    pm = max(pm_min, pm_max - wat)
-
-    masks = np.array([mask_tools.get_random_all_time_instrument_mask(pianoroll.shape, pm)
-                      for pianoroll in pianorolls])
-    input_data = np.asarray([
-        mask_tools.apply_mask_and_stack(pianoroll, mask)
-        for pianoroll, mask in zip(pianorolls, masks)])
-
-    predictions = wrapped_model.sess.run(model.predictions, {model.input_data: input_data})
-    samples = sample_onehot(predictions, axis=2, temperature=temperature)
-    pianorolls = np.where(masks, samples, pianorolls)
-
-    intermediates["pianorolls"].append(pianorolls.copy())
-    intermediates["masks"].append(masks.copy())
-
-    print pm
-  
-    sys.stderr.write(".")
-    sys.stderr.flush()
-  sys.stderr.write("\n")
-
-  return intermediates
-
-
 def regenerate_random_order(pianorolls, wrapped_model, config):
   model = wrapped_model.model
   batch_size, num_timesteps, num_pitches, num_instruments = pianorolls.shape
