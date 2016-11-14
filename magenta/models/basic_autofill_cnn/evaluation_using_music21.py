@@ -45,6 +45,18 @@ folders = ['']
 tag_in_fname = '0-empty'
 sampling_methods = ['gibbs']
 
+# TODO: need to fix the divide ratio b/c different number of measures
+base_path = '/Tmp/huangche/compare_sampling/rewriting/2016-11-13_19:52:58-balanced_by_scaling'
+folders = ['']
+tag_in_fname = 'regenerate_voice_by_voice'
+sampling_methods = ['regenerate_voice_by_voice']
+
+base_path ='/Tmp/huangche/compare_sampling/20161112_100steps_505799_unzip/20161112_100steps_505799'
+folders = ['', '', '']
+# tag_in_fname = 'step100'
+tag_in_fname = 'step10_'
+sampling_methods = ['0-99--', '0-75--', '0-5--']
+
 
 # Make source sets, for the second entry, expects a list of methods for each folder.
 source_sets = [[os.path.join(base_path, folder), [sampling_methods[i]]] for i, folder in enumerate(folders)]
@@ -53,6 +65,10 @@ for source in source_sets:
     path = source[0]
     print path
     methods = source[1]
+    print methods
+    raw_fnames = os.listdir(path)
+    print '# of all fnames', len(raw_fnames)
+    print raw_fnames[0]
     fnames = [fname for fname in os.listdir(path) if '.midi' in fname and tag_in_fname in fname]
     print '# of fnames', len(fnames)
     for fname in fnames:
@@ -76,7 +92,6 @@ for key, values in method_fpaths.items():
   #rules = filter(lambda x:'identify' in x and '_identify' not in x, dir(alpha.theoryAnalysis.theoryAnalyzer))
 
 rules = ['identifyParallelFifths',
- 'identifyParallelMotion',
  'identifyParallelOctaves',
  'identifyParallelUnisons',
  'identifyHiddenFifths',
