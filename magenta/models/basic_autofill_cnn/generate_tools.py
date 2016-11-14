@@ -137,7 +137,7 @@ def regenerate_chronological(pianorolls, wrapped_model, config, order="ti"):
 
   mask_for_generation = np.ones(pianorolls[0].shape)
   # mask generator for the rest of the batch
-  batch_mask_function = getattr(mask_tools, "get_random_chronological_%s_mask" % order)
+  batch_mask_function = getattr(mask_tools, "get_chronological_%s_mask" % order)
 
   for j in range(num_timesteps * num_instruments):
     if order == "ti":
@@ -149,11 +149,9 @@ def regenerate_chronological(pianorolls, wrapped_model, config, order="ti"):
     else:
       assert False
 
-    input_data = np.asarray([
-        mask_tools.apply_mask_and_stack(pianorolls[i],
-                                        mask_for_generation if i == config.requested_index else
-                                        batch_mask_function(pianorolls[i].shape))
-        for i in range(batch_size)])
+    input_data = np.asarray([mask_tools.apply_mask_and_stack(generated_pianoroll, mask_for_generation)] +
+                            [mask_tools.apply_mask_and_stack(pianoroll, batch_mask_function(pianoroll.shape))
+                             for pianoroll in pianorolls])
 
     raw_prediction = wrapped_model.sess.run(model.predictions, {model.input_data: input_data})
     prediction = raw_prediction[config.requested_index]
@@ -172,50 +170,6 @@ def regenerate_chronological(pianorolls, wrapped_model, config, order="ti"):
   print np.sum(generated_pianoroll), num_timesteps * num_instruments
   assert np.sum(generated_pianoroll) == num_timesteps * num_instruments
   return generated_pianoroll, autofill_steps, original_pianoroll, None
-
-
-def generate_annealed_gibbs(wrapped_model, temperature=1, num_steps=None):
-  # NOTE: incompatible with "generate_routine"
-  assert num_steps is not None
-
-  B, T, P, I = [20, 32, 53, 4]
-  pianorolls = sample_onehot(1 + np.random.rand(B, T, P, I), axis=2)
-  masks = np.ones(pianorolls.shape, dtype=np.float32)
-
-  intermediates = dict(pianorolls=[pianorolls.copy()],
-                       masks=[masks.copy()])
-
-  model = wrapped_model.model
-
-  pm_max = 0.9
-  pm_min = 0.1
-  alpha = 0.7
-  S = num_steps
-
-  for s in range(S):
-    wat = (pm_max - pm_min) / alpha * s / S
-    pm = max(pm_min, pm_max - wat)
-
-    masks = np.array([mask_tools.get_random_all_time_instrument_mask(pianoroll.shape, pm)
-                      for pianoroll in pianorolls])
-    input_data = np.asarray([
-        mask_tools.apply_mask_and_stack(pianoroll, mask)
-        for pianoroll, mask in zip(pianorolls, masks)])
-
-    predictions = wrapped_model.sess.run(model.predictions, {model.input_data: input_data})
-    samples = sample_onehot(predictions, axis=2, temperature=temperature)
-    pianorolls = np.where(masks, samples, pianorolls)
-
-    intermediates["pianorolls"].append(pianorolls.copy())
-    intermediates["masks"].append(masks.copy())
-
-    print pm
-  
-    sys.stderr.write(".")
-    sys.stderr.flush()
-  sys.stderr.write("\n")
-
-  return intermediates
 
 
 def regenerate_random_order(pianorolls, wrapped_model, config):
@@ -237,12 +191,10 @@ def regenerate_random_order(pianorolls, wrapped_model, config):
     time_step = j // num_instruments
     instr_indx = j % num_instruments
 
-    input_data = np.asarray([
-        mask_tools.apply_mask_and_stack(pianorolls[i],
-                                        mask_for_generation if i == config.requested_index else
-                                        batch_mask_function(pianorolls[i].shape))
-        for i in range(batch_size)])
-  
+    input_data = np.asarray([mask_tools.apply_mask_and_stack(generated_pianoroll, mask_for_generation)] +
+                            [mask_tools.apply_mask_and_stack(pianoroll, batch_mask_function(pianoroll.shape))
+                             for pianoroll in pianorolls])
+
     raw_prediction = wrapped_model.sess.run(model.predictions, {model.input_data: input_data})
     prediction = raw_prediction[config.requested_index]
     pitch = sample_pitch(prediction, time_step, instr_indx, num_pitches, config.temperature)
@@ -270,7 +222,7 @@ def regenerate_fixed_order(pianorolls, wrapped_model, config):
   original_pianoroll = pianorolls[config.requested_index].copy()
   autofill_steps = []
 
-  mask_for_generation = np.zeros(pianorolls[0].shape)
+  mask_for_generation = np.ones(pianorolls[0].shape)
   # mask generator for the rest of the batch
   batch_mask_function = getattr(mask_tools, "get_fixed_order_mask")
 
@@ -278,11 +230,9 @@ def regenerate_fixed_order(pianorolls, wrapped_model, config):
 
   for time_step in order:
     for instr_indx in range(num_instruments):
-      input_data = np.asarray([
-          mask_tools.apply_mask_and_stack(pianorolls[i],
-                                          mask_for_generation if i == config.requested_index else
-                                          batch_mask_function(pianorolls[i].shape))
-          for i in range(batch_size)])
+      input_data = np.asarray([mask_tools.apply_mask_and_stack(generated_pianoroll, mask_for_generation)] +
+                              [mask_tools.apply_mask_and_stack(pianoroll, batch_mask_function(pianoroll.shape))
+                               for pianoroll in pianorolls])
   
       raw_prediction = wrapped_model.sess.run(model.predictions, {model.input_data: input_data})
       prediction = raw_prediction[config.requested_index]
