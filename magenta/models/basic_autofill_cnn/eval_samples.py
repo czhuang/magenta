@@ -75,9 +75,8 @@ for name in set_names:
   for eval_iter in eval_iters:
     #pianorolls = np.load(fpaths[name])['pianorolls'][eval_iter]
     pianorolls = np.load(fpaths[name])['pianorolls']
-    print pianorolls.shape
+    assert pianorolls.shape[0] == 101
     pianorolls = pianorolls[eval_iter]
-    print pianorolls.shape
     assert pianorolls.shape == (100, 32, 53, 4)
     if TEST_MODE:
       pianorolls = pianorolls[:2, :2, :, :]  
