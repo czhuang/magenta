@@ -1,7 +1,7 @@
 import os, sys, time
 from datetime import datetime
 import numpy as np, tensorflow as tf
-from magenta.models.basic_autofill_cnn import mask_tools, retrieve_model_tools, config_tools, generate_tools
+from magenta.models.basic_autofill_cnn import mask_tools, retrieve_model_tools, config_tools, generate_tools, data_tools
 
 import contextlib
 @contextlib.contextmanager
@@ -56,6 +56,30 @@ def sample_contiguous_masks(shape, pm=None):
       t = np.arange(t, t + dt) % T
       masks[b, t, :, i] = 1.
   return masks
+
+def get_harmonization_masks(shape):
+  masks = np.zeros(shape, dtype=np.float32)
+  masks[:, :, :, 1:] = 1.
+  return masks
+
+def get_transition_masks(shape):
+  B, T, P, I = shape
+  masks = np.zeros(shape, dtype=np.float32)
+  start = int(T/2. - T/4.)
+  end = int(T/2. + T/4.)
+  masks[:, start:end, :, :] = 1.
+  return masks
+
+def get_inner_voices_masks(shape):
+  masks = np.zeros(shape, dtype=np.float32)
+  masks[:, :, :, 1:3] = 1.
+  return masks
+
+def get_tenor_masks(shape):
+  masks = np.zeros(shape, dtype=np.float32)
+  masks[:, :, :, 2] = 1.
+  return masks
+
 
 class BernoulliMasker(object):
   def __call__(self, shape, pm=None):
@@ -212,14 +236,15 @@ FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string("model_name", None, "model name")
 tf.app.flags.DEFINE_integer("num_steps", None, "number of gibbs steps to take")
 tf.app.flags.DEFINE_string("sampler", None, "independent or sequential or bisecting")
-tf.app.flags.DEFINE_string("masker", None, "bernoulli or contiguous")
+tf.app.flags.DEFINE_string("masker", None, "bernoulli or contiguous or harmonization, transition, inner_voices, tensor")
 tf.app.flags.DEFINE_string("schedule", None, "yao or constant")
 tf.app.flags.DEFINE_float("schedule_yao_pmin", 0.1, "")
 tf.app.flags.DEFINE_float("schedule_yao_pmax", 0.9, "")
 tf.app.flags.DEFINE_float("schedule_yao_alpha", 0.7, "")
 tf.app.flags.DEFINE_float("schedule_constant_p", None, "")
 tf.app.flags.DEFINE_float("temperature", 1, "softmax temperature")
-tf.app.flags.DEFINE_string("initialization", "random", "how to obtain initial piano roll; random or independent or nade")
+tf.app.flags.DEFINE_string("initialization", "random", "how to obtain initial piano roll; random or independent or nade or bach_nade")
+tf.app.flags.DEFINE_integer("piece_length", 32, "num of time steps in generated piece")
 # already defined in generate_tools.py
 #tf.app.flags.DEFINE_string(
 #    "generation_output_dir", "/Tmp/cooijmat/autofill/generate",
@@ -239,8 +264,11 @@ def main(unused_argv):
     schedule = ConstantSchedule(p=FLAGS.schedule_constant_p)
   else:
     assert False
-  masker = dict(bernoulli=BernoulliMasker(),
-                contiguous=ContiguousMasker())[FLAGS.masker]
+  try:
+    masker = dict(bernoulli=BernoulliMasker(),
+                  contiguous=ContiguousMasker())[FLAGS.masker]
+  except:
+    masker = FLAGS.masker
   gibbs = Gibbs(num_steps=FLAGS.num_steps,
                 masker=masker,
                 sampler=sampler,
@@ -250,7 +278,8 @@ def main(unused_argv):
   timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
   start_time = time.time()
 
-  B, T, P, I = [100, 32, 53, 4]
+  B, T, P, I = [100, FLAGS.piece_length, 53, 4]
+  print B, T, P, I
   if FLAGS.initialization == "random":
     pianorolls = generate_tools.sample_onehot(1 + np.random.rand(B, T, P, I), axis=2)
   elif FLAGS.initialization == "independent":
@@ -261,11 +290,42 @@ def main(unused_argv):
     pianorolls = np.zeros([B, T, P, I], dtype=np.float32)
     masks = np.ones_like(pianorolls)
     pianorolls = SequentialSampler(temperature=FLAGS.temperature)(wmodel, pianorolls, masks)
+  elif FLAGS.initialization == "bach_nade":
+    pianorolls = np.asarray(list(data_tools.get_pianoroll_from_note_sequence_data(
+      FLAGS.validation_set_dir, "valid", FLAGS.piece_length)))
+    shape = pianorolls.shape
+    print pianorolls.shape
+    if masker == "Bernoulli":
+      masks = sample_masks(shape, k=int(T*I*0.75)) 
+    else:
+      try: 
+        masks = globals()["get_%s_masks" % masker](shape)
+      except:
+        assert False, 'ERROR: %s mask is not implemented' % masker_name
+    
+    # Store original pianorolls.
+    intermediates = dict(pianorolls=[pianorolls.copy()],
+                         masks=[np.zeros(pianorolls.shape, dtype=np.float32)])
+    masks = masks[:pianorolls.shape[0]]
+    # Blank out pianorolls.
+    pianorolls = np.asarray([
+        mask_tools.apply_mask(pianoroll, mask)
+        for pianoroll, mask in zip(pianorolls, masks)])
+    # Store blanked out pianorolls and the corresponding masks.
+    intermediates["pianorolls"].append(pianorolls.copy())
+    intermediates["masks"].append(masks.copy())
+
+    # Inpaint
+    pianorolls = SequentialSampler(temperature=FLAGS.temperature)(
+        wmodel, pianorolls, masks)
+    intermediates["pianorolls"].append(pianorolls.copy())
+    intermediates["masks"].append(np.zeros(pianorolls.shape, dtype=np.float32))
   else:
     assert False
 
-  intermediates = dict(pianorolls=[pianorolls.copy()],
-                       masks=[np.zeros(pianorolls.shape, dtype=np.float32)])
+  if FLAGS.initialization != "bach_nade":
+    intermediates = dict(pianorolls=[pianorolls.copy()],
+                         masks=[np.zeros(pianorolls.shape, dtype=np.float32)])
   for pianorolls, masks in gibbs(wmodel, pianorolls):
     intermediates["pianorolls"].append(pianorolls.copy())
     intermediates["masks"].append(masks.copy())

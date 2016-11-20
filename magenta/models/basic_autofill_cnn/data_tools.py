@@ -193,7 +193,7 @@ def make_data_feature_maps(sequences, config, encoder, start_crop_index=None):
   return input_data, targets
 
 
-def get_pianoroll_from_note_sequence_data(path, type_):
+def get_pianoroll_from_note_sequence_data(path, type_, len_from_beginning=None):
   """Retrieves NoteSequences from a TFRecord and returns piano rolls.
 
   Args:
@@ -214,7 +214,13 @@ def get_pianoroll_from_note_sequence_data(path, type_):
   encoder = PianorollEncoderDecoder()
   seq_reader = note_sequence_record_iterator(fpath)
   for seq in seq_reader:
-    yield encoder.encode(seq)
+    pianoroll = encoder.encode(seq)
+    if len_from_beginning is None:
+      yield pianoroll
+    elif pianoroll.shape[0] >= len_from_beginning:
+      yield pianoroll[:len_from_beginning]
+    else:
+      continue
 
 
 def get_note_sequence_data(path, type_):

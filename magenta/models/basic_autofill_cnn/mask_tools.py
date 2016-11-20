@@ -55,6 +55,24 @@ def apply_mask_and_stack(pianoroll, mask):
   return np.concatenate([masked_pianoroll, mask], 2)
 
 
+def apply_mask(pianoroll, mask):
+  """Apply mask to pianoroll.
+
+  Args:
+    pianoroll: A 3D binary matrix with 2D slices of pianorolls. This is not
+        modified.
+    mask: A 3D binary matrix with 2D slices of masks, one per each pianoroll.
+
+  Returns:
+    A 3D binary matrix with masked pianoroll.
+
+  Raises:
+    MaskUseError: If the shape of pianoroll and mask do not match.
+  """
+  if pianoroll.shape != mask.shape:
+    raise MaskUseError('Shape mismatch in pianoroll and mask.')
+  return pianoroll * (1 - mask)
+
 def perturb_and_stack_alt(pianoroll, mask):
   """Alternative implementation."""
   if pianoroll.ndim != 3:
