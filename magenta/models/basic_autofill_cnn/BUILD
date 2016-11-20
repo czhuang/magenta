@@ -1,4 +1,3 @@
-
 py_binary(
     name = "eval_samples",
     srcs = ["eval_samples.py"],
