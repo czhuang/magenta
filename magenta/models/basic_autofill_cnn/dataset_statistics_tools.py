@@ -203,6 +203,7 @@ def synth_start_of_note_sequences():
 def synth_random_crop_from_valid():
   path = '/data/lisatmp4/huangche/data/bach/random_crops'
   path = '/data/lisatmp4/huangche/data/bach/fromScratch_random_crops'
+  path = '/data/lisatmp4/huangche/data/listening/samplingMethod_unconditioned/bach'
  # valid_data = list(data_tools.get_note_sequence_data(FLAGS.input_dir, 'valid'))
  # print '# of valid_data:', len(valid_data)
  # encoder = pianorolls_lib.PianorollEncoderDecoder()
@@ -212,7 +213,8 @@ def synth_random_crop_from_valid():
  # input_data, targets = data_tools.make_data_feature_maps(
  #     valid_data, config, encoder)
  
-  from pianorolls_lib import STRING_QUARTET_PROGRAMS
+  from pianorolls_lib import STRING_QUARTET_PROGRAMS, WOODWIND_QUARTET_PROGRAMS
+  PROGRAMS = WOODWIND_QUARTET_PROGRAMS
   # Gets data.
   input_dir = '/Tmp/huangche/data/bach/qbm120/instrs=4_duration=0.125_sep=True'
   valid_data = list(data_tools.get_note_sequence_data(input_dir, 'valid'))
@@ -227,10 +229,11 @@ def synth_random_crop_from_valid():
   seqs = [valid_data[i] for i in np.random.choice(len(valid_data), size=4)]
   print [seq.filename for seq in seqs]
   encoder = pianorolls_lib.PianorollEncoderDecoder()
+
   # skip first one since starts from beginning.
-  for seq in seqs:
+  for i, seq in enumerate(seqs):
   #  assert target.shape == (32, 53, 4)
-  #  decoded_seq = encoder.decode(target, STRING_QUARTET_PROGRAMS)
+  #  decoded_seq = encoder.decode(target, PROGRAMS)
   #  fpath = os.path.join(path, piece_names[i].split('.mxl')[0] + '.midi')
   #  sequence_proto_to_midi_file(decoded_seq, fpath)
   #  
@@ -238,16 +241,16 @@ def synth_random_crop_from_valid():
     # synth complete
     complete_seq = seq
     complete_pianoroll = encoder.encode(seq)
-    complete_seq_decoded = encoder.decode(complete_pianoroll, STRING_QUARTET_PROGRAMS)
-    complete_fpath = os.path.join(path, seq.filename.split('.mxl')[0] + 'complete.midi')
+    complete_seq_decoded = encoder.decode(complete_pianoroll, PROGRAMS)
+    complete_fpath = os.path.join(path, seq.filename.split('.mxl')[0] + 'complete_%d.midi'% i)
     sequence_proto_to_midi_file(complete_seq_decoded, complete_fpath)
     
     crop_len = 32
     start_index = np.random.randint(complete_pianoroll.shape[0] - crop_len)
     crop_pianoroll = complete_pianoroll[start_index:start_index + crop_len]
 
-    crop_seq_decoded = encoder.decode(crop_pianoroll, STRING_QUARTET_PROGRAMS)
-    crop_fpath = os.path.join(path, seq.filename.split('.mxl')[0] + '.midi')
+    crop_seq_decoded = encoder.decode(crop_pianoroll, PROGRAMS)
+    crop_fpath = os.path.join(path, 'o_%d.midi' % i)
     sequence_proto_to_midi_file(crop_seq_decoded, crop_fpath)
 
     tfrecord_fpath = os.path.join(path, seq.filename.split('.mxl')[0] + '.tfrecord')
@@ -259,6 +262,7 @@ def rearrange_instruments():
   path = '/data/lisatmp4/huangche/data/listening/fromScratch'
   print path
   from pianorolls_lib import STRING_QUARTET_PROGRAMS
+  PROGRAMS = STRING_QUARTET_PROGRAMS
   encoder = pianorolls_lib.PianorollEncoderDecoder()
   rename_dict = {'19-balanced': 'b', 'Denoising': 'd',
                  'balanced_fc_mask_only': 'bfm', 'bwv': 'o',
@@ -272,7 +276,7 @@ def rearrange_instruments():
         seqs = note_sequence_record_iterator(fpath)
         seq = list(seqs)[0]
         pianoroll = encoder.encode(seq)
-        decoded_seq = encoder.decode(pianoroll, pianoroll_to_program_map=STRING_QUARTET_PROGRAMS)
+        decoded_seq = encoder.decode(pianoroll, pianoroll_to_program_map=PROGRAMS)
         fname_prefix = fname.split('.tfrecord')[0]
         print fname_prefix
         rename_tag = None
@@ -392,12 +396,12 @@ def main(unused_argv):
   #check_tessitura_hist_per_voice()
   #check_voices()
   #check_tessitura_ordering_hist()
-#  synth_random_crop_from_valid()
-##  synth_start_of_note_sequences()
+  synth_random_crop_from_valid()
+#  synth_start_of_note_sequences()
 #  rearrange_instruments()
-  #match_dataset_split()
-  retrieve_nicolas_bach_pickle()
-  test_get_piece_tensor()
+#  match_dataset_split()
+#  retrieve_nicolas_bach_pickle()
+#  test_get_piece_tensor()
 
 
 if __name__ == '__main__':
