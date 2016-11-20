@@ -36,18 +36,26 @@ def get_NADE_nll_mean_and_sem():
   #  losses = evaluation_tools.compute_notewise_loss(wrapped_model, pianorolls)  
   if NOTEWISE:
     return 0.56509, 0.01071 
-  else:
-    assert False, 'not yet have number for chordwise'
+  else: 
+    return 0.96849*4, 0.01253*4
 
 # actual long run
-stats_fpath = '/Tmp/huangche/compare_sampling/stats_2016-11-15_13:56:11.pkl'
+if NOTEWISE:
+  stats_fpaths = ['/Tmp/huangche/compare_sampling/stats_2016-11-15_13:56:11.pkl',
+                  '/Tmp/huangche/compare_sampling/stats_2016-11-17_08:50:39.pkl']
+else:
+  stats_fpaths = ['/Tmp/huangche/compare_sampling/stats_2016-11-16_09:36:18.pkl']
 if TEST_MODE:
   # short test run
-  stats_fpath = '/Tmp/huangche/compare_sampling/stats_2016-11-14_21:31:41.pkl'
-print 'Reading from', stats_fpath
-# try reading it back in
-with open(stats_fpath, 'rb') as p:
-  lls_stats_by_method = pickle.load(p)
+  stats_fpaths = ['/Tmp/huangche/compare_sampling/stats_2016-11-14_21:31:41.pkl']
+
+# Load pickled statistics.
+lls_stats_by_method = dict()
+for stats_fpath in stats_fpaths:
+  print 'Reading from', stats_fpath
+  with open(stats_fpath, 'rb') as p:
+    lls_stats_by_method_partial = pickle.load(p)
+  lls_stats_by_method.update(lls_stats_by_method_partial)
 
 num_methods = len(lls_stats_by_method)
 num_iters = len(lls_stats_by_method.values()[0])
@@ -64,11 +72,14 @@ for method_name, lls_stats_by_iter in lls_stats_by_method.items():
     stats = lls_stats_by_iter[eval_iter]
     lls_means.append(stats[0])
     lls_sem.append(stats[2])
-  aggregated_lls_stats[method_name] = (lls_means, lls_sem)
+  aggregated_lls_stats[method_name] = (np.asarray(lls_means), np.asarray(lls_sem))
 
-method_names = ['sequential', 'independent', '50', '75', '99']
+#method_names = ['sequential', 'independent', '50', '75', '99']
+#method_names = lls_stats_by_method.keys()
+# To enforce ordering
+method_names = ['sequential', 'independent', '50', '75', '90', '95', '99']
 if TEST_MODE:
-  method_names = ['sequential', 'independent']
+  method_names = method_names[:2]
 
 #aggregated_means = []
 #aggregated_sems = []
@@ -83,15 +94,20 @@ if TEST_MODE:
 #print aggregated_means.shape, aggregated_sems.shape
 
 legend_names = {'sequential':'Contiguous(4timestep*16, covering50%)\n (sequential in block)',
-
                 'independent': 'Yao (2014) annealed block size\n (independent in block)',
-                '50': 'Bernoulli(50) (sequential in block)',
-                '75': 'Bernoulli(75) (sequential in block)',
-                '99': 'Bernoulli(99) (sequentail in block)'}
+                '50': 'Bernoulli(0.5) (sequential in block)',
+                '75': 'Bernoulli(0.25) (sequential in block)',
+                '90': 'Bernoulli(0.1) (sequentail in block)',
+                '95': 'Bernoulli(0.05) (sequentail in block)',
+                '99': 'Bernoulli(0.01) (sequentail in block)'}
+ 
 
 plt.figure()
 for method_name in method_names:
   means, sems = aggregated_lls_stats[method_name] 
+  if not NOTEWISE:
+    means *= 4
+    sems *= 4
   plt.errorbar(sorted_iters, means, yerr=sems, label='%s' % legend_names[method_name])
 # Add Nade line.
 nade_mean, nade_sem = get_NADE_nll_mean_and_sem()
@@ -103,10 +119,18 @@ plt.legend(prop={'size':10})
 plt.xlim(-1, 101)
 plt.xlabel('# of Gibbs steps')
 plt.ylabel('Negative log-likelihood (NLL)')
-plt.title("Note-wise NLL for different Blocked-Gibbs setups")
+title_str = "NLL for different Blocked-Gibbs setups" 
+if NOTEWISE:
+  title_str = "Note-wise " + title_str
+else:
+  title_str = "Chord-wise " + title_str
+  
+plt.title(title_str)
 
-
-plot_fpath = get_fpath_wrapper('nll_curve-notewise', 'png')
+if NOTEWISE:
+  plot_fpath = get_fpath_wrapper('nll_curve-notewise', 'png')
+else:
+  plot_fpath = get_fpath_wrapper('nll_curve-chordwise', 'png')
 print 'Saving plot to', plot_fpath
 plt.savefig(plot_fpath)
 
