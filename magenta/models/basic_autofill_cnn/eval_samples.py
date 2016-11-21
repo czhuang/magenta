@@ -9,9 +9,11 @@ from magenta.models.basic_autofill_cnn import retrieve_model_tools
 
 TEST_MODE = False
 NOTEWISE = True 
+QUICK_RUN = True
 #eval_iters = range(0, 101, 5)
 eval_iters = range(20)
-eval_iters = range(2)
+eval_iters = [2]  #range(3)
+subsample_size = 10 
 
 def get_current_time_as_str():
   return datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
@@ -104,6 +106,9 @@ for name in set_names:
       assert pianorolls.shape == (70, 32, 53, 4)
     else:
       assert pianorolls.shape == (100, 32, 53, 4)
+    if QUICK_RUN:
+      inds = np.random.choice(np.arange(pianorolls.shape[0]), size=subsample_size, replace=False)
+      pianorolls = pianorolls[inds, :, :, :]
     if TEST_MODE:
       pianorolls = pianorolls[:2, :2, :, :]  
       print pianorolls.shape
