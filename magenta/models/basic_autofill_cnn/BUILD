@@ -210,6 +210,7 @@ py_binary(
 	":config_tools",
         "//magenta/protobuf:music_py_pb2",
         "//magenta/lib:midi_io",
+        "//magenta/lib:note_sequence_io",
     ],
 )
 

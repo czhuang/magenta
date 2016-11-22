@@ -9,6 +9,7 @@ from matplotlib import colors
 import tensorflow as tf
 
 from magenta.protobuf import music_pb2
+from magenta.lib.note_sequence_io import note_sequence_record_iterator
 
 from magenta.models.basic_autofill_cnn import pianorolls_lib
 from magenta.models.basic_autofill_cnn import mask_tools
@@ -31,16 +32,87 @@ def get_unique_output_path():
   return output_path
 
 
-def get_sequence():
+def get_sequence_gen():
   fpath = os.path.join(tf.resource_loader.get_data_files_path(), 'testdata', 'generated', 'sample1.midi')
   return midi_io.midi_file_to_sequence_proto(fpath)
 
+
+def get_sequence():
+  fpath = '/data/lisatmp4/huangche/data/bach/bwv103.6.tfrecord'
+  return list(note_sequence_record_iterator(fpath))[0]
 
 def get_input():
   seq = get_sequence()
   encoder = pianorolls_lib.PianorollEncoderDecoder()
   pianoroll = encoder.encode(seq)
   return pianoroll
+
+def get_process():
+  fpath = '/Tmp/huangche/new_generation/fromscratch_balanced_by_scaling_init=bach_Gibbs-num-steps-0--masker-None--schedule-ConstantSchedule-None---sampler-SequentialSampler-temperature-1e-05--_20161121235937_1.03min.npz'
+  data = np.load(fpath)
+
+  pianorolls = data["pianorolls"]
+  predictions = data["predictions"]
+  masks = data["masks"]
+  print len(pianorolls), len(predictions), len(masks)
+  print pianorolls.shape, predictions.shape, masks.shape
+  S, B, T, P, I = pianorolls.shape
+  
+  # Take the first one in the batch
+  rolls = pianorolls[:, 0, :, :, :]
+  predictions = predictions[:, 0, :, :, :]
+  
+  original = rolls[0]
+  context = rolls[1]
+  blankouts = original - context
+  #plot_steps = [2, int(S/8), int(S/4), int(S/2), S-1]  
+  plot_steps = [2, 3, 6, 18, S-1]  
+  
+  figs, axes = plt.subplots(2, 3, figsize=(11, 6))
+  axes = axes.ravel()
+  pitch_lb=43 #36 #43
+  pitch_ub=72 #89 #77
+  for i in range(5):
+    ax = axes[i]
+    step = plot_steps[i]
+    roll = rolls[step]
+    proll = rolls[step-1]
+    prediction = predictions[step] 
+
+    # set style of pianoroll lines
+    set_pianoroll_style(ax, T, pitch_lb=pitch_lb, pitch_ub=pitch_ub, is_subplot=True)
+
+    # plot context
+    plot_pianoroll_with_colored_voices(ax, context)
+    
+    # plot blankout
+    #plot_pianoroll_with_colored_voices(ax, blankouts, empty_boxes=True)
+
+    # plot prediction
+    plot_pianoroll_with_colored_voices(ax, prediction, imshow=True, plot_boxes=False)
+
+    # plot generated
+    plot_pianoroll_with_colored_voices(ax, proll - context, colors=GENERATED_COLORS)
+
+    # plot current step
+    plot_pianoroll_with_colored_voices(ax, roll - proll, colors=GENERATED_COLORS, empty_boxes=True)
+
+    ax.set_title('Step %d' % (step-2))
+
+ 
+  # Showing the original.
+  ax = axes[-1]
+  set_pianoroll_style(ax, T, pitch_lb=pitch_lb, pitch_ub=pitch_ub, is_subplot=True)
+  plot_pianoroll_with_colored_voices(ax, original)
+  # Hack to force aspect ratio to be equal
+  plot_pianoroll_with_colored_voices(ax, np.zeros_like(original), imshow=True, plot_boxes=False)
+  ax.set_title('Ground Truth')
+ 
+  path = get_unique_output_path()
+  fname_prefix = 'process'
+  plt.savefig(os.path.join(path, fname_prefix + '.png'), bbox_inches='tight')
+  plt.savefig(os.path.join(path, fname_prefix + '.pdf'), bbox_inches='tight')
+  plt.close()
 
 
 def set_axes_style(ax, total_time, subplots, pitch_lb=None, pitch_ub=None):
@@ -52,6 +124,9 @@ def set_axes_style(ax, total_time, subplots, pitch_lb=None, pitch_ub=None):
   ax.tick_params(axis='both', which='major', labelsize=labelsize)
   ax.tick_params(axis='both', which='minor', labelsize=labelsize)
   pitch_base = 37  # the label is actually one above 36, since starts with 0, ends at 88
+  #TODO: hack to fix one-off
+  # DID NOT WORK
+  #pitch_base = 36
   c_ticks = [12*i + 11 for i in range(4)] 
   y_ticks = [0] + c_ticks + [89-pitch_base]
 
@@ -79,6 +154,11 @@ def set_axes_style(ax, total_time, subplots, pitch_lb=None, pitch_ub=None):
   
   # Get black key positions
   b_ticks = [1, 3, 6, 8, 10]
+  
+  # TODO: hack to fix one-off
+  # DID NOT WORK
+  #c_ticks = np.asarray(c_ticks) - 1
+  #b_ticks = np.asarray(b_ticks) - 1 
   return c_ticks, b_ticks
 
 
@@ -86,7 +166,7 @@ def plot_summed_pianoroll(pianoroll, crop_length, ax):
   summed_pianoroll = np.clip(pianoroll[:crop_length].sum(axis=2), 0, 1)
   plt.imshow(summed_pianoroll.T, aspect='equal', cmap='Greys',
     origin='lower', interpolation='none')
-  set_axes_style(ax, crop_legnth)
+  set_axes_style(ax, crop_length, subplots=True)
   plt.ylabel('pitch')
   plt.xlabel('time')
 
@@ -95,7 +175,7 @@ def plot_input():
   seq = get_sequence()
   encoder = pianorolls_lib.PianorollEncoderDecoder()
   pianoroll = encoder.encode(seq)
-  crop_length = 32  #64
+  crop_length = 64
 
   plt.figure(figsize=(6, 20))
   # Plot individual instruments.
@@ -103,7 +183,7 @@ def plot_input():
     ax = plt.subplot(5, 1,  1)
     plt.imshow(pianoroll[:crop_length, :, i].T, aspect='equal', cmap='Greys',
        origin='lower', interpolation='none')
-    set_axes_style(ax, crop_length)
+    set_axes_style(ax, crop_length, subplots=True)
     if i == len(INSTR_ORDERING) :
       # Only include xticks for the last subplot. 
       ax.set_xticklabels(())
@@ -120,6 +200,101 @@ def plot_input():
        bbox_inches='tight')
     plt.close()
 
+def tranpose_down_one(pianoroll):
+  T, P, I = pianoroll.shape
+  pianoroll = np.concatenate((pianoroll, np.zeros((T, 1, I))), axis=1)
+  return np.roll(pianoroll, -1, axis=1)
+
+
+def plot_pianoroll_with_colored_voices_wrapper():
+  seq = get_sequence()
+  encoder = pianorolls_lib.PianorollEncoderDecoder()
+  pianoroll = encoder.encode(seq)[:64]
+  T, P, I = pianoroll.shape
+  print T, P, I
+  # TODO: hack for one-off in pitch
+  pianoroll = transpose_down_one(pianoroll)
+  plt.figure()
+  axis = plt.gca()
+  pitch_lb=43
+  pitch_ub=77
+  set_pianoroll_style(axis, T, pitch_lb=pitch_lb, pitch_ub=pitch_ub)
+  plot_pianoroll_with_colored_voices(pianoroll, pitch_lb=pitch_lb, pitch_ub=pitch_ub)
+  path = get_unique_output_path()
+  fname_prefix = 'bach'
+  plt.savefig(os.path.join(path, 'bach.png'),
+     bbox_inches='tight')
+  plt.savefig(os.path.join(path, 'bach.pdf'),
+     bbox_inches='tight')
+  plt.close()
+
+CONTEXT_COLORS = np.array([[ 0.253935,  0.265254,  0.529983,  1.      ],
+       [ 0.163625,  0.471133,  0.558148,  1.      ],
+       [ 0.134692,  0.658636,  0.517649,  1.      ],
+       [ 0.477504,  0.821444,  0.318195,  1.      ]])
+GENERATED_COLORS = np.array([[  4.17642000e-01,   5.64000000e-04,   6.58390000e-01,
+          1.00000000e+00],
+       [  6.92840000e-01,   1.65141000e-01,   5.64522000e-01,
+          1.00000000e+00],
+       [  8.81443000e-01,   3.92529000e-01,   3.83229000e-01,
+          1.00000000e+00],
+       [  9.88260000e-01,   6.52325000e-01,   2.11364000e-01,
+          1.00000000e+00]])
+CONTEXT_COLORS = GENERATED_COLORS
+
+def plot_pianoroll_with_colored_voices(axis, pianoroll, colors=CONTEXT_COLORS, imshow=False, plot_boxes=True, empty_boxes=False):
+    T, P, I = pianoroll.shape
+    print T, P, I
+    if imshow:
+      axis.imshow(pianoroll.sum(axis=2).T, aspect='equal', cmap='Greys',
+        origin='lower', interpolation='none')
+    if plot_boxes:
+      for i in range(I):
+        if empty_boxes:
+          for t, p in zip(*np.where(pianoroll[:, :, i])):
+            axis.add_patch(Rectangle((t-.5, p-.5), 1, 1,
+                 facecolor='none', edgecolor=colors[i], alpha=0.5))
+        else:  
+          for t, p in zip(*np.where(pianoroll[:, :, i])):
+            axis.add_patch(Rectangle((t-.5, p-.5), 1, 1,
+                 facecolor=colors[i], edgecolor='none'))
+
+def set_pianoroll_style(axis, T, pitch_lb=36, pitch_ub=89, is_subplot=False):
+  total_time = T
+  # Setting axes styles.  
+  c_positions, b_positions = set_axes_style(
+      axis, T, is_subplot, pitch_lb, pitch_ub)
+  # Turn off tick labels that was set in set_axes_style.
+  axis.get_xaxis().set_visible(False)
+  axis.get_yaxis().set_visible(False)
+  axis.set_frame_on(False)
+
+  # Alpha levels
+  bc_alpha = 0.7  # between B, C line
+  ef_alpha = 0.4  # between E, F line
+  bk_alpha = 0.15  # black key alpha
+ 
+  # Add lines for C.
+  offset = 0.5
+  c_positions = [c_positions[0] - 12] + c_positions
+  b_positions = b_positions + [5]
+  print 'c_positions', c_positions
+  for c_pos in c_positions:
+    c_y_pos = c_pos-offset
+    c_alpha = bc_alpha
+    print c_y_pos
+    if c_pos > 0:
+      axis.axhline(y=c_y_pos, xmin=0, xmax=total_time, color='royalblue', linewidth='1', alpha=c_alpha)
+    # Add dash lines for black keys.
+    for b_pos in b_positions:
+      y_pos = c_y_pos + b_pos
+      alpha = bk_alpha
+      if b_pos == 5:
+        alpha = ef_alpha
+      else:
+        y_pos += offset
+      print y_pos
+      axis.axhline(y=y_pos, xmin=0, xmax=total_time, color='royalblue', linewidth='1', alpha=alpha)
 
 def plot_blankout():
   fpath = get_unique_output_path()
@@ -165,7 +340,7 @@ def plot_blankout():
       plt.imshow(targets[:crop_length, :, instr_idx].T,
         interpolation='nearest', origin='lower',
         cmap=target_cmap, norm=target_norm)
-    set_axes_style(ax, crop_length)
+    set_axes_style(ax, crop_length, subplots=True)
     if i == len(INSTR_ORDERING) :
       ax.set_xticklabels(())
     if i == 1:
@@ -181,7 +356,7 @@ def plot_blankout():
   plt.imshow(summed_pianoroll.T, aspect='equal', cmap='Greys',
     origin='lower', interpolation='none')
   total_time = input_data.shape[0]
-  set_axes_style(ax, total_time)
+  set_axes_style(ax, total_time, subplots=True)
   plt.ylabel('pitch')
   plt.xlabel('time')
  
@@ -191,7 +366,7 @@ def plot_blankout():
   plt.imshow(summed_pianoroll.T,
      interpolation='nearest', origin='lower',
      cmap=target_cmap, norm=target_norm)
-  set_axes_style(ax, total_time)
+  set_axes_style(ax, total_time, subplots=True)
   plt.ylabel('pitch')
   plt.xlabel('time')
  
@@ -401,10 +576,10 @@ def plot_steps(steps_bundle, output_path, run_id,
 
 
 def main(argv):
-  plot_input()
-  plot_blankout()
-
-
+  #plot_input()
+  #plot_blankout()
+  #plot_pianoroll_with_colored_voices_wrapper()
+  get_process()
 
 if __name__ == '__main__':
   #tf.app.run()
