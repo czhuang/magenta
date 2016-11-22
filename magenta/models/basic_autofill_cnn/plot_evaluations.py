@@ -134,4 +134,12 @@ else:
 print 'Saving plot to', plot_fpath
 plt.savefig(plot_fpath)
 
+if NOTEWISE:
+  plot_fpath = get_fpath_wrapper('nll_curve-notewise', 'pdf')
+else:
+  plot_fpath = get_fpath_wrapper('nll_curve-chordwise', 'pdf')
+print 'Saving plot to', plot_fpath
+plt.savefig(plot_fpath)
+
+
 

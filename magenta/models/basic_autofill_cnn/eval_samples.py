@@ -9,11 +9,14 @@ from magenta.models.basic_autofill_cnn import retrieve_model_tools
 
 TEST_MODE = False
 NOTEWISE = True 
-QUICK_RUN = True
+QUICK_RUN = False
 #eval_iters = range(0, 101, 5)
 eval_iters = range(20)
 eval_iters = [2]  #range(3)
-subsample_size = 10 
+eval_iters = [-1]
+#eval_iters = [102]
+#eval_iters = range(2, 102, 20)
+subsample_size = 70
 
 def get_current_time_as_str():
   return datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
@@ -78,9 +81,28 @@ fpaths = {'sequential':'fromscratch_balanced_by_scaling_init=independent_Gibbs-n
 
 
 fpaths = {'bernoulli75_inpainting':'fromscratch_balanced_by_scaling_init=bach_nade_Gibbs-num-steps-0--masker-BernoulliMasker----schedule-ConstantSchedule-0-75---sampler-SequentialSampler-temperature-1e-05--_20161119203302_1.50min.npz',
+          'harmonization_inpainting':'fromscratch_balanced_by_scaling_init=bach_nade_Gibbs-num-steps-0--masker--harmonization---schedule-ConstantSchedule-0-75---sampler-SequentialSampler-temperature-1e-05--_20161120192512_1.47min.npz',
           'transition_inpainting': 'fromscratch_balanced_by_scaling_init=bach_nade_Gibbs-num-steps-0--masker--transition---schedule-ConstantSchedule-0-75---sampler-SequentialSampler-temperature-1e-05--_20161119234002_1.05min.npz',
           'inner_voices_inpainting': 'fromscratch_balanced_by_scaling_init=bach_nade_Gibbs-num-steps-0--masker--inner-voices---schedule-ConstantSchedule-0-75---sampler-SequentialSampler-temperature-1e-05--_20161120013826_1.06min.npz',
           'tensor_inpainting': 'fromscratch_balanced_by_scaling_init=bach_nade_Gibbs-num-steps-0--masker--tenor---schedule-ConstantSchedule-0-75---sampler-SequentialSampler-temperature-1e-05--_20161120014019_0.58min.npz'}
+
+
+fpaths = {'transition_inpainting_independent-100':'fromscratch_balanced_by_scaling_init=bach_Gibbs-num-steps-100--masker-BernoulliInpaintingMasker-context-kind-transition---schedule-YaoSchedule-pmin-0-1--pmax-0-9--alpha-0-7---sampler-IndependentSampler-temperature-1e-05--_20161121020140_1.68min.npz'}
+
+
+fpaths = {'transition_inpainting_sequential-30_bernoulli-25':'fromscratch_balanced_by_scaling_init=bach_Gibbs-num-steps-30--masker-BernoulliInpaintingMasker-context-kind-transition---schedule-ConstantSchedule-0-25---sampler-SequentialSampler-temperature-1e-05--_20161121033900_8.04min.npz',
+          'transition_inpainting_sequential-30_bernoulli-50': 'fromscratch_balanced_by_scaling_init=bach_Gibbs-num-steps-30--masker-BernoulliInpaintingMasker-context-kind-transition---schedule-ConstantSchedule-0-5---sampler-SequentialSampler-temperature-1e-05--_20161121032410_14.65min.npz',
+          'transition_inpainting_sequential-30_bernoulli-75': 'fromscratch_balanced_by_scaling_init=bach_Gibbs-num-steps-30--masker-BernoulliInpaintingMasker-context-kind-transition---schedule-ConstantSchedule-0-75---sampler-SequentialSampler-temperature-1e-05--_20161121030150_22.16min.npz',
+          'transition_inpainting_sequential-30_bernoulli-90': 'fromscratch_balanced_by_scaling_init=bach_Gibbs-num-steps-30--masker-BernoulliInpaintingMasker-context-kind-transition---schedule-ConstantSchedule-0-9---sampler-SequentialSampler-temperature-1e-05--_20161121023609_25.49min.npz'}
+
+
+fpaths = {'harmonization_inpainting_sequential-30_bernoulli-75':'fromscratch_balanced_by_scaling_init=bach_Gibbs-num-steps-30--masker-BernoulliInpaintingMasker-context-kind-harmonization---schedule-ConstantSchedule-0-75---sampler-SequentialSampler-temperature-1e-05--_20161121134918_62.77min.npz',
+          'harmonization_inpainting_sequential-30_bernoulli-90':'fromscratch_balanced_by_scaling_init=bach_Gibbs-num-steps-30--masker-BernoulliInpaintingMasker-context-kind-harmonization---schedule-ConstantSchedule-0-9---sampler-SequentialSampler-temperature-1e-05--_20161121123327_75.65min.npz'}
+
+fpaths = {'harmonization_inpainting_independent-100':'fromscratch_balanced_by_scaling_init=bach_Gibbs-num-steps-100--masker-BernoulliInpaintingMasker-context-kind-harmonization---schedule-YaoSchedule-pmin-0-1--pmax-0-9--alpha-0-7---sampler-IndependentSampler-temperature-1e-05--_20161121155835_2.97min.npz',
+          'harmonization_inpainting_sequential-30-bernoulli-25':'fromscratch_balanced_by_scaling_init=bach_Gibbs-num-steps-30--masker-BernoulliInpaintingMasker-context-kind-harmonization---schedule-ConstantSchedule-0-25---sampler-SequentialSampler-temperature-1e-05--_20161121153459_23.41min.npz',
+          'harmonization_inpainting_sequential-30-bernoulli-50':'fromscratch_balanced_by_scaling_init=bach_Gibbs-num-steps-30--masker-BernoulliInpaintingMasker-context-kind-harmonization---schedule-ConstantSchedule-0-5---sampler-SequentialSampler-temperature-1e-05--_20161121145217_42.53min.npz'}
+
 
 set_names = fpaths.keys()
 
@@ -97,8 +119,9 @@ for name in set_names:
   for eval_iter in eval_iters:
     #pianorolls = np.load(fpaths[name])['pianorolls'][eval_iter]
     pianorolls = np.load(fpaths[name])['pianorolls']
+    print 'shape', pianorolls.shape
     if 'inpainting' in name:
-      assert pianorolls.shape[0] == 3
+      assert pianorolls.shape[0] == 3 or pianorolls.shape[0] == 103 or pianorolls.shape[0] == 13 or pianorolls.shape[0] == 33
     else:
       assert pianorolls.shape[0] == 101
     pianorolls = pianorolls[eval_iter]
