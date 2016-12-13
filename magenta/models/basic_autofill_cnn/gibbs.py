@@ -155,8 +155,9 @@ class IndependentSampler(object):
   def __init__(self, temperature=1):
     self.temperature = temperature
 
-  def __call__(self, wmodel, pianorolls, masks):
+  def __call__(self, wmodel, pianorolls, masks, intermediates=None):
     print 'independent sampling...'
+    # TODO: intermediates not yet used
     input_data = np.asarray([
         mask_tools.apply_mask_and_stack(pianoroll, mask)
         for pianoroll, mask in zip(pianorolls, masks)])
@@ -401,11 +402,15 @@ def main(unused_argv):
     intermediates = dict(pianorolls=[pianorolls.copy()],
                          masks=[np.zeros(pianorolls.shape, dtype=np.float32)])
 
+  count = 0
   for pianorolls, masks in gibbs(wmodel, pianorolls, intermediates):
+    print count
+    count += 1
     intermediates["pianorolls"].append(pianorolls.copy())
     intermediates["masks"].append(masks.copy())
     # So that predictions indices line up with pianorolls and masks.
-    intermediates["predictions"].append(np.zeros_like(pianorolls))
+    if 'predictions' in intermediates:
+      intermediates["predictions"].append(np.zeros_like(pianorolls))
   
     sys.stderr.write(".")
     sys.stderr.flush()
