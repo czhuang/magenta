@@ -16,7 +16,7 @@ class Hyperparameters(object):
       corrupt_ratio=0.25,
       # Input dimensions.
       num_pitches=53,  #53 + 11
-      crop_piece_len=64, #64,
+      crop_piece_len=128, #64, #32,
       input_depth=8,
       output_depth=4,
       # Batch norm parameters.

@@ -9,8 +9,16 @@ import numpy as np
 from magenta.protobuf import music_pb2
 import test_tools
 
-WOODWIND_QUARTET_PROGRAMS = OrderedDict(
-    [(74, 'flute'), (72, 'clarinet'), (69, 'oboe'), (71, 'bassoon')])
+OLD_SETTINGS = True
+
+if OLD_SETTINGS:
+  #WOODWIND_QUARTET_PROGRAMS = OrderedDict(
+  #    [(73, 'flute'), (71, 'clarinet'), (68, 'oboe'), (70, 'bassoon')])
+  WOODWIND_QUARTET_PROGRAMS = OrderedDict(
+      [(75, 'flute'), (73, 'clarinet'), (70, 'oboe'), (72, 'bassoon')])
+else:
+  WOODWIND_QUARTET_PROGRAMS = OrderedDict(
+      [(74, 'flute'), (72, 'clarinet'), (69, 'oboe'), (71, 'bassoon')])
 
 # In order to have 4 different instruments, not including second violin,
 # and adding in double bass.
@@ -29,8 +37,8 @@ SYNTH_MODE = False
 if SYNTH_MODE:
   _DEFAULT_QPM = 60 
 else:
+  _DEFAULT_QPM = 60
   _DEFAULT_QPM = 120
-
 
 class PitchOutOfEncodeRangeError(Exception):
   """Exception for when pitch of note is out of encoding range."""

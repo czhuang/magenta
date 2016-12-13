@@ -24,6 +24,11 @@ def get_note_sequences():
   return list(note_sequence_record_iterator(os.path.join(path, fname)))
 
 
+def get_the_prime_piece():
+  fpath = '/data/lisatmp4/huangche/data/bach/bwv103.6.tfrecord'
+  return list(note_sequence_record_iterator(fpath))
+  
+
 def check_num_of_pieces_in_tfrecord():
   path = '/u/huangche/data/bach/qbm120/instrs=4_duration=0.125_sep=True'
   fnames = ['train', 'valid', 'test']
@@ -188,10 +193,11 @@ def match_dataset_split():
 
 
 def synth_start_of_note_sequences():
-  path = '/data/lisatmp4/huangche/data/bach/midi/'
-  seqs = get_4_voice_sequences()
+  path = '/data/lisatmp4/huangche/data/bach/primes'
+#  seqs = get_4_voice_sequences()
+  seqs = get_the_prime_piece()
   encoder = pianorolls_lib.PianorollEncoderDecoder()
-  synth_timesteps = 32
+  synth_timesteps = 128
   short_seqs = []
   for seq in seqs:
     pianoroll = encoder.encode(seq)
@@ -396,8 +402,8 @@ def main(unused_argv):
   #check_tessitura_hist_per_voice()
   #check_voices()
   #check_tessitura_ordering_hist()
-  synth_random_crop_from_valid()
-#  synth_start_of_note_sequences()
+#  synth_random_crop_from_valid()
+  synth_start_of_note_sequences()
 #  rearrange_instruments()
 #  match_dataset_split()
 #  retrieve_nicolas_bach_pickle()
