@@ -12,6 +12,9 @@ import pylab as plt
 TEST_MODE = False
 NOTEWISE = True
 
+COMPARE_BERNOULLI, COMPARE_GIBBS = range(2)
+plot_type = COMPARE_BERNOULLI
+#plot_type = COMPARE_GIBBS
 
 def get_current_time_as_str():
   return datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
@@ -77,7 +80,11 @@ for method_name, lls_stats_by_iter in lls_stats_by_method.items():
 #method_names = ['sequential', 'independent', '50', '75', '99']
 #method_names = lls_stats_by_method.keys()
 # To enforce ordering
-method_names = ['sequential', 'independent', '50', '75', '90', '95', '99']
+#method_names = ['sequential', 'independent', '50', '75', '90', '95', '99']
+if plot_type == COMPARE_BERNOULLI:
+  method_names = ['sequential', '50', '75', '90', '95', '99']
+else:
+  method_names = ['sequential', 'independent', '75']
 if TEST_MODE:
   method_names = method_names[:2]
 
@@ -93,39 +100,84 @@ if TEST_MODE:
 #aggregated_sems = np.asarray(aggregated_sems)
 #print aggregated_means.shape, aggregated_sems.shape
 
-legend_names = {'sequential':'Contiguous(4timestep*16, covering50%)\n (sequential in block)',
-                'independent': 'Yao (2014) annealed block size\n (independent in block)',
-                '50': 'Bernoulli(0.5) (sequential in block)',
-                '75': 'Bernoulli(0.25) (sequential in block)',
-                '90': 'Bernoulli(0.1) (sequentail in block)',
-                '95': 'Bernoulli(0.05) (sequentail in block)',
-                '99': 'Bernoulli(0.01) (sequentail in block)'}
- 
+legend_names = {'sequential':'Contiguous(0.50)',
+                'independent': 'Annealed sampling',
+                '50': 'Bernoulli(0.50)',
+                '75': 'Bernoulli(0.25)',
+                '90': 'Bernoulli(0.10)',
+                '95': 'Bernoulli(0.05)',
+                '99': 'Bernoulli(0.01)'}
 
-plt.figure()
-for method_name in method_names:
+IS_POSTER = False 
+markers = ['x', '+', 'x', '+', '.', '.']
+if IS_POSTER:
+  line_styles = ['--', '-', '-', '-', '-', '-']
+else:
+  line_styles = ['-', '-', '--', '--', '-', '--']
+colors = ['r', 'm', 'g', 'b', 'c', 'y']
+if IS_POSTER:
+  linewidth = 3
+  title_fontsize = 'xx-large'
+  label_fontsize = 'xx-large'
+  labelsize='x-large'
+else:
+  linewidth = 1
+  title_fontsize = 'x-large'
+  label_fontsize = 'x-large'
+  labelsize='large'
+#title_fontsize = 'xx-large'
+#label_fontsize = 'xx-large'
+#labelsize='x-large'
+
+#plt.figure(figsize=(16, 6))
+fig = plt.figure()
+#print fig.get_size_inches()
+#plt.subplot(1,2,1)
+ax = plt.gca()
+for i, method_name in enumerate(method_names):
   means, sems = aggregated_lls_stats[method_name] 
   if not NOTEWISE:
     means *= 4
     sems *= 4
-  plt.errorbar(sorted_iters, means, yerr=sems, label='%s' % legend_names[method_name])
+  #plt.errorbar(sorted_iters, means, yerr=sems, marker=markers[i], label='%s' % legend_names[method_name])
+  if IS_POSTER:
+    plt.plot(sorted_iters, means, '%s%s' % (colors[i], line_styles[i]), linewidth=linewidth, label='%s' % legend_names[method_name])
+  else:
+    plt.plot(sorted_iters, means, '%s%s%s' % (colors[i], markers[i], line_styles[i]), linewidth=linewidth, label='%s' % legend_names[method_name])
 # Add Nade line.
 nade_mean, nade_sem = get_NADE_nll_mean_and_sem()
-plt.axhline(y=nade_mean, xmin=0, xmax=101, linewidth=1, color = 'k', label='NADE ancestral sampling')
+plt.axhline(y=nade_mean, xmin=0, xmax=101, linewidth=1, color = 'k', label='NADE')
 plt.axhline(y=nade_mean+nade_sem, xmin=0, xmax=101, linewidth=0.5, color = 'k', linestyle='dotted')
 plt.axhline(y=nade_mean-nade_sem, xmin=0, xmax=101, linewidth=0.5, color = 'k', linestyle='dotted')
 
-plt.legend(prop={'size':10})
-plt.xlim(-1, 101)
-plt.xlabel('# of Gibbs steps')
-plt.ylabel('Negative log-likelihood (NLL)')
-title_str = "NLL for different Blocked-Gibbs setups" 
+plt.legend(ncol=2, prop={'size':'large'})
+#plt.legend(loc="upper left", bbox_to_anchor=[0, 1],
+#           ncol=2, shadow=True, title="Legend", fancybox=True)
+plt.gca().get_legend().get_frame().set_linewidth(0.5)
+plt.ylim(0.4, 0.82)
+yticks = np.arange(0.4, 0.9, 0.1)
+ax.set_yticks(yticks)
+ax.set_yticklabels(yticks)
+plt.xlim(0, 101)
+ax.tick_params(axis='both', which='major', labelsize=labelsize)
+ax.tick_params(axis='both', which='minor', labelsize=labelsize)
+plt.xlabel('# of Gibbs steps', fontsize=label_fontsize)
+
 if NOTEWISE:
-  title_str = "Note-wise " + title_str
+  evaluation_type = "Note-wise"
 else:
-  title_str = "Chord-wise " + title_str
+  evaluation_type = "Chord-wise" 
+
+plt.ylabel('%s NLL' % evaluation_type, fontsize=label_fontsize)
+#plt.ylabel('%s negative log-likelihood (NLL)' % evaluation_type, fontsize=label_fontsize)
+
+if plot_type == COMPARE_BERNOULLI:
+  title_str = "Comparing sample quality" # from Gibbs between \ndifferent expected context sizes and types" 
+else:
+  title_str = "Compare different blocked-Gibbs procedures" 
   
-plt.title(title_str)
+plt.title(title_str, fontsize=title_fontsize)
+
 
 if NOTEWISE:
   plot_fpath = get_fpath_wrapper('nll_curve-notewise', 'png')
@@ -139,7 +191,7 @@ if NOTEWISE:
 else:
   plot_fpath = get_fpath_wrapper('nll_curve-chordwise', 'pdf')
 print 'Saving plot to', plot_fpath
-plt.savefig(plot_fpath)
+plt.savefig(plot_fpath, bbox_inches='tight')
 
 
 
