@@ -47,10 +47,9 @@ def get_input():
   pianoroll = encoder.encode(seq)
   return pianoroll
 
-def get_process():
+def get_npz_data():
   fpath = '/Tmp/huangche/new_generation/fromscratch_balanced_by_scaling_init=bach_Gibbs-num-steps-0--masker-None--schedule-ConstantSchedule-None---sampler-SequentialSampler-temperature-1e-05--_20161121235937_1.03min.npz'
   data = np.load(fpath)
-
   pianorolls = data["pianorolls"]
   predictions = data["predictions"]
   masks = data["masks"]
@@ -59,9 +58,66 @@ def get_process():
   S, B, T, P, I = pianorolls.shape
   
   # Take the first one in the batch
-  rolls = pianorolls[:, 0, :, :, :]
-  predictions = predictions[:, 0, :, :, :]
+  batch_idx = 0
+  rolls = pianorolls[:, batch_idx, :, :, :]
+  masks = masks[:, batch_idx, :, :, :]
+  predictions = predictions[:, batch_idx, :, :, :]
+  return rolls, masks, predictions
+
+
+def plot_fancy_pianoroll(ax, T, pitch_lb, pitch_ub, roll, proll, prediction, context, roll, step, is_subplot):
+  # with predictions
+
+  # set style of pianoroll lines
+  set_pianoroll_style(ax, T, pitch_lb=pitch_lb, pitch_ub=pitch_ub, is_subplot=True)
+
+  # plot context
+  plot_pianoroll_with_colored_voices(ax, context)
   
+  # plot blankout
+  #plot_pianoroll_with_colored_voices(ax, blankouts, empty_boxes=True)
+
+  # plot prediction
+  plot_pianoroll_with_colored_voices(ax, prediction, imshow=True, plot_boxes=False)
+
+  # plot generated
+  plot_pianoroll_with_colored_voices(ax, proll - context, colors=GENERATED_COLORS)
+
+  # plot current step
+  plot_pianoroll_with_colored_voices(ax, roll - proll, colors=GENERATED_COLORS, empty_boxes=True)
+
+  ax.set_title('Step %d' % (step-2))
+
+
+def plot_mask_prediction_pianorolls():
+  rolls, masks, predictions = get_npz_data()
+  S, B, T, P, I = rolls.shape
+  original = rolls[0]
+  context = rolls[1]
+  blankouts = original - context
+  plot_steps = [2, 3, 6, 18, S-1]  
+  figs, axes = plt.subplots(5, 3, figsize=(11, 6))
+  print 'axes.shape', axes.shape  
+  pitch_lb=43 #36 #43
+  pitch_ub=72 #89 #77
+
+  # plot mask
+
+  # plot predictions
+  for i, step in enumerate(plot_steps):
+    ax = axes[i, 1]
+    roll = rolls[step]
+    proll = rolls[step-1]
+    prediction = predictions[step] 
+    
+    plot_fancy_pianoroll(ax, T, pitch_lb, pitch_ub, roll, proll, prediction, context, roll, step, is_subplot)
+
+  # plot realizations
+
+  
+    
+def get_process():
+  rolls, masks, predictions = get_npz_data()
   original = rolls[0]
   context = rolls[1]
   blankouts = original - context
@@ -79,25 +135,7 @@ def get_process():
     proll = rolls[step-1]
     prediction = predictions[step] 
 
-    # set style of pianoroll lines
-    set_pianoroll_style(ax, T, pitch_lb=pitch_lb, pitch_ub=pitch_ub, is_subplot=True)
-
-    # plot context
-    plot_pianoroll_with_colored_voices(ax, context)
-    
-    # plot blankout
-    #plot_pianoroll_with_colored_voices(ax, blankouts, empty_boxes=True)
-
-    # plot prediction
-    plot_pianoroll_with_colored_voices(ax, prediction, imshow=True, plot_boxes=False)
-
-    # plot generated
-    plot_pianoroll_with_colored_voices(ax, proll - context, colors=GENERATED_COLORS)
-
-    # plot current step
-    plot_pianoroll_with_colored_voices(ax, roll - proll, colors=GENERATED_COLORS, empty_boxes=True)
-
-    ax.set_title('Step %d' % (step-2))
+    plot_fancy_pianoroll(ax, T, pitch_lb, pitch_ub, roll, proll, prediction, context, roll, step, is_subplot)
 
  
   # Showing the original.
@@ -243,21 +281,31 @@ GENERATED_COLORS = np.array([[  4.17642000e-01,   5.64000000e-04,   6.58390000e-
 CONTEXT_COLORS = GENERATED_COLORS
 
 def plot_pianoroll_with_colored_voices(axis, pianoroll, colors=CONTEXT_COLORS, imshow=False, plot_boxes=True, empty_boxes=False):
-    T, P, I = pianoroll.shape
+  T, P, I = pianoroll.shape
+  print T, P, I
+  if imshow:
+    axis.imshow(pianoroll.sum(axis=2).T, aspect='equal', cmap='Greys',
+      origin='lower', interpolation='none')
+  if plot_boxes:
+    for i in range(I):
+      if empty_boxes:
+        for t, p in zip(*np.where(pianoroll[:, :, i])):
+          axis.add_patch(Rectangle((t-.5, p-.5), 1, 1,
+               facecolor='none', edgecolor=colors[i], alpha=0.5))
+      else:  
+        for t, p in zip(*np.where(pianoroll[:, :, i])):
+          axis.add_patch(Rectangle((t-.5, p-.5), 1, 1,
+               facecolor=colors[i], edgecolor='none'))
+
+
+def plot_masks(ax, mask):
+    """Show instrument by time mask."""
+    T, P, I = mask.shape
     print T, P, I
-    if imshow:
-      axis.imshow(pianoroll.sum(axis=2).T, aspect='equal', cmap='Greys',
-        origin='lower', interpolation='none')
-    if plot_boxes:
-      for i in range(I):
-        if empty_boxes:
-          for t, p in zip(*np.where(pianoroll[:, :, i])):
-            axis.add_patch(Rectangle((t-.5, p-.5), 1, 1,
-                 facecolor='none', edgecolor=colors[i], alpha=0.5))
-        else:  
-          for t, p in zip(*np.where(pianoroll[:, :, i])):
-            axis.add_patch(Rectangle((t-.5, p-.5), 1, 1,
-                 facecolor=colors[i], edgecolor='none'))
+    mask = np.clip(mask.sum(axis=1)0, 1)
+    # Instrument by time
+    axis.imshow(mask.T, aspect='equal', cmap='Greys', origin='lower', interpolation='none')
+
 
 def set_pianoroll_style(axis, T, pitch_lb=36, pitch_ub=89, is_subplot=False):
   total_time = T
