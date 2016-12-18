@@ -147,7 +147,6 @@ class IndependentSampler(object):
 
   def __call__(self, wmodel, pianorolls, masks):
     print 'independent sampling...'
-    # TODO: intermediates not yet used
     input_data = np.asarray([
         mask_tools.apply_mask_and_stack(pianoroll, mask)
         for pianoroll, mask in zip(pianorolls, masks)])
@@ -159,7 +158,7 @@ class IndependentSampler(object):
     assert (samples * masks).sum() == masks.max(axis=2).sum()
     #assert samples.sum() == B * T * I
     pianorolls = np.where(masks, samples, pianorolls)
-    return pianorolls
+    yield pianorolls, masks, predictions
 
   def __repr__(self):
     return "IndependentSampler(temperature=%r)" % self.temperature
@@ -192,14 +191,11 @@ class SequentialSampler(object):
       selection = selection.reshape([B, T, 1, I])
 
       pianorolls = np.where(selection, samples, pianorolls)
+      previous_masks = masks.copy()
       masks = np.where(selection, 0., masks)
-      
-      if intermediates is not None:
-        intermediates['predictions'].append(predictions.copy())
-        intermediates['pianorolls'].append(pianorolls.copy())
-        intermediates['masks'].append(masks.copy())
-    assert masks.sum() == 0
-    return pianorolls
+      yield pianorolls, previous_masks, predictions  
+    #assert masks.sum() == 0
+    #return pianorolls
 
   def __repr__(self):
     return "SequentialSampler(temperature=%r)" % self.temperature
@@ -230,15 +226,15 @@ class BisectingSampler(object):
       bisection[b, t, :, i] = 1.
 
     # sample one half independently
-    ind_pianorolls = self.independent_sampler(wmodel, pianorolls, masks)
+    ind_pianorolls, _, predictions = self.independent_sampler(wmodel, pianorolls, masks)
     pianorolls = np.where(bisection, ind_pianorolls, pianorolls)
 
     if bisection_size == mask_size:
-      return pianorolls
+      yield pianorolls, masks, predictions
 
     # sample the other half by recursive bisection
     pianorolls = self(wmodel, pianorolls, np.where(bisection, 0., masks))
-    return pianorolls
+    yield pianorolls, masks, predictions
 
   def __repr__(self):
     return "BisectingSampler(temperature=%r)" % self.independent_sampler.temperature
@@ -280,10 +276,12 @@ class Gibbs(object):
     for s in range(self.num_steps):
       pm = self.schedule(s, self.num_steps)
       masks = self.masker(pianorolls.shape, pm)
-      pianorolls = self.sampler(wmodel, pianorolls, masks)
-      assert (pianorolls * masks).sum() == masks.max(axis=2).sum()
-      #assert pianorolls.sum() == B * T * I
-      yield pianorolls, masks
+      #pianorolls = self.sampler(wmodel, pianorolls, masks)
+      #assert (pianorolls * masks).sum() == masks.max(axis=2).sum()
+      ##assert pianorolls.sum() == B * T * I
+      #yield pianorolls, masks
+      for pianorolls, masks, predictions in self.sampler(wmodel, pianorolls, masks):
+        yield pianorolls, masks, predictions
 
   def __repr__(self):
     return ("Gibbs(num_steps=%r, masker=%r, schedule=%r, sampler=%r)"
@@ -380,11 +378,10 @@ def main(unused_argv):
                 masker=masker,
                 sampler=sampler,
                 schedule=schedule)
-  for pianorolls, masks in gibbs(wmodel, pianorolls):
+  for pianorolls, masks, predictions in gibbs(wmodel, pianorolls):
     intermediates["pianorolls"].append(pianorolls.copy())
     intermediates["masks"].append(masks.copy())
-    if 'predictions' in intermediates:
-      intermediates["predictions"].append(np.zeros_like(pianorolls))
+    intermediates["predictions"].append(predictions.copy())
 
     sys.stderr.write(".")
     sys.stderr.flush()
