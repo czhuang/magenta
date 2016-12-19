@@ -43,14 +43,15 @@ tf.app.flags.DEFINE_string(
     'prime_fpath', '/u/huangche/data/bach/bwv103.6.tfrecord',
     'Path to the Midi or MusicXML file that is used as a prime.')
 
+#    'validation_set_dir', '/Tmp/huangche/data/bach/qbm120/instrs=4_duration=0.125_sep=True',
 tf.app.flags.DEFINE_string(
-    'validation_set_dir', '/Tmp/huangche/data/bach/qbm120/instrs=4_duration=0.125_sep=True',
+    'validation_set_dir', '/data/lisatmp4/huangche/data/bach/qbm120/instrs=4_duration=0.125_sep=True',
     'Directory for validation set to use in batched prediction')
 
 #    'generation_output_dir', '/Tmp/huangche/generation',
 #    'generation_output_dir', '/data/lisatmp4/huangche/new_generated',
 tf.app.flags.DEFINE_string(
-    'generation_output_dir', '/Tmp/huangche/new_generation/',
+    'generation_output_dir', '/data/lisatmp4/huangche/new_generated',
     'Output directory for storing the generated Midi.')
 
 AutofillStep = namedtuple('AutofillStep', ['prediction', 'change_to_context',

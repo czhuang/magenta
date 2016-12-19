@@ -23,10 +23,11 @@ from magenta.models.basic_autofill_cnn.hparams_tools import Hyperparameters
 
 # '/u/huangche/data/bach/instrs=4_duration=0.250_sep=True',
 #    '/u/huangche/data/bach/qbm120/instrs=4_duration=0.125_sep=True',
+#    'input_dir', '/Tmp/huangche/data/bach/qbm120/instrs=4_duration=0.125_sep=True',
 FLAGS = tf.app.flags.FLAGS
 # TODO(annahuang): Set the default input and output_dir to None for opensource.
 tf.app.flags.DEFINE_string(
-    'input_dir', '/Tmp/huangche/data/bach/qbm120/instrs=4_duration=0.125_sep=True',
+    'input_dir', '/data/lisatmp4/huangche/data/bach/qbm120/instrs=4_duration=0.125_sep=True',
     'Path to the directory that holds the train, valid, test TFRecords.')
 tf.app.flags.DEFINE_string('run_dir', '/u/huangche/tf_logss',
                            'Path to the directory where checkpoints and '
