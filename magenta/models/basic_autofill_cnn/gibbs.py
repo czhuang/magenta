@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 import os, sys, time
 from datetime import datetime
 import numpy as np, tensorflow as tf
@@ -85,21 +87,26 @@ class BernoulliMasker(object):
     return "BernoulliMasker()"
 
 class BernoulliInpaintingMasker(object):
-  def __init__(self, context_kind, shape):
+  def __init__(self, context_kind):
     self.context_kind = context_kind
-    self.shape = shape
+    self._context_masks = None
+
+  def context_masks(self, shape):
+    # Only set context masks once.  Afterwards in Gibbs they are kept fixed.
+    if self._context_masks is not None:
+      return self._context_masks
     try:
-      masker = getattr(self.__class__, "get_%s_masks" % context_kind)
+      masker = getattr(self.__class__, "get_%s_masks" % self.context_kind)
     except KeyError:
-      assert False, "ERROR: %s context_kind is not implemented" % context_kind
-    self.context_masks = masker(shape)
+      assert False, "ERROR: %s context_kind is not implemented" % self.context_kind
+    self._context_masks = masker(shape)
+    return self._context_masks
 
   def __call__(self, shape, pm=None):
-    assert shape == self.shape
-    return sample_masks_within_masks(shape, self.context_masks, pm=pm)
+    return sample_masks_within_masks(shape, self.context_masks(shape), pm=pm)
 
   def __repr__(self):
-    return "BernoulliInpaintingMasker(context_kind=%r, shape=%r)" % (self.context_kind, self.shape)
+    return "BernoulliInpaintingMasker(context_kind=%r)" % (self.context_kind)
 
   @staticmethod
   def get_bernoulli_masks(shape):
@@ -290,6 +297,8 @@ class Gibbs(object):
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string("model_name", None, "model name")
 tf.app.flags.DEFINE_integer("num_steps", None, "number of gibbs steps to take")
+tf.app.flags.DEFINE_string("generation_type", None, "unconditioned, inpainting")
+tf.app.flags.DEFINE_string("context_source", "bach", "bach")
 tf.app.flags.DEFINE_string("sampler", None, "independent or sequential or bisecting")
 tf.app.flags.DEFINE_string("masker", None, "bernoulli or contiguous or bernoulli_inpainting")
 tf.app.flags.DEFINE_string("context_kind", None, "bernoulli, harmonization, transition, inner_voices, tenor")
@@ -299,7 +308,7 @@ tf.app.flags.DEFINE_float("schedule_yao_pmax", 0.9, "")
 tf.app.flags.DEFINE_float("schedule_yao_alpha", 0.7, "")
 tf.app.flags.DEFINE_float("schedule_constant_p", None, "")
 tf.app.flags.DEFINE_float("temperature", 1, "softmax temperature")
-tf.app.flags.DEFINE_string("initialization", "random", "how to obtain initial piano roll; random or independent or nade or bach")
+tf.app.flags.DEFINE_string("initialization", "random", "how to obtain initial piano roll; random or independent or nade")
 tf.app.flags.DEFINE_integer("piece_length", 32, "num of time steps in generated piece")
 # already defined in generate_tools.py
 #tf.app.flags.DEFINE_string(
@@ -309,11 +318,27 @@ tf.app.flags.DEFINE_integer("piece_length", 32, "num of time steps in generated 
 def main(unused_argv):
   timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
+  if FLAGS.generation_type is None:
+    assert False, "Please specify generation type: unconditioned or inpainting"
+
+  # Setup init sampler.
+  # TODO: not yet supporting random init here.
+  if FLAGS.initialization == 'random':
+    init_sampler = None
+  else:
+    init_sampler = dict(
+        independent=IndependentSampler,
+        sequential=SequentialSampler,
+        bisecting=BisectingSampler
+    )[FLAGS.initialization](temperature=FLAGS.temperature)
+  
+  # Setup sampler.
   sampler = dict(
       independent=IndependentSampler,
       sequential=SequentialSampler,
       bisecting=BisectingSampler
   )[FLAGS.sampler](temperature=FLAGS.temperature)
+  # Setup schedule.
   if FLAGS.schedule == "yao":
     schedule = YaoSchedule(pmin=FLAGS.schedule_yao_pmin,
                         pmax=FLAGS.schedule_yao_pmax,
@@ -322,70 +347,80 @@ def main(unused_argv):
     schedule = ConstantSchedule(p=FLAGS.schedule_constant_p)
   else:
     assert False
-
-  wmodel = retrieve_model_tools.retrieve_model(model_name=FLAGS.model_name)
-
-  B, T, P, I = [100, FLAGS.piece_length, 53, 4]
-  print B, T, P, I
-  if FLAGS.initialization == "random":
-    pianorolls = generate_tools.sample_onehot(1 + np.random.rand(B, T, P, I), axis=2)
-  elif FLAGS.initialization == "independent":
-    pianorolls = np.zeros([B, T, P, I], dtype=np.float32)
-    masks = np.ones_like(pianorolls)
-    pianorolls = IndependentSampler(temperature=FLAGS.temperature)(wmodel, pianorolls, masks)
-  elif FLAGS.initialization == "nade":
-    pianorolls = np.zeros([B, T, P, I], dtype=np.float32)
-    masks = np.ones_like(pianorolls)
-    pianorolls = SequentialSampler(temperature=FLAGS.temperature)(wmodel, pianorolls, masks)
-  elif "bach" in FLAGS.initialization:
-    print "Loading Bach chorales..."
-    pianorolls = np.asarray(list(data_tools.get_pianoroll_from_note_sequence_data(
-        FLAGS.validation_set_dir, "valid", FLAGS.piece_length)))
-  else:
-    assert False
-
+ 
+  # Setup masker. 
   if FLAGS.masker is None:
     masker = None 
   else:
     masker = dict(bernoulli=BernoulliMasker(),
                   contiguous=ContiguousMasker(),
-                  bernoulli_inpainting=BernoulliInpaintingMasker(FLAGS.context_kind,
-                                                                 pianorolls.shape)
+                  bernoulli_inpainting=BernoulliInpaintingMasker(FLAGS.context_kind)
     )[FLAGS.masker]
 
-  intermediates = dict(pianorolls=[pianorolls.copy()],
-                       masks=[np.zeros(pianorolls.shape, dtype=np.float32)])
+  wmodel = retrieve_model_tools.retrieve_model(model_name=FLAGS.model_name)
 
-  # if doing inpainting, get initial masks and initialize masked-out portion
-  if FLAGS.context_kind == "harmonization":
-    # track predictions in addition to pianorolls and masks
-    intermediates["predictions"] = [np.zeros_like(intermediates["pianorolls"])]
+  B, T, P, I = [100, FLAGS.piece_length, 53, 4]
+  print B, T, P, I
+  
+  intermediates = defaultdict(list)
 
+  # Sets up context and blank slate.  
+  if FLAGS.generation_type == "inpainting":
+    if FLAGS.context_source == "bach":
+      print "Loading Bach chorales..."
+      pianorolls = np.asarray(list(data_tools.get_pianoroll_from_note_sequence_data(
+          FLAGS.validation_set_dir, "valid", FLAGS.piece_length)))
+      # Logs initial complete bach chorale.
+      intermediates["pianorolls"].append(pianorolls.copy())
+      intermediates["masks"].append(np.zeros_like(pianorolls))
+      intermediates["predictions"].append(np.zeros_like(pianorolls))
+    else:
+      assert False, 'context source option %s not yet supported' % FLAGS.context_source
     # if doing inpainting, masker must expose inpainting masks
-    masks = masker.context_masks
+    # if doing inpainting, get initial masks and initialize masked-out portion
+    masks = masker.context_masks(pianorolls.shape)
     pianorolls = np.asarray([mask_tools.apply_mask(pianoroll, mask)
                              for pianoroll, mask in zip(pianorolls, masks)])
-
-    # sample once to populate masked-out portion
-    pianorolls = sampler(wmodel, pianorolls, masks)
+    # Logs context.
     intermediates["pianorolls"].append(pianorolls.copy())
     intermediates["masks"].append(masks.copy())
     intermediates["predictions"].append(np.zeros_like(pianorolls))
+  elif FLAGS.generation_type == "unconditioned":
+    pianorolls = np.zeros([B, T, P, I], dtype=np.float32)
+    masks = np.ones_like(pianorolls)
+  else:
+    assert False, 'Generation type %s not yet supported.' % FLAGS.generation_type  
 
+  if FLAGS.initialization == "random":
+    # TODO: not yet support inpainting
+    pianorolls = generate_tools.sample_onehot(1 + np.random.rand(B, T, P, I), axis=2)
+    intermediates["pianorolls"].append(pianorolls.copy())
+    intermediates["masks"].append(masks.copy())
+    intermediates["predictions"].append(np.zeros_like(pianorolls))
+  else: 
+    # sample once to populate masked-out portion
+    for pianorolls, masks, predictions in init_sampler(wmodel, pianorolls, masks):
+      intermediates["pianorolls"].append(pianorolls.copy())
+      intermediates["masks"].append(masks.copy())
+      intermediates["predictions"].append(predictions.copy())
+  
   start_time = time.time()
 
   gibbs = Gibbs(num_steps=FLAGS.num_steps,
                 masker=masker,
                 sampler=sampler,
                 schedule=schedule)
+  iter_idx = 0
   for pianorolls, masks, predictions in gibbs(wmodel, pianorolls):
+    print iter_idx,
     intermediates["pianorolls"].append(pianorolls.copy())
     intermediates["masks"].append(masks.copy())
     intermediates["predictions"].append(predictions.copy())
-
-    sys.stderr.write(".")
-    sys.stderr.flush()
-  sys.stderr.write("\n")
+    iter_idx += 1
+    #sys.stderr.write(".")
+    #sys.stderr.flush()
+  #sys.stderr.write("\n")
+  print
 
   time_taken = (time.time() - start_time) / 60.0 #  In minutes.
   label = "".join(c if c.isalnum() else "" for c in repr(gibbs))
