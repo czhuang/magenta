@@ -16,7 +16,7 @@ tf.app.flags.DEFINE_string('plot_dir', '/u/huangche/plots/',
 #--------------
 # For plotting Bach chorale (prime piece) on poster
 def get_sequence():
-  from magenta.lib.note_sequence_io import note_sequence_record_iterator
+  from magenta.music.note_sequence_io import note_sequence_record_iterator
   fpath = '/data/lisatmp4/huangche/data/bach/bwv103.6.tfrecord'
   return list(note_sequence_record_iterator(fpath))[0]
 

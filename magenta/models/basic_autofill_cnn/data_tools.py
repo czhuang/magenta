@@ -5,7 +5,7 @@ import os
 import numpy as np
 import tensorflow as tf
 
-from magenta.lib.note_sequence_io import note_sequence_record_iterator
+from magenta.music.note_sequence_io import note_sequence_record_iterator
 from magenta.protobuf import music_pb2
 
 from magenta.models.basic_autofill_cnn import mask_tools

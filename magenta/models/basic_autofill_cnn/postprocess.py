@@ -6,8 +6,8 @@ import tensorflow as tf
 import numpy as np
 
 from magenta.protobuf import music_pb2
-from magenta.lib.midi_io import sequence_proto_to_midi_file
-from magenta.lib.note_sequence_io import NoteSequenceRecordWriter
+from magenta.music.midi_io import sequence_proto_to_midi_file
+from magenta.music.note_sequence_io import NoteSequenceRecordWriter
 
 from magenta.models.basic_autofill_cnn.generate_tools import AutofillStep
 from magenta.models.basic_autofill_cnn.plot_tools import plot_steps
