@@ -29,11 +29,7 @@ FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string(
     'input_dir', '/data/lisatmp4/huangche/data/bach/qbm120/instrs=4_duration=0.125_sep=True',
     'Path to the directory that holds the train, valid, test TFRecords.')
-tf.ap.flags.DEFINE_string('dataset', '4_part_JSB_Chorales', '4part_JSB_Chorales,  JSB_Chorales, MuseData, Nottingham, Piano-midi.de')
-tf.app.flags.DEFINE_bool('separate_instruments', True,
-                         'Separate instruments into different input feature'
-                         'maps or not.')
-tf.app.flags.DEFINE_string('run_dir', '/u/huangche/tf_logss',
+tf.app.flags.DEFINE_string('run_dir', '/u/huangche/tf_logs_sigmoids',
                            'Path to the directory where checkpoints and '
                            'summary events will be saved during training and '
                            'evaluation. Multiple runs can be stored within the '
@@ -43,6 +39,19 @@ tf.app.flags.DEFINE_string('run_dir', '/u/huangche/tf_logss',
 tf.app.flags.DEFINE_bool('log_progress', True,
                          'If False, do not log any checkpoints and summary'
                          'statistics.')
+
+# Dataset.
+tf.app.flags.DEFINE_string('dataset', '4_part_JSB_Chorales', '4part_JSB_Chorales,' 
+                           ' JSB_Chorales, MuseData, Nottingham, Piano-midi.de')
+# Later on have a lookup table for different datasets.
+tf.app.flags.DEFINE_integer('num_instruments', 4, 
+                        'Maximum number of instruments that appear in this dataset.')
+tf.app.flags.DEFINE_bool('separate_instruments', True,
+                         'Separate instruments into different input feature'
+                         'maps or not.')
+tf.app.flags.DEFINE_integer('crop_piece_len', 64, 'The number of time steps included in a crop')
+
+# Model architecture.
 tf.app.flags.DEFINE_string('model_name', 'DeepStraightConvSpecs',
                            'A string specifying the name of the model.  The '
                            'choices are currently "PitchLocallyConnectedConvSpecs", '
@@ -54,27 +63,26 @@ tf.app.flags.DEFINE_integer('num_layers', 64,
 tf.app.flags.DEFINE_integer('num_filters', 128,
                             'The number of filters for each convolutional '
                             'layer.')
-tf.app.flags.DEFINE_integer('batch_size', 20,
-                            'The batch size training and validation the model.')
 # TODO(annahuang): Some are meant to be booleans.
 tf.app.flags.DEFINE_integer('use_residual', 1,
                             '1 specifies use residual, while 0 specifies not '
                             'to.')
-tf.app.flags.DEFINE_integer('num_epochs', 0,
-                            'The number of epochs to train the model. Default '
-                            'is 0, which means to run until terminated '
-                            'manually.')
-tf.app.flags.DEFINE_integer('save_model_secs', 30,
-                            'The number of seconds between saving each '
-                            'checkpoint.')
-tf.app.flags.DEFINE_string('maskout_method', 'random_multiple_instrument_time', 
+tf.app.flags.DEFINE_integer('batch_size', 20,
+                            'The batch size training and validation the model.')
+# Mask related.
+tf.app.flags.DEFINE_string('maskout_method', 'balanced_by_scaling', 
                            "The choices include: 'random_all_time_instrument', "
                            "'random_patches', 'random_pitch_range',"
                            'random_time_range, random_multiple_instrument_time, '
                            'random_multiple_instrument_time,'
                            'random_easy, random_medium, random_hard,'
                            'chronological_ti, chronological_it, fixed_order, '
-                           'balanced, and balanced_by_scaling (which invokes gradient rescaling as per NADE).')
+                           'balanced, and balanced_by_scaling (which '
+                           'invokes gradient rescaling as per NADE).')
+tf.app.flags.DEFINE_bool('mask_indicates_context', True, 
+                         'Feed inverted mask into convnet so that zero-padding makes sense')
+tf.app.flags.DEFINE_bool('optimize_mask_only', False, 'optimize masked predictions only')
+# Data Augmentation.
 tf.app.flags.DEFINE_integer('augment_by_transposing', 0, 'If true during '
                             'training shifts each data point by a random '
                             'interval between -5 and 6 ')
@@ -83,12 +91,17 @@ tf.app.flags.DEFINE_integer('augment_by_halfing_doubling_durations', 0, 'If '
                             'or halve durations or stay the same.  The former '
                             'two options are only available if they do not '
                             'go outside of the original set of durations.')
-
-tf.app.flags.DEFINE_bool('mask_indicates_context', True, 'Feed inverted mask into convnet so that zero-padding makes sense')
-tf.app.flags.DEFINE_bool('optimize_mask_only', False, 'optimize masked predictions only')
+# Denoise mode.
 tf.app.flags.DEFINE_bool('denoise_mode', False, 'Instead of blankout, randomly add perturb noise.  Hence instead of inpainting, model learns to denoise.')
 tf.app.flags.DEFINE_bool('corrupt_ratio', 0.5, 'Ratio to blankout or perturb in case of denoising.')
-
+# Run parameters.
+tf.app.flags.DEFINE_integer('num_epochs', 0,
+                            'The number of epochs to train the model. Default '
+                            'is 0, which means to run until terminated '
+                            'manually.')
+tf.app.flags.DEFINE_integer('save_model_secs', 30,
+                            'The number of seconds between saving each '
+                            'checkpoint.')
 
 def run_epoch(supervisor,
               sess,
@@ -118,9 +131,9 @@ def run_epoch(supervisor,
   losses_mask = summary_tools.AggregateMean('losses_mask_%s' % experiment_type)
   losses_unmask = summary_tools.AggregateMean('losses_unmasked_%s' %
                                               (experiment_type))
-  if not config.separate_instruments:
-    accuracy_stats = summary_tools.AggregateInOutMaskPredictionPerformanceStats(
-        '%s-prediction' % experiment_type, config.hparams.prediction_threshold)
+  #if not config.separate_instruments:
+  #  accuracy_stats = summary_tools.AggregateInOutMaskPredictionPerformanceStats(
+  #      '%s-prediction' % experiment_type, config.hparams.prediction_threshold)
 
   start_time = time.time()
   for step in range(num_batches):
@@ -150,14 +163,15 @@ def run_epoch(supervisor,
       losses.add(loss * mask_size, mask_size)
     else:
       losses.add(loss, 1)
-  if not config.separate_instruments:
-    accuracy_stats.add(predictions, y, mask)
+  #if not config.separate_instruments:
+  #  accuracy_stats.add(predictions, y, mask)
 
   # Collect run statistics.
-  if not config.separate_instruments:
-    run_stats = accuracy_stats.get_aggregates_stats()
-  else:
-    run_stats = dict()
+  #if not config.separate_instruments:
+  #  run_stats = accuracy_stats.get_aggregates_stats()
+  #else:
+  #  run_stats = dict()
+  run_stats = dict()
   run_stats['loss_mask_%s' % experiment_type] = losses_mask.mean
   run_stats['loss_unmask_%s' % experiment_type] = losses_unmask.mean
   run_stats['loss_total_%s' % experiment_type] = losses_total.mean
@@ -232,25 +246,31 @@ def main(unused_argv):
     tf.logging.fatal('No input directory was provided.')
 
   print FLAGS.maskout_method, 'seperate', FLAGS.separate_instruments
-  print 'FLAGS.augment_by_transposing', FLAGS.augment_by_transposing
+  print 'Augmentation', FLAGS.augment_by_transposing, FLAGS.augment_by_halfing_doubling_durations
 
   # Load hyperparameter settings, configs, and data.
   hparams = Hyperparameters(
+      num_instruments=FLAGS.num_instruments,
+      separate_instruments=FLAGS.separate_instruments,
+      crop_piece_len=FLAGS.crop_piece_len,
       model_name=FLAGS.model_name,
       num_layers=FLAGS.num_layers,
       num_filters=FLAGS.num_filters,
-      batch_size=FLAGS.batch_size,
       use_residual=FLAGS.use_residual,
+      batch_size=FLAGS.batch_size,
       mask_indicates_context=FLAGS.mask_indicates_context,
-      denoise_mode=FLAGS.denoise_mode,
-      corrupt_ratio=FLAGS.corrupt_ratio,
       optimize_mask_only=FLAGS.optimize_mask_only,
       augment_by_transposing=FLAGS.augment_by_transposing,
       augment_by_halfing_doubling_durations=FLAGS.
-      augment_by_halfing_doubling_durations)
+      augment_by_halfing_doubling_durations,
+      denoise_mode=FLAGS.denoise_mode,
+      corrupt_ratio=FLAGS.corrupt_ratio)
 
+  # TODO: Is it possible to remove config (and directly refer to mask just through name)
+  # or at least remove the separate_instruments, num_instruments from config to avoid duplication.
   config = config_tools.PipelineConfig(hparams, FLAGS.maskout_method,
-                                       FLAGS.separate_instruments)
+                                       FLAGS.separate_instruments, FLAGS.num_instruments)
+  print 'after config', hparams.input_depth, hparams.output_depth
   # TODO(annahuang): Use queues.
   train_data = list(data_tools.get_note_sequence_data(FLAGS.input_dir, 'train'))
   valid_data = list(data_tools.get_note_sequence_data(FLAGS.input_dir, 'valid'))

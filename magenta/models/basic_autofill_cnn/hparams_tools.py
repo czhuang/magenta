@@ -12,13 +12,15 @@ class Hyperparameters(object):
       # Data augmentation.
       augment_by_transposing=0,
       augment_by_halfing_doubling_durations=0,
-      batch_size=20,
       corrupt_ratio=0.25,
       # Input dimensions.
+      batch_size=20,
       num_pitches=53,  #53 + 11
-      crop_piece_len=128, #64, #32,
-      input_depth=8,
-      output_depth=4,
+      crop_piece_len=64, #128, #64, #32,
+      num_instruments=4,
+      separate_instruments=True,
+      input_depth=None, #8,
+      output_depth=None, #4,
       # Batch norm parameters.
       batch_norm=True,
       batch_norm_variance_epsilon=1e-7,
@@ -66,6 +68,12 @@ class Hyperparameters(object):
         value = init_hparams[key]
       setattr(self, key, value)
 
+    if self.separate_instruments:
+      self.input_depth = self.num_instruments * 2
+    else:
+      self.input_depth = 1 * 2
+    self.output_depth = self.input_depth // 2    
+
     # Check if pitch range is expanded if data augmentation on pitch is desired.
     if self.augment_by_transposing and self.num_pitches != 53 + 11:
       self.num_pitches = 53 + 11
@@ -99,8 +107,18 @@ class Hyperparameters(object):
     # Filter out some parameters so that string repr won't be too long for
     # directory name.
     keys_to_filter_out = [
-        'batch_size', 'use_softmax_loss', ' instr_sep', 'border', 'num_layers',
+        'batch_size', 'use_softmax_loss', 'instr_sep', 'border', 'num_layers',
         'input_depth', 'output_depth', 'model_name',
+        'batch_norm_variance_epsilon', 'batch_norm_gamma', 'batch_norm',
+        'init_scale', 'crop_piece_len', 'learning_rate',
+        'prediction_threshold', 'optimize_mask_only', 'conv_arch',
+        'augment_by_halfing_doubling_durations', 'augment_by_transposing',
+        'mask_indicates_context',
+    ]
+    # Want to show 'input_depth'
+    keys_to_filter_out = [
+        'batch_size', 'use_softmax_loss', 'border', 'num_layers',
+        'output_depth', 'model_name',
         'batch_norm_variance_epsilon', 'batch_norm_gamma', 'batch_norm',
         'init_scale', 'crop_piece_len', 'learning_rate',
         'prediction_threshold', 'optimize_mask_only', 'conv_arch',
@@ -153,6 +171,43 @@ class ConvArchitecture(object):
       else:
         conv_specs_expanded.append(layer)
     return conv_specs_expanded
+
+
+class DeepStraightConvSpecs(ConvArchitecture):
+  """A convolutional net where each layer has the same number of filters."""
+  model_name = 'DeepStraightConvSpecs'
+
+  def __init__(self, input_depth, num_layers, num_filters, num_pitches, output_depth):
+    print self.model_name, input_depth, output_depth
+    if num_layers < 4:
+      raise ModelMisspecificationError(
+          'The network needs to be at least 4 layers deep, %d given.' %
+          num_layers)
+    super(DeepStraightConvSpecs, self).__init__()
+    self.condensed_specs = [
+        dict(
+            filters=[3, 3, input_depth, num_filters],
+            conv_stride=1,
+            conv_pad='SAME'), (num_layers - 3, dict(
+                filters=[3, 3, num_filters, num_filters],
+                conv_stride=1,
+                conv_pad='SAME')), dict(
+                    filters=[2, 2, num_filters, num_filters],
+                    conv_stride=1,
+                    conv_pad='SAME'), dict(
+                        filters=[2, 2, num_filters, output_depth],
+                        conv_stride=1,
+                        conv_pad='SAME',
+                        activation=lambda x: x)
+    ]
+    self.specs = self.get_spec()
+    assert self.specs
+    if input_depth != 2:
+      self.name_prefix = '%s-multi_instr' % self.model_name
+    else:
+      self.name_prefix = '%s-col_instr' % self.model_name
+    self.name = '%s_depth-%d_filter-%d-%d' % (self.name_prefix, len(self.specs),
+                                              num_filters, num_filters)
 
 
 class PitchLocallyConnectedConvSpecs(ConvArchitecture):
@@ -220,40 +275,6 @@ class PitchFullyConnectedConvSpecs(ConvArchitecture):
     self.name = '%s_depth-%d_filter-%d-%d' % (self.name_prefix, len(self.specs),
                                               num_filters, num_filters)
 
-class DeepStraightConvSpecs(ConvArchitecture):
-  """A convolutional net where each layer has the same number of filters."""
-  model_name = 'DeepStraightConvSpecs'
-
-  def __init__(self, input_depth, num_layers, num_filters, num_pitches, output_depth):
-    if num_layers < 4:
-      raise ModelMisspecificationError(
-          'The network needs to be at least 4 layers deep, %d given.' %
-          num_layers)
-    super(DeepStraightConvSpecs, self).__init__()
-    self.condensed_specs = [
-        dict(
-            filters=[3, 3, input_depth, num_filters],
-            conv_stride=1,
-            conv_pad='SAME'), (num_layers - 3, dict(
-                filters=[3, 3, num_filters, num_filters],
-                conv_stride=1,
-                conv_pad='SAME')), dict(
-                    filters=[2, 2, num_filters, num_filters],
-                    conv_stride=1,
-                    conv_pad='SAME'), dict(
-                        filters=[2, 2, num_filters, output_depth],
-                        conv_stride=1,
-                        conv_pad='SAME',
-                        activation=lambda x: x)
-    ]
-    self.specs = self.get_spec()
-    assert self.specs
-    if input_depth != 2:
-      self.name_prefix = '%s-multi_instr' % self.model_name
-    else:
-      self.name_prefix = '%s-col_instr' % self.model_name
-    self.name = '%s_depth-%d_filter-%d-%d' % (self.name_prefix, len(self.specs),
-                                              num_filters, num_filters)
 
 
 class DeepStraightConvSpecsWithEmbedding(ConvArchitecture):

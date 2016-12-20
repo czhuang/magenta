@@ -78,10 +78,6 @@ class PipelineConfig(object):
       self.maskout_border = 3
 
     self.separate_instruments = separate_instruments
-    if self.separate_instruments:
-      self.hparams.input_depth = num_instruments * 2
-    else:
-      self.hparams.input_depth = 2
 
     # Log directory name for Tensorflow supervisor.
     self.log_subdir_str = '%s,%s,%s' % (conv_specs_str, str(hparams),
