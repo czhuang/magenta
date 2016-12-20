@@ -25,7 +25,7 @@ py_binary(
     deps = [
         ":create_dataset",
         ":generate_tools",
-        "//magenta/lib:note_sequence_io",
+        "//magenta/music:note_sequence_io",
     ],
 )
 
@@ -36,8 +36,8 @@ py_binary(
         ":data_tools",
         ":test_tools",
         ":seed_tools",
-        "//magenta/lib:note_sequence_io",
-        "//magenta/lib:midi_io",
+        "//magenta/music:note_sequence_io",
+        "//magenta/music:midi_io",
     ],
 )
 
@@ -47,7 +47,7 @@ py_binary(
     deps = [
         ":generate_tools",
         "//magenta/protobuf:music_py_pb2",
-        "//magenta/lib:midi_io",
+        "//magenta/music:midi_io",
     ],
 )
 
@@ -57,9 +57,9 @@ py_binary(
     deps = [
         ":pianorolls_lib",
         ":test_tools",
-        "//magenta/lib:midi_io",
-	"//magenta/lib:music_xml_io",
-        "//magenta/lib:note_sequence_io",
+        "//magenta/music:midi_io",
+	"//magenta/music:music_xml_io",
+        "//magenta/music:note_sequence_io",
     ],
 )
 
@@ -76,9 +76,9 @@ py_binary(
         ":pianorolls_lib",
         ":retrieve_model_tools",
         ":test_tools",
-        "//magenta/lib:midi_io",
-        "//magenta/lib:music_xml_io",
-        "//magenta/lib:note_sequence_io",
+        "//magenta/music:midi_io",
+#        "//magenta/music:music_xml_io",
+        "//magenta/music:note_sequence_io",
     ],
 )
 
@@ -94,7 +94,7 @@ py_binary(
         ":pianorolls_lib",
         ":seed_tools",
         ":retrieve_model_tools",
-        "//magenta/lib:midi_io",
+        "//magenta/music:midi_io",
     ],
 )
 
@@ -110,7 +110,7 @@ py_binary(
         ":seed_tools",
 	":plot_tools",
         ":retrieve_model_tools",
-        "//magenta/lib:midi_io",
+        "//magenta/music:midi_io",
     ],
 )
 
@@ -130,7 +130,7 @@ py_binary(
     srcs = ["pianorolls_lib.py"],
     deps = [
         ":test_tools",
-        "//magenta/lib:midi_io",
+        "//magenta/music:midi_io",
     ],
 )
 
@@ -160,7 +160,7 @@ py_binary(
     deps = [
         ":mask_tools",
         ":pianorolls_lib",
-        "//magenta/lib:note_sequence_io",
+        "//magenta/music:note_sequence_io",
         "//magenta/protobuf:music_py_pb2",
     ],
 )
@@ -209,8 +209,8 @@ py_binary(
 	":mask_tools",
 	":config_tools",
         "//magenta/protobuf:music_py_pb2",
-        "//magenta/lib:midi_io",
-        "//magenta/lib:note_sequence_io",
+        "//magenta/music:midi_io",
+        "//magenta/music:note_sequence_io",
     ],
 )
 
@@ -222,7 +222,7 @@ py_binary(
     ],
     deps = [
         ":pianorolls_lib",
-        "//magenta/lib:note_sequence_io",
+        "//magenta/music:note_sequence_io",
         "//magenta/pipelines:dag_pipeline",
         "//magenta/pipelines:pipeline",
         "//magenta/pipelines:pipelines_common",

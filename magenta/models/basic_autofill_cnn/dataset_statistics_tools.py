@@ -9,7 +9,7 @@ import numpy as np
 import tensorflow as tf
 
 from magenta.models.basic_autofill_cnn import data_tools
-from magenta.models.basic_autofill_cnn import seed_tools
+#from magenta.models.basic_autofill_cnn import seed_tools
 #from magenta.models.basic_autofill_cnn import data_pipeline_tools
 from magenta.models.basic_autofill_cnn import test_tools
 from magenta.models.basic_autofill_cnn import pianorolls_lib
