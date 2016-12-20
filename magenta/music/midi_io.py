@@ -69,6 +69,8 @@ def midi_to_sequence_proto(midi_data):
   # pylint: disable=bare-except
   if isinstance(midi_data, pretty_midi.PrettyMIDI):
     midi = midi_data
+  elif isinstance(midi_data, str):
+    midi = pretty_midi.PrettyMIDI(midi_data)
   else:
     try:
       midi = pretty_midi.PrettyMIDI(StringIO(midi_data))
