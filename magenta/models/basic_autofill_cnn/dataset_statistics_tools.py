@@ -8,6 +8,8 @@ from collections import defaultdict
 import numpy as np
 import tensorflow as tf
 
+import pretty_midi
+
 from magenta.models.basic_autofill_cnn import data_tools
 #from magenta.models.basic_autofill_cnn import seed_tools
 #from magenta.models.basic_autofill_cnn import data_pipeline_tools
@@ -16,6 +18,18 @@ from magenta.models.basic_autofill_cnn import pianorolls_lib
 
 from magenta.music.note_sequence_io import note_sequence_record_iterator, NoteSequenceRecordWriter
 from magenta.music.midi_io import sequence_proto_to_midi_file, midi_to_sequence_proto
+
+
+def read_midi(): 
+  print pretty_midi.__version__
+  fpath = '/data/lisatmp4/huangche/data/Nottingham/train/waltzes_simple_chords_8.mid'
+  fpath = '/data/lisatmp4/huangche/data/Nottingham/train/morris_simple_chords_21.mid'
+  seq = midi_to_sequence_proto(fpath)
+  print len(seq.notes)
+  num_instruments = set(note.instrument for note in seq.notes)
+  num_programs = set(note.program for note in seq.notes)
+  num_parts = set(note.part for note in seq.notes)
+  print num_instruments, num_programs, num_parts
 
 
 def get_note_sequences():
@@ -403,12 +417,12 @@ def main(unused_argv):
   #check_voices()
   #check_tessitura_ordering_hist()
 #  synth_random_crop_from_valid()
-  synth_start_of_note_sequences()
+#  synth_start_of_note_sequences()
 #  rearrange_instruments()
 #  match_dataset_split()
 #  retrieve_nicolas_bach_pickle()
 #  test_get_piece_tensor()
-
+  read_midi()
 
 if __name__ == '__main__':
   tf.app.run()

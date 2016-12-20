@@ -29,6 +29,10 @@ FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string(
     'input_dir', '/data/lisatmp4/huangche/data/bach/qbm120/instrs=4_duration=0.125_sep=True',
     'Path to the directory that holds the train, valid, test TFRecords.')
+tf.ap.flags.DEFINE_string('dataset', '4_part_JSB_Chorales', '4part_JSB_Chorales,  JSB_Chorales, MuseData, Nottingham, Piano-midi.de')
+tf.app.flags.DEFINE_bool('separate_instruments', True,
+                         'Separate instruments into different input feature'
+                         'maps or not.')
 tf.app.flags.DEFINE_string('run_dir', '/u/huangche/tf_logss',
                            'Path to the directory where checkpoints and '
                            'summary events will be saved during training and '
@@ -71,9 +75,6 @@ tf.app.flags.DEFINE_string('maskout_method', 'random_multiple_instrument_time',
                            'random_easy, random_medium, random_hard,'
                            'chronological_ti, chronological_it, fixed_order, '
                            'balanced, and balanced_by_scaling (which invokes gradient rescaling as per NADE).')
-tf.app.flags.DEFINE_bool('separate_instruments', True,
-                         'Separate instruments into different input feature'
-                         'maps or not.')
 tf.app.flags.DEFINE_integer('augment_by_transposing', 0, 'If true during '
                             'training shifts each data point by a random '
                             'interval between -5 and 6 ')
