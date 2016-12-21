@@ -333,11 +333,15 @@ def main(unused_argv):
     )[FLAGS.initialization](temperature=FLAGS.temperature)
   
   # Setup sampler.
-  sampler = dict(
-      independent=IndependentSampler,
-      sequential=SequentialSampler,
-      bisecting=BisectingSampler
-  )[FLAGS.sampler](temperature=FLAGS.temperature)
+  if FLAGS.sampler is None:
+    sampler = None
+  else:
+    sampler = dict(
+        independent=IndependentSampler,
+        sequential=SequentialSampler,
+        bisecting=BisectingSampler
+    )[FLAGS.sampler](temperature=FLAGS.temperature)
+
   # Setup schedule.
   if FLAGS.schedule == "yao":
     schedule = YaoSchedule(pmin=FLAGS.schedule_yao_pmin,
@@ -352,6 +356,7 @@ def main(unused_argv):
   if FLAGS.masker is None:
     masker = None 
   else:
+    # TODO: for NADE, because need context mask, would need to setup a BernoulliInpainting master too.  Should separate these different functions.
     masker = dict(bernoulli=BernoulliMasker(),
                   contiguous=ContiguousMasker(),
                   bernoulli_inpainting=BernoulliInpaintingMasker(FLAGS.context_kind)
