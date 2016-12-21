@@ -25,9 +25,9 @@ from magenta.models.basic_autofill_cnn import retrieve_model_tools
 from magenta.models.basic_autofill_cnn import config_tools
 from magenta.models.basic_autofill_cnn import seed_tools
 #from magenta.models.basic_autofill_cnn.seed_tools import MELODY_VOICE_INDEX
-from magenta.models.basic_autofill_cnn import plot_tools
-from magenta.lib.midi_io import sequence_proto_to_midi_file
-from magenta.lib.note_sequence_io import NoteSequenceRecordWriter
+#from magenta.models.basic_autofill_cnn import plot_tools
+from magenta.music.midi_io import sequence_proto_to_midi_file
+from magenta.music.note_sequence_io import NoteSequenceRecordWriter
 from magenta.protobuf import music_pb2
 
 

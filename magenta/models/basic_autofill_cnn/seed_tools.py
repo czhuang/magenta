@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pylab as plt
 from matplotlib.patches import Rectangle
 import tensorflow as tf
-from magenta.lib.note_sequence_io import note_sequence_record_iterator
+from magenta.music.note_sequence_io import note_sequence_record_iterator
 
 from magenta.models.basic_autofill_cnn import test_tools
 from magenta.models.basic_autofill_cnn import pianorolls_lib
@@ -14,9 +14,9 @@ from magenta.models.basic_autofill_cnn import mask_tools
 from magenta.models.basic_autofill_cnn import config_tools
 from magenta.models.basic_autofill_cnn import data_tools
 from magenta.models.basic_autofill_cnn import mask_tools
-from magenta.lib.midi_io import sequence_proto_to_midi_file
-from magenta.lib.midi_io import midi_to_sequence_proto
-from magenta.lib.music_xml_io import music_xml_to_sequence_proto
+from magenta.music.midi_io import sequence_proto_to_midi_file
+from magenta.music.midi_io import midi_to_sequence_proto
+#from magenta.music.music_xml_io import music_xml_to_sequence_proto
 from magenta.models.basic_autofill_cnn.pianorolls_lib import WOODWIND_QUARTET_PROGRAMS
 
 
@@ -143,7 +143,8 @@ class SeedPianoroll(object):
                          fpath)
     file_extension = os.path.splitext(fpath)[1]
     if file_extension == '.xml' or file_extension == '.mxl':
-      sequence = music_xml_to_sequence_proto(fpath)
+      #sequence = music_xml_to_sequence_proto(fpath)
+      assert False, 'MusicXML priming no longer supported'
     elif file_extension == '.mid' or file_extension == '.midi':
       sequence = midi_to_sequence_proto(fpath)
     elif file_extension == '.tfrecord':
