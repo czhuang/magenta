@@ -143,7 +143,7 @@ def compute_chordwise_loss(wrapped_model, piano_rolls):
   sys.stdout.write("\n")
   return losses
 
-def compute_notewise_loss(wrapped_model, piano_rolls):
+def compute_notewise_loss(wrapped_model, piano_rolls, separate_instruments=True):
   config = wrapped_model.config
   model = wrapped_model.model
   session = wrapped_model.sess
@@ -161,26 +161,41 @@ def compute_notewise_loss(wrapped_model, piano_rolls):
 
     B, T, P, I = xs.shape
     mask = np.ones([B, T, P, I], dtype=np.float32)
+    assert separate_instruments or (not separate_instruments and I == 1)
 
     # each example has its own ordering
-    orders = np.ones([B, 1], dtype=np.int32) * np.arange(T * I, dtype=np.int32)
+    if separate_instruments:
+      D = T * I
+    else:
+      D = T * P
+    orders = np.ones([B, 1], dtype=np.int32) * np.arange(D, dtype=np.int32)
     # yuck
     for i in range(B):
       np.random.shuffle(orders[i])
 
     for j in orders.T:
       # NOTE: j is a vector with an index for each example in the batch
-      t = j // I
-      i = j % I
-  
+      if separate_instruments:
+        t = j // I
+        i = j % I
+      else:
+        t = j // P
+        p = j % P
       input_data = [mask_tools.apply_mask_and_stack(x, m)
                     for x, m in zip(xs, mask)]
       p = session.run(model.predictions,
                       feed_dict={model.input_data: input_data})
-      loss = -np.where(xs[np.arange(B), t, :, i], np.log(p[np.arange(B), t, :, i]), 0).sum(axis=1)
-      #loss = -(np.log(p[np.arange(B), t, :, i]) * xs[np.arange(B), t, :, i]).sum(axis=1)
+      if separate_instruments:
+        loss = -np.where(xs[np.arange(B), t, :, i], np.log(p[np.arange(B), t, :, i]), 0).sum(axis=1)
+        #loss = -(np.log(p[np.arange(B), t, :, i]) * xs[np.arange(B), t, :, i]).sum(axis=1)
+      else:
+        loss = -np.where(xs[np.arange(B), t, p, 0], np.log(p[np.arange(B), t, p, 0]), 0).sum(axis=1)
+        
       losses.append(loss)
-      mask[np.arange(B), t, :, i] = 0
+      if separate_instruments:
+        mask[np.arange(B), t, :, i] = 0
+      else:
+        mask[np.arange(B), t, p, 0] = 0
       assert np.unique(mask.sum(axis=(1, 2, 3))).size == 1
 
       if len(losses) % 100 == 0:
@@ -208,7 +223,10 @@ def main(argv):
     print 'model_name', wrapped_model.config.hparams.model_name
     # TODO: model_name in hparams is the conv spec class name, not retrieve model_name
     #assert wrapped_model.config.hparams.model_name == FLAGS.model_name
-    fn(wrapped_model, piano_rolls)
+    if 'sigmoid' in FLAGS.model_name:
+      fn(wrapped_model, piano_rolls, False)
+    else:
+      fn(wrapped_model, piano_rolls, True)
     print "%s done" % wrapped_model.config.hparams.model_name
   except:
     exc_type, exc_value, exc_traceback = sys.exc_info()

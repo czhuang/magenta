@@ -29,7 +29,7 @@ FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string(
     'input_dir', '/data/lisatmp4/huangche/data/bach/qbm120/instrs=4_duration=0.125_sep=True',
     'Path to the directory that holds the train, valid, test TFRecords.')
-tf.app.flags.DEFINE_string('run_dir', '/u/huangche/tf_logs_sigmoids',
+tf.app.flags.DEFINE_string('run_dir', '/u/huangche/logs',
                            'Path to the directory where checkpoints and '
                            'summary events will be saved during training and '
                            'evaluation. Multiple runs can be stored within the '
@@ -151,7 +151,9 @@ def run_epoch(supervisor,
 
     (predictions, loss, loss_total, loss_mask, mask_size, mask, loss_unmask,
      unmask_size, learning_rate, lossmask, _) = results
-
+    #print 'predictions', np.sum(predictions) / np.product(predictions.shape)
+    #print 'mask_sizes', mask_size, unmask_size, '%.4f, %.4f, %.4f' % (loss, loss_total, loss_mask)
+ 
     # Aggregate performances.
     losses_total.add(loss_total, 1)
     # Multiply the mean loss_mask by mask_size for aggregation as the mask size

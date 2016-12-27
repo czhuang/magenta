@@ -38,7 +38,8 @@ class Hyperparameters(object):
       optimize_mask_only=False,
       use_softmax_loss=True,
       # Training.
-      learning_rate=2**-6,
+      #learning_rate=2**-6,
+      learning_rate=2**-4, #for sigmoids
       mask_indicates_context=False,
       # Prediction threshold.
       prediction_threshold=0.5)
@@ -73,6 +74,9 @@ class Hyperparameters(object):
     else:
       self.input_depth = 1 * 2
     self.output_depth = self.input_depth // 2    
+
+    if not self.separate_instruments and self.num_instruments > 1:
+      self.use_softmax_loss = False
 
     # Check if pitch range is expanded if data augmentation on pitch is desired.
     if self.augment_by_transposing and self.num_pitches != 53 + 11:
@@ -115,15 +119,15 @@ class Hyperparameters(object):
         'augment_by_halfing_doubling_durations', 'augment_by_transposing',
         'mask_indicates_context',
     ]
-    # Want to show 'input_depth'
+    # Want to show 'input_depth', and use_softmax_loss
     keys_to_filter_out = [
-        'batch_size', 'use_softmax_loss', 'border', 'num_layers',
+        'batch_size', 'border', 'num_layers',
         'output_depth', 'model_name',
         'batch_norm_variance_epsilon', 'batch_norm_gamma', 'batch_norm',
         'init_scale', 'crop_piece_len', 'learning_rate',
         'prediction_threshold', 'optimize_mask_only', 'conv_arch',
         'augment_by_halfing_doubling_durations', 'augment_by_transposing',
-        'mask_indicates_context',
+        'mask_indicates_context', 'denoise_mode', 'corrupt_ratio', 'num_filters',
     ]
     return (','.join('%s=%s' % (key, self.__dict__[key]) for key in sorted_keys
                      if key not in keys_to_filter_out))

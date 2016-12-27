@@ -219,10 +219,17 @@ class BasicAutofillCNNGraph(object):
       def compute_scale():
         shape = tf.shape(self._targets)
         mask = tf.split(3, 2, self._input_data)[1]
-        # #timesteps * #instruments
-        D = tf.to_float(shape[1] * shape[3])
-        # #masked out variables
-        Dmdp1 = tf.reduce_sum(mask, reduction_indices=[1, 3], keep_dims=True)
+        if hparams.use_softmax_loss:
+          # #timesteps * #instruments
+          D = tf.to_float(shape[1] * shape[3])
+          # #masked out variables
+          Dmdp1 = tf.reduce_sum(mask, reduction_indices=[1, 3], keep_dims=True)
+        else:
+          # #timesteps * #pitches
+          D = tf.to_float(shape[1] * shape[2])
+          # #masked out variables
+          Dmdp1 = tf.reduce_sum(mask, reduction_indices=[1, 2], keep_dims=True)
+           
         return D / Dmdp1
       self._unreduced_loss *= compute_scale()
 
@@ -357,9 +364,9 @@ class BasicAutofillCNNGraph(object):
 
 def get_placeholders(hparams):
   # NOTE: fixed batch_size because einstein sum can only deal with up to 1 unknown dimension
-  P, D = hparams.num_pitches, hparams.input_depth
+  P, D, O = hparams.num_pitches, hparams.input_depth, hparams.output_depth
   return dict(input_data=tf.placeholder(tf.float32, [None, None, P, D]),
-              targets=tf.placeholder(tf.float32, [None, None, P, D // 2]))
+              targets=tf.placeholder(tf.float32, [None, None, P, O]))
 
 def build_placeholders_initializers_graph(is_training, hparams, placeholders=None):
   """Builds input and target placeholders, initializer, and training graph."""

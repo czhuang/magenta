@@ -172,7 +172,8 @@ def make_data_feature_maps(sequences, config, encoder, start_crop_index=None):
     elif maskout_method == config.NO_MASK:
       mask = mask_tools.get_no_mask(cropped_pianoroll.shape)
     elif maskout_method == config.BALANCED_BY_SCALING:
-      mask = mask_tools.get_balanced_by_scaling_mask(cropped_pianoroll.shape)
+      mask = mask_tools.get_balanced_by_scaling_mask(
+          cropped_pianoroll.shape, config.hparams.separate_instruments)
     else:
       raise ValueError('Mask method not supported.')
     

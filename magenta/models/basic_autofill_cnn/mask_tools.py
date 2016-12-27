@@ -247,19 +247,26 @@ def get_balanced_mask(pianoroll_shape):
   return mask
 
 
-def get_balanced_by_scaling_mask(pianoroll_shape):
+def get_balanced_by_scaling_mask(pianoroll_shape, separate_instruments):
   T, P, I = pianoroll_shape
 
-  d = T * I
+  if separate_instruments:
+    d = T * I
+  else:
+    assert I == 1
+    d = T * P 
   # sample a mask size
   k = np.random.choice(d) + 1
   # sample a mask of size k
   i = np.random.choice(d, size=k, replace=False)
-
-  mask = np.zeros(T * I, dtype=np.float32)
+ 
+  mask = np.zeros(d, dtype=np.float32)
   mask[i] = 1.
-  mask = mask.reshape((T, 1, I))
-  mask = np.tile(mask, [1, P, 1])
+  if separate_instruments:
+    mask = mask.reshape((T, 1, I))
+    mask = np.tile(mask, [1, P, 1])
+  else:
+    mask = mask.reshape((T, P, 1))
   return mask
 
 
