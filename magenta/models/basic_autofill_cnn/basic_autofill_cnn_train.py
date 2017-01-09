@@ -12,7 +12,6 @@ import time
 import numpy as np
 import tensorflow as tf
 
-from magenta.models.basic_autofill_cnn import config_tools
 from magenta.models.basic_autofill_cnn import data_tools
 from magenta.models.basic_autofill_cnn import pianorolls_lib
 from magenta.models.basic_autofill_cnn import summary_tools
@@ -52,7 +51,7 @@ tf.app.flags.DEFINE_bool('separate_instruments', True,
 tf.app.flags.DEFINE_integer('crop_piece_len', 64, 'The number of time steps included in a crop')
 
 # Model architecture.
-tf.app.flags.DEFINE_string('model_name', 'DeepStraightConvSpecs',
+tf.app.flags.DEFINE_string('model_name', None,
                            'A string specifying the name of the model.  The '
                            'choices are currently "PitchLocallyConnectedConvSpecs", '
                            '"PitchFullyConnectedConvSpecs", '
@@ -69,9 +68,10 @@ tf.app.flags.DEFINE_integer('use_residual', 1,
                             'to.')
 tf.app.flags.DEFINE_integer('batch_size', 20,
                             'The batch size training and validation the model.')
+
 # Mask related.
 tf.app.flags.DEFINE_string('maskout_method', 'balanced_by_scaling', 
-                           "The choices include: 'random_all_time_instrument', "
+                           "The choices include: 'bernoulli', "
                            "'random_patches', 'random_pitch_range',"
                            'random_time_range, random_multiple_instrument_time, '
                            'random_multiple_instrument_time,'
@@ -82,6 +82,8 @@ tf.app.flags.DEFINE_string('maskout_method', 'balanced_by_scaling',
 tf.app.flags.DEFINE_bool('mask_indicates_context', True, 
                          'Feed inverted mask into convnet so that zero-padding makes sense')
 tf.app.flags.DEFINE_bool('optimize_mask_only', False, 'optimize masked predictions only')
+tf.app.flags.DEFINE_bool('rescale_loss', True, 'Rescale loss based on context size.')
+
 # Data Augmentation.
 tf.app.flags.DEFINE_integer('augment_by_transposing', 0, 'If true during '
                             'training shifts each data point by a random '
@@ -93,7 +95,7 @@ tf.app.flags.DEFINE_integer('augment_by_halfing_doubling_durations', 0, 'If '
                             'go outside of the original set of durations.')
 # Denoise mode.
 tf.app.flags.DEFINE_bool('denoise_mode', False, 'Instead of blankout, randomly add perturb noise.  Hence instead of inpainting, model learns to denoise.')
-tf.app.flags.DEFINE_bool('corrupt_ratio', 0.5, 'Ratio to blankout or perturb in case of denoising.')
+tf.app.flags.DEFINE_float('corrupt_ratio', 0.5, 'Ratio to blankout (or perturb in case of denoising).')
 # Run parameters.
 tf.app.flags.DEFINE_integer('num_epochs', 0,
                             'The number of epochs to train the model. Default '

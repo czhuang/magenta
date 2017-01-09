@@ -215,7 +215,7 @@ class BasicAutofillCNNGraph(object):
 
     self._unreduced_loss = self._cross_entropy
 
-    if hparams.maskout_method == "balanced_by_scaling":
+    if hparams.rescale_loss:
       def compute_scale():
         shape = tf.shape(self._targets)
         mask = tf.split(3, 2, self._input_data)[1]
