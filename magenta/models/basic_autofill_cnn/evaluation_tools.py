@@ -1,6 +1,7 @@
 """Evaluations for comparing against prior work."""
 import os, sys, traceback
 import numpy as np
+import scipy.stats as stats
 import tensorflow as tf
 
 from magenta.models.basic_autofill_cnn import pianorolls_lib
@@ -25,8 +26,9 @@ def compute_greedy_notewise_loss(wrapped_model, piano_rolls, sign):
   losses = []
   def report():
     loss_mean = np.mean(losses)
-    loss_std = np.std(losses)
-    sys.stdout.write("%.5f+-%.5f" % (loss_mean, loss_std))
+    #loss_std = np.std(losses)
+    loss_sem = stats.sem(losses)
+    sys.stdout.write("%.5f+-%.5f" % (loss_mean, loss_sem))
 
   num_crops = 5
   for _ in range(num_crops):
@@ -79,8 +81,9 @@ def compute_chordwise_loss(wrapped_model, piano_rolls, separate_instruments=True
   losses = []
   def report():
     loss_mean = np.mean(losses)
-    loss_std = np.std(losses)
-    sys.stdout.write("%.5f+-%.5f" % (loss_mean, loss_std))
+    #loss_std = np.std(losses)
+    loss_sem = stats.sem(losses)
+    sys.stdout.write("%.5f+-%.5f" % (loss_mean, loss_sem))
 
   for _ in range(num_crops):
     xs = np.array([data_tools.random_crop_pianoroll(x, hparams.crop_piece_len)
