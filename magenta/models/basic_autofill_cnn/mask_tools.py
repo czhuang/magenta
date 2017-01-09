@@ -1,6 +1,4 @@
 """Tools for masking out pianorolls in different ways, such as by instrument."""
-
-
  
 import numpy as np
 

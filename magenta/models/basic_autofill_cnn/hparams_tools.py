@@ -1,15 +1,27 @@
 """Classes for defining hypermaters and model architectures."""
 
+from datetime import datetime
+
 
 class ModelMisspecificationError(Exception):
   """Exception for specifying a model that is not currently supported."""
   pass
 
 
+def get_checkpoint_hparams(model_name='DeepResidual'):
+  """Returns the hyperparameters for the checkpoint model."""
+  return hparams_tools.get_checkpoint_hparams(model_name)
+
+
+def get_current_time_as_str():
+  return datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
+
+
 class Hyperparameters(object):
   """Stores hyperparameters for initialization, batch norm and training."""
   _defaults = dict(
-      # Data augmentation.
+      # Data.
+      dataset=None,
       augment_by_transposing=0,
       augment_by_halfing_doubling_durations=0,
       corrupt_ratio=0.25,
@@ -35,12 +47,21 @@ class Hyperparameters(object):
       use_residual=True,
       denoise_mode=False,
       # Loss setup.
+      # TODO: currently maskout_method here is not functional, still need to go through config_tools.
+      maskout_method='balanced_by_scaling',
       optimize_mask_only=False,
       use_softmax_loss=True,
+      rescale_loss=True,
       # Training.
       #learning_rate=2**-6,
       learning_rate=2**-4, #for sigmoids
       mask_indicates_context=False,
+      eval_freq = 5,
+      num_epochs = 0,
+      # Runtime configs.
+      run_dir=None,
+      log_process=True,
+      save_model_secs=30,
       # Prediction threshold.
       prediction_threshold=0.5)
 
@@ -59,6 +80,9 @@ class Hyperparameters(object):
       **init_hparams: Keyword arguments for setting hyperparameters.
 
     """
+    print 'checking init_hparams model_name'
+    print init_hparams.keys()
+    print init_hparams['model_name']
     unknown_params = set(init_hparams) - set(Hyperparameters._defaults)
     if unknown_params:
       raise ValueError('Unknown hyperparameters: %s', unknown_params)
@@ -68,6 +92,8 @@ class Hyperparameters(object):
       if key in init_hparams:
         value = init_hparams[key]
       setattr(self, key, value)
+  
+    print 'model_name', self.model_name
 
     if self.separate_instruments:
       self.input_depth = self.num_instruments * 2
@@ -94,6 +120,14 @@ class Hyperparameters(object):
 
     self.conv_arch = self.get_conv_arch()
 
+    # Log directory name for Tensorflow supervisor.
+    #self.run_id = get_current_time_as_str()
+    #self.log_subdir_str = '%s_%s_%s' % (self.conv_arch.name, self.__str__(),
+    #                                    self.run_id)
+    self.log_subdir_str = '%s_%s' % (self.conv_arch.name, self.__str__())
+    print 'Model Specification: %s' % self.log_subdir_str
+
+
   @property
   def input_data_shape(self):
     """Returns the shape of input data."""
@@ -103,34 +137,42 @@ class Hyperparameters(object):
   def name(self):
     return self.conv_arch.name
 
+  #@property
+  #def params_to_serialize(self):
+  #  #FIXME: hack.
+  #  params = dict()
+  #  for key in Hyperparameters._defaults.keys():
+  #    params[key] = getattr(self, key)
+  #  return params
+
   def __str__(self):
     """Get all hyperparameters as a string."""
     param_keys = self.__dict__.keys()
-    print param_keys
+    #print param_keys
     sorted_keys = sorted(param_keys)
     # Filter out some parameters so that string repr won't be too long for
     # directory name.
+    # Want to show 'input_depth', and use_softmax_loss, learning rate
     keys_to_filter_out = [
-        'batch_size', 'use_softmax_loss', 'instr_sep', 'border', 'num_layers',
-        'input_depth', 'output_depth', 'model_name',
+        'batch_size', 'border', 'num_layers', 'num_filters', 'eval_freq',
+        'output_depth', 'model_name', 'run_id', 'checkpoint_name',
         'batch_norm_variance_epsilon', 'batch_norm_gamma', 'batch_norm',
-        'init_scale', 'crop_piece_len', 'learning_rate',
+        'init_scale', 'crop_piece_len',
         'prediction_threshold', 'optimize_mask_only', 'conv_arch',
         'augment_by_halfing_doubling_durations', 'augment_by_transposing',
-        'mask_indicates_context',
+        'mask_indicates_context', 'denoise_mode', 
+        'run_dir', 'num_epochs', 'log_process', 'save_model_secs',
+        'dataset',
     ]
-    # Want to show 'input_depth', and use_softmax_loss
-    keys_to_filter_out = [
-        'batch_size', 'border', 'num_layers',
-        'output_depth', 'model_name',
-        'batch_norm_variance_epsilon', 'batch_norm_gamma', 'batch_norm',
-        'init_scale', 'crop_piece_len', 'learning_rate',
-        'prediction_threshold', 'optimize_mask_only', 'conv_arch',
-        'augment_by_halfing_doubling_durations', 'augment_by_transposing',
-        'mask_indicates_context', 'denoise_mode', 'corrupt_ratio', 'num_filters',
-    ]
-    return (','.join('%s=%s' % (key, self.__dict__[key]) for key in sorted_keys
-                     if key not in keys_to_filter_out))
+    keys_to_include_last = ['maskout_method', 'corrupt_ratio']
+    line = (','.join('%s=%s' % (key, self.__dict__[key]) for key in sorted_keys
+                     if (key not in keys_to_filter_out 
+                         and key not in keys_to_include_last)))
+    line += ','
+    line += (','.join('%s=%s' % (key, self.__dict__[key]) for key in sorted_keys
+                     if key in keys_to_include_last))
+    return line
+
 
   def get_conv_arch(self):
     """Returns the model architecture."""
@@ -156,7 +198,12 @@ class Hyperparameters(object):
       return PitchFullyConnectedWithResidual(self.input_depth, self.num_layers,
                                              self.num_filters, self.num_pitches)
     else:
-      raise ModelMisspecificationError('Model name does not exist.')
+      raise ModelMisspecificationError('Model name %s does not exist.' % self.model_name)
+
+
+class ReturnIdentity(object):
+  def __call__(self, x):
+    return x
 
 
 class ConvArchitecture(object):
@@ -202,16 +249,16 @@ class DeepStraightConvSpecs(ConvArchitecture):
                         filters=[2, 2, num_filters, output_depth],
                         conv_stride=1,
                         conv_pad='SAME',
-                        activation=lambda x: x)
+           #             activation=lambda x: x)
+                        activation=ReturnIdentity())
     ]
     self.specs = self.get_spec()
     assert self.specs
-    if input_depth != 2:
-      self.name_prefix = '%s-multi_instr' % self.model_name
-    else:
-      self.name_prefix = '%s-col_instr' % self.model_name
-    self.name = '%s_depth-%d_filter-%d-%d' % (self.name_prefix, len(self.specs),
-                                              num_filters, num_filters)
+    self.name = '%s-%d-%d' % (self.model_name, len(self.specs), num_filters)
+  
+  def __str__(self):
+    #FIXME: a hack.
+    return self.name
 
 
 class PitchLocallyConnectedConvSpecs(ConvArchitecture):
@@ -439,118 +486,3 @@ class PitchFullyConnectedWithResidual(ConvArchitecture):
     self.name = '%s_depth-%d_filter-%d-%d' % (self.name_prefix, len(self.specs),
                                               num_filters, num_filters)
 
-
-CHECKPOINT_HPARAMS = {
-    'DeepResidual': Hyperparameters(
-        num_layers=28,
-        num_filters=256,
-        use_residual=True,
-        model_name='DeepStraightConvSpecs',
-        checkpoint_name='DeepStraightConvSpecs-with_res-multi_instr_depth-28_filter-256-256-best_model.ckpt'
-    ),
-    'DeepResidual32_256': Hyperparameters(
-        num_layers=32,
-        num_filters=256,
-        use_residual=True,
-        mask_indicates_context=True,
-        model_name='DeepStraightConvSpecs',
-        checkpoint_name='DeepStraightConvSpecs_d-32_f-256_best_model.ckpt',
-    ),
-    'DeepResidual64_128': Hyperparameters(
-        num_layers=64,
-        num_filters=128,
-        use_residual=True,
-        mask_indicates_context=True,
-        model_name='DeepStraightConvSpecs',
-        checkpoint_name='DeepStraightConvSpecs_d-64_f-128_best_model.ckpt',
-    ),
- 
-    'DeepResidualRandomMaskTBF': Hyperparameters(
-        num_layers=64,
-        num_filters=128,
-        use_residual=True,
-        mask_indicates_context=True,
-        model_name='DeepStraightConvSpecs',
-        checkpoint_name=''
-    ),
-    'Denoising64_128': Hyperparameters(
-        num_layers=64,
-        num_filters=128,
-        use_residual=True,
-        mask_indicates_context=True,
-        denoise_mode=True,
-        model_name='DeepStraightConvSpecs',
-        checkpoint_name='denoising_d-64_f-128.ckpt'
-    ),
-    'Denoising32_256': Hyperparameters(
-        num_layers=32,
-        num_filters=256,
-        use_residual=True,
-        mask_indicates_context=True,
-        denoise_mode=True,
-        model_name='DeepStraightConvSpecs',
-        checkpoint_name='',
-    ),
-
-   'random_medium': Hyperparameters(
-        num_layers=64,
-        num_filters=128,
-        use_residual=True,
-        mask_indicates_context=True,
-        model_name='DeepStraightConvSpecs',
-        checkpoint_name="random_64-128_0.5.ckpt",
-    ),
-
-    'balanced_fc_mask_only': Hyperparameters(
-        num_layers=64,
-        num_filters=128,
-        use_residual=True,
-        mask_indicates_context=True,
-        model_name='PitchFullyConnectedConvSpecs',
-        checkpoint_name="balanced_64-128_fc_mask_only.ckpt",
-    ),
-    'balanced_by_scaling': Hyperparameters(
-       num_layers=64,
-       num_filters=128,
-       use_residual=True,
-       mask_indicates_context=True,
-       model_name='DeepStraightConvSpecs',
-       checkpoint_name="balanced_by_scaling_64-128.ckpt",
-    ),
-    'DeepResidualDataAug': Hyperparameters(
-        num_layers=28,
-        num_filters=256,
-        augment_by_transposing=1,
-        augment_by_halfing_doubling_durations=1,
-        num_pitches=53 + 11,
-        use_residual=True,
-        model_name='DeepStraightConvSpecs',
-        checkpoint_name='DeepStraightConvSpecs-with_res-with_aug-multi_instr_depth-28_filter-256-256-best_model.ckpt'
-    ),
-    'PitchFullyConnectedWithResidual': Hyperparameters(
-        num_layers=28,
-        num_filters=256,
-        model_name='PitchFullyConnectedWithResidual',
-        checkpoint_name='PitchFullyConnected-multi_instr_depth-29_filter-256-256-best_model.ckpt'
-    ),
-    'DeepStraight': Hyperparameters(
-        num_layers=28,
-        num_filters=256,
-        use_residual=False,
-        model_name='DeepStraightConvSpecs',
-        checkpoint_name='DeepStraightConvSpecs-multi_instr_depth-28_filter-256-256-best_model.ckpt'
-    ),
-    'SmallTest': Hyperparameters(
-        batch_size=2,
-        num_layers=4,
-        num_filters=8,
-        model_name='DeepStraightConvSpecs')
-}
-
-
-def get_checkpoint_hparams(model_name):
-  """Returns the model architecture."""
-  if model_name not in CHECKPOINT_HPARAMS:
-    raise ModelMisspecificationError('Model name %s does not exist.' % model_name)
-  else:
-    return CHECKPOINT_HPARAMS[model_name]
