@@ -170,6 +170,26 @@ def get_random_all_time_instrument_mask(pianoroll_shape, blankout_ratio=0.5):
   return mask
 
 
+def get_bernoulli_mask(pianoroll_shape, separate_instruments=True, 
+                       blankout_ratio=0.5, **kwargs):
+  """
+  Returns:
+    A 3D binary mask.
+  """
+  if len(pianoroll_shape) != 3:
+    raise ValueError(
+        'Shape needs to of 3 dimensional, time, pitch, and instrument.')
+  T, P, I = pianoroll_shape
+  if separate_instruments:
+    mask = np.random.random([T, 1, I]) < blankout_ratio
+    mask = mask.astype(np.float32)
+    mask = np.tile(mask, [1, pianoroll_shape[1], 1])
+  else:
+    mask = np.random.random([T, P, I]) < blankout_ratio
+    mask = mask.astype(np.float32)
+  return mask
+
+
 def get_chronological_ti_mask(pianoroll_shape):
   # ti means the class of masks corresponds to the time-major ordering
   # over the time/instrument matrix, i.e. s1a1t1b1s2a2t2b2s3a3t3b3
@@ -245,7 +265,7 @@ def get_balanced_mask(pianoroll_shape):
   return mask
 
 
-def get_balanced_by_scaling_mask(pianoroll_shape, separate_instruments):
+def get_balanced_by_scaling_mask(pianoroll_shape, separate_instruments=True, **kwargs):
   T, P, I = pianoroll_shape
 
   if separate_instruments:

@@ -11,7 +11,6 @@ from magenta.music.note_sequence_io import note_sequence_record_iterator
 from magenta.models.basic_autofill_cnn import test_tools
 from magenta.models.basic_autofill_cnn import pianorolls_lib
 from magenta.models.basic_autofill_cnn import mask_tools
-from magenta.models.basic_autofill_cnn import config_tools
 from magenta.models.basic_autofill_cnn import data_tools
 from magenta.models.basic_autofill_cnn import mask_tools
 from magenta.music.midi_io import sequence_proto_to_midi_file
