@@ -104,14 +104,11 @@ def random_crop_pianoroll(pianoroll,
   return shifted_pianoroll
 
 
-def make_data_feature_maps(sequences, config, encoder, start_crop_index=None):
+def make_data_feature_maps(sequences, hparams, encoder, start_crop_index=None):
   """Return input and output pairs of masked out and full pianorolls.
 
   Args:
     sequences: A list of NoteSequences.
-    config: A PipelineConfig object that stores which mask out method to use
-        and its enumerations. It also stores hyperparameters such as
-        crop_piece_length which determines the width of the feature maps.
 
   Returns:
     input_data: A 4D matrix with dimensions named
@@ -124,60 +121,29 @@ def make_data_feature_maps(sequences, config, encoder, start_crop_index=None):
     DataProcessingError: If pianoroll is shorter than the desired crop_len, or
         if the inputs and targets have the wrong number of dimensions.
   """
-  maskout_method = config.maskout_method
+  maskout_method = hparams.maskout_method
   input_data = []
   targets = []
-  maskout_border = config.maskout_border
   seq_count = 0
   for sequence in sequences:
     pianoroll = random_double_or_halftime_pianoroll_from_note_sequence(
-        sequence, config.hparams.augment_by_halfing_doubling_durations, encoder)
+        sequence, hparams.augment_by_halfing_doubling_durations, encoder)
     try:
       cropped_pianoroll = random_crop_pianoroll(
-          pianoroll, config.hparams.crop_piece_len, start_crop_index,
-          config.hparams.augment_by_transposing)
+          pianoroll, hparams.crop_piece_len, start_crop_index,
+          hparams.augment_by_transposing)
     except DataProcessingError:
       tf.logging.warning('Piece shorter than requested crop length.')
       continue
     seq_count += 1
+   
+    # Get mask.
+    mask = getattr(mask_tools, 'get_%s_mask' % hparams.maskout_method)(
+        cropped_pianoroll.shape, separate_instruments=hparams.separate_instruments,
+        blankout_ratio=hparams.corrupt_ratio)
+    #  raise ValueError('Mask method not supported.')
     
-    if maskout_method == config.RANDOM_INSTRUMENT:
-      mask = mask_tools.get_random_instrument_mask(cropped_pianoroll.shape)
-    elif maskout_method == config.RANDOM_PATCHES:
-      mask = mask_tools.get_multiple_random_patch_mask(
-          cropped_pianoroll.shape, maskout_border,
-          config.initial_maskout_factor)
-    elif maskout_method == config.RANDOM_PITCH_RANGE:
-      # Only use when all instruments are collapsed in one pianoroll.
-      if pianoroll.shape[-1] > 1:
-        raise MaskUseError(
-            'Only use when all instruments are represented in one pianoroll.')
-    elif maskout_method == config.RANDOM_TIME_RANGE:
-      mask = mask_tools.get_random_time_range_mask(cropped_pianoroll.shape,
-                                                   maskout_border)
-    elif maskout_method == config.RANDOM_MULTIPLE_INSTRUMENT_TIME:
-      mask = mask_tools.get_multiple_random_instrument_time_mask(
-          cropped_pianoroll.shape, maskout_border, config.num_maskout)
-    elif config.hparams.denoise_mode or maskout_method == config.RANDOM_ALL_TIME_INSTRUMENT:
-      mask = mask_tools.get_random_all_time_instrument_mask(
-          cropped_pianoroll.shape, config.hparams.corrupt_ratio)
-    elif maskout_method == config.CHRONOLOGICAL_TI:
-      mask = mask_tools.get_chronological_ti_mask(cropped_pianoroll.shape)
-    elif maskout_method == config.CHRONOLOGICAL_IT:
-      mask = mask_tools.get_chronological_it_mask(cropped_pianoroll.shape)
-    elif maskout_method == config.FIXED_ORDER:
-      mask = mask_tools.get_fixed_order_mask(cropped_pianoroll.shape)
-    elif maskout_method == config.BALANCED:
-      mask = mask_tools.get_balanced_mask(cropped_pianoroll.shape)
-    elif maskout_method == config.NO_MASK:
-      mask = mask_tools.get_no_mask(cropped_pianoroll.shape)
-    elif maskout_method == config.BALANCED_BY_SCALING:
-      mask = mask_tools.get_balanced_by_scaling_mask(
-          cropped_pianoroll.shape, config.hparams.separate_instruments)
-    else:
-      raise ValueError('Mask method not supported.')
-    
-    if config.hparams.denoise_mode:
+    if hparams.denoise_mode:
       masked_pianoroll = mask_tools.perturb_and_stack(cropped_pianoroll, mask)
     else:
       masked_pianoroll = mask_tools.apply_mask_and_stack(cropped_pianoroll, mask)

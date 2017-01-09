@@ -3,18 +3,13 @@ import os, sys, traceback
 import numpy as np
 import tensorflow as tf
 
-from magenta.models.basic_autofill_cnn import config_tools
-from magenta.models.basic_autofill_cnn import seed_tools, pianorolls_lib
+from magenta.models.basic_autofill_cnn import pianorolls_lib
 from magenta.models.basic_autofill_cnn import mask_tools, retrieve_model_tools, data_tools
 
 FLAGS = tf.app.flags.FLAGS
-tf.app.flags.DEFINE_string(
-    'input_dir', None,
-    'Path to the directory that holds the train, valid, test TFRecords.')
-tf.app.flags.DEFINE_string('model_name', None, 'name of the model to evaluate')
 tf.app.flags.DEFINE_string('fold', None, 'data fold on which to evaluate (valid or test)')
 tf.app.flags.DEFINE_string('kind', None, 'notewise or chordwise loss, or maxgreedy_notewise or mingreedy_notewise')
-tf.app.flags.DEFINE_integer('num_crops', 10, 'number of random crops to consider')
+tf.app.flags.DEFINE_integer('num_crops', 5, 'number of random crops to consider')
 
 def compute_maxgreedy_notewise_loss(wrapped_model, piano_rolls):
   return compute_greedy_notewise_loss(wrapped_model, piano_rolls, sign=+1)
@@ -23,7 +18,7 @@ def compute_mingreedy_notewise_loss(wrapped_model, piano_rolls):
   return compute_greedy_notewise_loss(wrapped_model, piano_rolls, sign=-1)
 
 def compute_greedy_notewise_loss(wrapped_model, piano_rolls, sign):
-  config = wrapped_model.config
+  hparams = wrapped_model.hparams
   model = wrapped_model.model
   session = wrapped_model.sess
 
@@ -35,7 +30,7 @@ def compute_greedy_notewise_loss(wrapped_model, piano_rolls, sign):
 
   num_crops = 5
   for _ in range(num_crops):
-    xs = np.array([data_tools.random_crop_pianoroll(x, config.hparams.crop_piece_len)
+    xs = np.array([data_tools.random_crop_pianoroll(x, hparams.crop_piece_len)
                    for x in piano_rolls], dtype=np.float32)
 
     B, T, P, I = xs.shape

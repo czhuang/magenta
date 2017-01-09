@@ -388,10 +388,10 @@ def build_placeholders_initializers_graph(is_training, hparams, placeholders=Non
 class TFModelWrapper(object):
   """A Wrapper for passing model related and other configs as one object."""
 
-  def __init__(self, model, graph, config):
+  def __init__(self, model, graph, hparams):
     self.model = model
     self.graph = graph
-    self.config = config
+    self.hparams = hparams
     self._sess = None
 
   @property
@@ -403,8 +403,8 @@ class TFModelWrapper(object):
     self._sess = sess
 
 
-def build_graph(is_training, config, placeholders=None):
+def build_graph(is_training, hparams, placeholders=None):
   """Build BasicAutofillCNNGraph, input output placeholders, and initializer."""
   _, _, _, model = build_placeholders_initializers_graph(
-      is_training, config.hparams, placeholders=placeholders)
-  return TFModelWrapper(model, model.loss.graph, config)
+      is_training, hparams, placeholders=placeholders)
+  return TFModelWrapper(model, model.loss.graph, hparams)

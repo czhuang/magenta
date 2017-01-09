@@ -110,14 +110,14 @@ def run_epoch(supervisor,
               m,
               raw_data,
               encoder,
-              config,
+              hparams,
               eval_op,
               experiment_type,
               epoch_count,
               best_validation_loss=None,
               best_model_saver=None):
   """Runs an epoch of training or evaluate the model on given data."""
-  input_data, targets = data_tools.make_data_feature_maps(raw_data, config,
+  input_data, targets = data_tools.make_data_feature_maps(raw_data, hparams,
                                                           encoder)
   permutation = np.random.permutation(len(input_data))
   input_data = input_data[permutation]
@@ -133,10 +133,6 @@ def run_epoch(supervisor,
   losses_mask = summary_tools.AggregateMean('losses_mask_%s' % experiment_type)
   losses_unmask = summary_tools.AggregateMean('losses_unmasked_%s' %
                                               (experiment_type))
-  #if not config.separate_instruments:
-  #  accuracy_stats = summary_tools.AggregateInOutMaskPredictionPerformanceStats(
-  #      '%s-prediction' % experiment_type, config.hparams.prediction_threshold)
-
   start_time = time.time()
   for step in range(num_batches):
     start_idx = step * batch_size
@@ -163,18 +159,12 @@ def run_epoch(supervisor,
     losses_mask.add(loss_mask * mask_size, mask_size)
     losses_unmask.add(loss_unmask * unmask_size, unmask_size)
 
-    if config.hparams.optimize_mask_only:
+    if hparams.optimize_mask_only:
       losses.add(loss * mask_size, mask_size)
     else:
       losses.add(loss, 1)
-  #if not config.separate_instruments:
-  #  accuracy_stats.add(predictions, y, mask)
 
   # Collect run statistics.
-  #if not config.separate_instruments:
-  #  run_stats = accuracy_stats.get_aggregates_stats()
-  #else:
-  #  run_stats = dict()
   run_stats = dict()
   run_stats['loss_mask_%s' % experiment_type] = losses_mask.mean
   run_stats['loss_unmask_%s' % experiment_type] = losses_unmask.mean
@@ -203,8 +193,8 @@ def run_epoch(supervisor,
     tf.logging.info('Previous best validation loss: %.4f.' %
                     (best_validation_loss))
     best_validation_loss = run_stats['loss_%s' % experiment_type]
-    save_path = os.path.join(FLAGS.run_dir, config.log_subdir_str,
-                             '%s-best_model.ckpt' % config.hparams.name)
+    save_path = os.path.join(FLAGS.run_dir, hparams.log_subdir_str,
+                             '%s-best_model.ckpt' % hparams.name)
     # Saving the best model thusfar checkpoint.
     best_model_saver.save(sess, save_path)
 
@@ -262,19 +252,17 @@ def main(unused_argv):
       num_filters=FLAGS.num_filters,
       use_residual=FLAGS.use_residual,
       batch_size=FLAGS.batch_size,
+      maskout_method=FLAGS.maskout_method,
       mask_indicates_context=FLAGS.mask_indicates_context,
       optimize_mask_only=FLAGS.optimize_mask_only,
+      rescale_loss=FLAGS.rescale_loss,
       augment_by_transposing=FLAGS.augment_by_transposing,
       augment_by_halfing_doubling_durations=FLAGS.
       augment_by_halfing_doubling_durations,
       denoise_mode=FLAGS.denoise_mode,
       corrupt_ratio=FLAGS.corrupt_ratio)
 
-  # TODO: Is it possible to remove config (and directly refer to mask just through name)
-  # or at least remove the separate_instruments, num_instruments from config to avoid duplication.
-  config = config_tools.PipelineConfig(hparams, FLAGS.maskout_method,
-                                       FLAGS.separate_instruments, FLAGS.num_instruments)
-  print 'after config', hparams.input_depth, hparams.output_depth
+  print 'hparams input_depth, output_depth', hparams.input_depth, hparams.output_depth
   # TODO(annahuang): Use queues.
   train_data = list(data_tools.get_note_sequence_data(FLAGS.input_dir, 'train'))
   valid_data = list(data_tools.get_note_sequence_data(FLAGS.input_dir, 'valid'))
@@ -286,7 +274,7 @@ def main(unused_argv):
       augment_by_transposing=FLAGS.augment_by_transposing)
 
   # TODO(annahuang): Set this according to pitch range.
-  best_validation_loss = 10.0
+  best_validation_loss = np.inf
 
   # Build the graph and subsequently running it for train and validation.
   with tf.Graph().as_default() as graph:
@@ -314,11 +302,12 @@ def main(unused_argv):
     # Graph will be finalized after instantiating supervisor.
     sv = tf.train.Supervisor(
         graph=graph,
-        logdir=os.path.join(FLAGS.run_dir, config.log_subdir_str),
+        logdir=os.path.join(FLAGS.run_dir, hparams.log_subdir_str),
         saver=saver,
         summary_op=None,
         save_model_secs=FLAGS.save_model_secs)
     #with sv.managed_session('local') as sess:
+    #with sv.managed_session() as sess:
     with sv.PrepareSession() as sess:
       epoch_count = 0
       time_since_improvement = 0
@@ -327,12 +316,12 @@ def main(unused_argv):
         if sv.should_stop():
           break
         # Run training.
-        run_epoch(sv, sess, m, train_data, pianoroll_encoder, config,
+        run_epoch(sv, sess, m, train_data, pianoroll_encoder, hparams,
                   m.train_op, 'train', epoch_count)
 
         # Run validation.
-        if epoch_count % config.eval_freq == 0:
-          new_best_validation_loss = run_epoch(sv, sess, mvalid, valid_data, pianoroll_encoder, config,
+        if epoch_count % hparams.eval_freq == 0:
+          new_best_validation_loss = run_epoch(sv, sess, mvalid, valid_data, pianoroll_encoder, hparams,
                                                no_op, 'valid', epoch_count, best_validation_loss,
                                                best_model_saver)
           if new_best_validation_loss < best_validation_loss:
