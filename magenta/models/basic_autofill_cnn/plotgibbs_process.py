@@ -4,7 +4,8 @@ def merge_held(notes):
   notes = list(notes)
   i = 1
   while i < len(notes):
-    if notes[i].pitch == notes[i - 1].pitch:
+    if (notes[i].pitch == notes[i - 1].pitch and
+        notes[i].start == notes[i - 1].end):
       notes[i - 1].end = notes[i].end
       del notes[i]
     else:
@@ -15,21 +16,23 @@ def pianoroll_to_midi(x):
   import pretty_midi
   midi_data = pretty_midi.PrettyMIDI()
   programs = [74, 72, 69, 71]
+  programs = [1]
   pitch_offset = 36
   bpm = 120.
-  x = x.argmax(axis=1)
-  for voice, program in zip(x, programs):
-    time = 0
-    duration = bpm / 60 / 16.
+  duration = bpm / 60 / 16.
+  I, P, T = x.shape
+  for i in range(I):
     notes = []
-    for pitch in voice:
-      pitch += pitch_offset
-      notes.append(pretty_midi.Note(velocity=100, pitch=pitch,
-                                    start=time, end=time + duration))
-      time += duration
+    for p in range(P):
+      for t in range(T):
+        if x[i, p, t]:
+          notes.append(pretty_midi.Note(velocity=100,
+                                        pitch=pitch_offset + p,
+                                        start=t * duration,
+                                        end=(t + 1) * duration))
     notes = merge_held(notes)
 
-    instrument = pretty_midi.Instrument(program=program - 1)
+    instrument = pretty_midi.Instrument(program=programs[i] - 1)
     instrument.notes.extend(notes)
     midi_data.instruments.append(instrument)
   return midi_data
