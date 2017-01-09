@@ -219,7 +219,8 @@ class SequentialSampler(object):
     # everything is better if mask sizes are the same throughout the batch
     assert mask_size.size == 1
 
-    for _ in range(mask_size):
+    for s in range(mask_size):
+      print '\tsequential step', s
       input_data = np.asarray([
           mask_tools.apply_mask_and_stack(pianoroll, mask)
           for pianoroll, mask in zip(pianorolls, masks)])

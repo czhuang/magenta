@@ -87,6 +87,7 @@ CHECKPOINT_HPARAMS = {
 
 def get_checkpoint_hparams(model_name):
   """Returns the model architecture."""
+  print 'model_name', model_name
   if model_name is None and FLAGS.checkpoint_dir is None:
     raise ModelMisspecificationError('No model name or checkpoint path specified.')
   if model_name is None:
@@ -97,6 +98,7 @@ def get_checkpoint_hparams(model_name):
     hparams.checkpoint_fpath = os.path.join(
         FLAGS.run_dir, FLAGS.checkpoint_dir,
         'DeepStraightConvSpecs-64-128-best_model.ckpt')
+    print 'Will load checkpoint from ', hparams.checkpoint_fpath
     #checkpoint_fpath = os.path.join(tf.resource_loader.get_data_files_path(),
     #                                'checkpoints',
     #                                hparams.checkpoint_name)
