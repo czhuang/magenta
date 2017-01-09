@@ -70,7 +70,6 @@ py_binary(
         "testdata/jsb/bach-one_phrase-note_sequence.tfrecord",
     ],
     deps = [
-        ":config_tools",
         ":data_tools",
         ":mask_tools",
         ":pianorolls_lib",
@@ -88,13 +87,10 @@ py_binary(
     data = [
     ],
     deps = [
-        ":config_tools",
         ":mask_tools",
         ":data_tools",
         ":pianorolls_lib",
-        ":seed_tools",
         ":retrieve_model_tools",
-        "//magenta/music:midi_io",
     ],
 )
 
@@ -104,7 +100,6 @@ py_binary(
     data = [
     ],
     deps = [
-        ":config_tools",
         ":mask_tools",
         ":pianorolls_lib",
         ":seed_tools",
@@ -118,7 +113,6 @@ py_binary(
     name = "gibbs",
     srcs = ["gibbs.py"],
     deps = [
-        ":config_tools",
         ":mask_tools",
         ":retrieve_model_tools",
 	":generate_tools",
@@ -138,14 +132,6 @@ py_binary(
     name = "hparams_tools",
     srcs = ["hparams_tools.py"],
     deps = [
-    ],
-)
-
-py_binary(
-    name = "config_tools",
-    srcs = ["config_tools.py"],
-    deps = [
-        ":hparams_tools",
     ],
 )
 
@@ -190,7 +176,7 @@ py_binary(
     name = "basic_autofill_cnn_train",
     srcs = ["basic_autofill_cnn_train.py"],
     deps = [
-        ":config_tools",
+        ":hparams_tools",
         ":data_tools",
         ":pianorolls_lib",
         ":summary_tools",
@@ -207,7 +193,6 @@ py_binary(
     deps = [
 	":pianorolls_lib",
 	":mask_tools",
-	":config_tools",
         "//magenta/protobuf:music_py_pb2",
         "//magenta/music:midi_io",
         "//magenta/music:note_sequence_io",
@@ -248,7 +233,8 @@ py_binary(
     ],
     deps = [
         ":basic_autofill_cnn_graph",
-        ":config_tools",
+        ":hparams_tools",
+        ":basic_autofill_cnn_train",
     ],
 )
 
@@ -258,7 +244,6 @@ py_test(
     srcs = ["retrieve_model_tools_test.py"],
     deps = [
         ":basic_autofill_cnn_graph",
-        ":config_tools",
         ":retrieve_model_tools",
         ":test_tools",
     ],
@@ -318,7 +303,6 @@ py_test(
     srcs = ["basic_autofill_cnn_graph_test.py"],
     deps = [
         ":basic_autofill_cnn_graph",
-        ":config_tools",
         ":test_tools",
     ],
 )
@@ -337,7 +321,6 @@ py_test(
     size = "small",
     srcs = ["data_tools_test.py"],
     deps = [
-        ":config_tools",
         ":data_tools",
         ":pianorolls_lib",
     ],
