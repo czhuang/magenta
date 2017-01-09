@@ -22,7 +22,6 @@ import tensorflow as tf
 from magenta.models.basic_autofill_cnn import pianorolls_lib
 from magenta.models.basic_autofill_cnn import mask_tools
 from magenta.models.basic_autofill_cnn import retrieve_model_tools
-from magenta.models.basic_autofill_cnn import config_tools
 from magenta.models.basic_autofill_cnn import seed_tools
 #from magenta.models.basic_autofill_cnn.seed_tools import MELODY_VOICE_INDEX
 #from magenta.models.basic_autofill_cnn import plot_tools

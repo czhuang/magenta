@@ -3,7 +3,7 @@ from collections import defaultdict
 import os, sys, time
 from datetime import datetime
 import numpy as np, tensorflow as tf
-from magenta.models.basic_autofill_cnn import mask_tools, retrieve_model_tools, config_tools, generate_tools, data_tools
+from magenta.models.basic_autofill_cnn import mask_tools, retrieve_model_tools, generate_tools, data_tools
 
 import contextlib
 @contextlib.contextmanager
@@ -17,23 +17,48 @@ def pdb_post_mortem():
       traceback.print_exception(exc_type, exc_value, exc_traceback)
       import pdb; pdb.post_mortem()
 
-def sample_masks(shape, pm=None, k=None):
+def sample_masks(shape, separate_instruments=None, pm=None, k=None):
   assert (pm is None) != (k is None)
+  assert separate_instruments is not None
   # like mask_tools.get_random_all_time_instrument_mask except
   # produces a full batch of masks. the size of the mask follows a
   # binomial distribution, but all examples in the batch have the same
   # mask size. (this simplifies the sequential sampling logic.)
   B, T, P, I = shape
+  assert separate_instruments or I == 1
+  if separate_instruments:
+    D = I
+  else:
+    D = P
   if k is None:
-    k = (np.random.rand(T * I) < pm).sum()
+    k = (np.random.rand(T * D) < pm).sum()
   masks = np.zeros(shape, dtype=np.float32)
   for b in range(B):
-    js = np.random.choice(T * I, size=k, replace=False)
-    t = js / I
-    i = js % I
-    masks[b, t, :, i] = 1.
-  assert np.allclose(masks.max(axis=2).sum(axis=(1,2)), k)
+    js = np.random.choice(T * D, size=k, replace=False)
+    t = js / D
+    i = js % D
+    if separate_instruments:
+      masks[b, t, :, i] = 1.
+    else:
+      masks[b, t, i, 0] = 1.
+  if separate_instruments:
+    assert np.allclose(masks.max(axis=2).sum(axis=(1,2)), k)
+  else: 
+    assert np.allclose(masks.sum(axis=(1,2,3)), k)
   return masks
+
+
+def sample_bernoulli(p, temperature):
+  B, T, P, I = p.shape
+  assert I == 1
+  if temperature == 0.:
+    sampled = p > 0.5
+  else:
+    assert False, "Not yet implemented."
+    p /= temperature
+    sampled = p.random.rand(p.shape) > p
+  return sampled
+
 
 def sample_contiguous_masks(shape, pm=None):
   B, T, P, I = shape
@@ -80,8 +105,8 @@ def sample_masks_within_masks(shape, context_masks, pm=None, k=None):
   return masks
 
 class BernoulliMasker(object):
-  def __call__(self, shape, pm=None):
-    return sample_masks(shape, pm=pm)
+  def __call__(self, shape, separate_instruments, pm=None):
+    return sample_masks(shape, separate_instruments, pm=pm)
 
   def __repr__(self):
     return "BernoulliMasker()"
@@ -149,8 +174,10 @@ class ContiguousMasker(object):
     return "ContiguousMasker()"
 
 class IndependentSampler(object):
-  def __init__(self, temperature=1):
+  def __init__(self, temperature=1, separate_instruments=None):
     self.temperature = temperature
+    assert separate_instruments is not None
+    self.separate_instruments = separate_instruments
 
   def __call__(self, wmodel, pianorolls, masks):
     print 'independent sampling...'
@@ -159,10 +186,14 @@ class IndependentSampler(object):
         for pianoroll, mask in zip(pianorolls, masks)])
     predictions = wmodel.sess.run(wmodel.model.predictions,
                                   {wmodel.model.input_data: input_data})
-    samples = generate_tools.sample_onehot(predictions, axis=2,
-                                           temperature=self.temperature)
-    B, T, P, I = pianorolls.shape
-    assert (samples * masks).sum() == masks.max(axis=2).sum()
+    if self.separate_instruments:
+      samples = generate_tools.sample_onehot(predictions, axis=2,
+                                             temperature=self.temperature)
+      assert (samples * masks).sum() == masks.max(axis=2).sum()
+    else:
+      samples = sample_bernoulli(predictions, self.temperature)
+
+    #B, T, P, I = pianorolls.shape
     #assert samples.sum() == B * T * I
     pianorolls = np.where(masks, samples, pianorolls)
     yield pianorolls, masks, predictions
@@ -171,14 +202,20 @@ class IndependentSampler(object):
     return "IndependentSampler(temperature=%r)" % self.temperature
 
 class SequentialSampler(object):
-  def __init__(self, temperature=1):
+  def __init__(self, temperature=1, separate_instruments=None):
     self.temperature = temperature
+    assert separate_instruments is not None
+    self.separate_instruments = separate_instruments
 
   def __call__(self, wmodel, pianorolls, masks):
     B, T, P, I = pianorolls.shape
+    assert self.separate_instruments or I == 1
 
     # determine how many model evaluations we need to make
-    mask_size = np.unique(masks.max(axis=2).sum(axis=(1,2)))
+    if self.separate_instruments:
+      mask_size = np.unique(masks.max(axis=2).sum(axis=(1,2)))
+    else:
+      mask_size = np.unique(masks.sum(axis=(1,2,3)))
     # everything is better if mask sizes are the same throughout the batch
     assert mask_size.size == 1
 
@@ -188,15 +225,19 @@ class SequentialSampler(object):
           for pianoroll, mask in zip(pianorolls, masks)])
       predictions = wmodel.sess.run(wmodel.model.predictions,
                                     {wmodel.model.input_data: input_data})
-      samples = generate_tools.sample_onehot(predictions, axis=2,
-                                             temperature=self.temperature)
-
-      # select one variable to sample. sample according to normalized mask;
-      # is uniform as all masked out variables have equal positive weight.
-      selection = masks.max(axis=2).reshape([B, T * I])
-      selection = generate_tools.sample_onehot(selection, axis=1)
-      selection = selection.reshape([B, T, 1, I])
-
+      if self.separate_instruments:
+        samples = generate_tools.sample_onehot(
+            predictions, axis=2, temperature=self.temperature)
+        # select one variable to sample. sample according to normalized mask;
+        # is uniform as all masked out variables have equal positive weight.
+        selection = masks.max(axis=2).reshape([B, T * I])
+        selection = generate_tools.sample_onehot(selection, axis=1)
+        selection = selection.reshape([B, T, 1, I])
+      else:
+        samples = sample_bernoulli(predictions, self.temperature)
+        selection = masks.reshape([B, T * P])
+        selection = generate_tools.sample_onehot(selection, axis=1)
+        selection = selection.reshape([B, T, P, I])
       pianorolls = np.where(selection, samples, pianorolls)
       previous_masks = masks.copy()
       masks = np.where(selection, 0., masks)
@@ -271,18 +312,19 @@ class ConstantSchedule(object):
     return "ConstantSchedule(%r)" % self.p
 
 class Gibbs(object):
-  def __init__(self, num_steps, masker, sampler, schedule):
+  def __init__(self, num_steps, masker, sampler, schedule, separate_instruments):
     self.num_steps = num_steps
     self.masker = masker
     self.sampler = sampler
     self.schedule = schedule
+    self.separate_instruments = separate_instruments
 
   def __call__(self, wmodel, pianorolls):
     B, T, P, I = pianorolls.shape
     print 'shape', pianorolls.shape
     for s in range(self.num_steps):
       pm = self.schedule(s, self.num_steps)
-      masks = self.masker(pianorolls.shape, pm)
+      masks = self.masker(pianorolls.shape, self.separate_instruments, pm)
       #pianorolls = self.sampler(wmodel, pianorolls, masks)
       #assert (pianorolls * masks).sum() == masks.max(axis=2).sum()
       ##assert pianorolls.sum() == B * T * I
@@ -295,7 +337,6 @@ class Gibbs(object):
             % (self.num_steps, self.masker, self.schedule, self.sampler))
 
 FLAGS = tf.app.flags.FLAGS
-tf.app.flags.DEFINE_string("model_name", None, "model name")
 tf.app.flags.DEFINE_integer("num_steps", None, "number of gibbs steps to take")
 tf.app.flags.DEFINE_string("generation_type", None, "unconditioned, inpainting")
 tf.app.flags.DEFINE_string("context_source", "bach", "bach")
@@ -330,7 +371,8 @@ def main(unused_argv):
         independent=IndependentSampler,
         sequential=SequentialSampler,
         bisecting=BisectingSampler
-    )[FLAGS.initialization](temperature=FLAGS.temperature)
+    )[FLAGS.initialization](temperature=FLAGS.temperature, 
+                            separate_instruments=FLAGS.separate_instruments)
   
   # Setup sampler.
   if FLAGS.sampler is None:
@@ -340,7 +382,8 @@ def main(unused_argv):
         independent=IndependentSampler,
         sequential=SequentialSampler,
         bisecting=BisectingSampler
-    )[FLAGS.sampler](temperature=FLAGS.temperature)
+    )[FLAGS.sampler](temperature=FLAGS.temperature,
+                     separate_instruments=FLAGS.separate_instruments)
 
   # Setup schedule.
   if FLAGS.schedule == "yao":
@@ -349,8 +392,10 @@ def main(unused_argv):
                         alpha=FLAGS.schedule_yao_alpha)
   elif FLAGS.schedule == "constant":
     schedule = ConstantSchedule(p=FLAGS.schedule_constant_p)
+  elif FLAGS.num_steps == 0:
+    schedule = None
   else:
-    assert False
+    assert False, 'No schedule specified.'
  
   # Setup masker. 
   if FLAGS.masker is None:
@@ -363,8 +408,11 @@ def main(unused_argv):
     )[FLAGS.masker]
 
   wmodel = retrieve_model_tools.retrieve_model(model_name=FLAGS.model_name)
+  if FLAGS.separate_instruments:
+    B, T, P, I = [100, FLAGS.piece_length, 53, 4]
+  else:
+    B, T, P, I = [100, FLAGS.piece_length, 53, 1]
 
-  B, T, P, I = [100, FLAGS.piece_length, 53, 4]
   print B, T, P, I
   
   intermediates = defaultdict(list)
@@ -396,6 +444,9 @@ def main(unused_argv):
   else:
     assert False, 'Generation type %s not yet supported.' % FLAGS.generation_type  
 
+  # Include initialization time.  Allows us to also time NADE sampling.
+  start_time = time.time()
+
   if FLAGS.initialization == "random":
     # TODO: not yet support inpainting
     pianorolls = generate_tools.sample_onehot(1 + np.random.rand(B, T, P, I), axis=2)
@@ -409,12 +460,12 @@ def main(unused_argv):
       intermediates["masks"].append(masks.copy())
       intermediates["predictions"].append(predictions.copy())
   
-  start_time = time.time()
 
   gibbs = Gibbs(num_steps=FLAGS.num_steps,
                 masker=masker,
                 sampler=sampler,
-                schedule=schedule)
+                schedule=schedule,
+                separate_instruments=FLAGS.separate_instruments)
   iter_idx = 0
   for pianorolls, masks, predictions in gibbs(wmodel, pianorolls):
     print iter_idx,
@@ -428,7 +479,7 @@ def main(unused_argv):
   print
 
   time_taken = (time.time() - start_time) / 60.0 #  In minutes.
-  label = "".join(c if c.isalnum() else "" for c in repr(gibbs))
+  label = "".join(c if c.isalnum() else "_" for c in repr(gibbs))
   label = "fromscratch_%s_init=%s_%s_%s_%.2fmin" % (FLAGS.model_name, FLAGS.initialization, label, timestamp, time_taken)
   path = os.path.join(FLAGS.generation_output_dir, label + ".npz")
   print "Writing to", path  
