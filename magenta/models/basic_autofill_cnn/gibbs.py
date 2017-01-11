@@ -50,13 +50,24 @@ def sample_masks(shape, separate_instruments=None, pm=None, k=None):
 
 def sample_bernoulli(p, temperature):
   B, T, P, I = p.shape
+  print 'before p.shape', p.shape
   assert I == 1
   if temperature == 0.:
     sampled = p > 0.5
   else:
-    assert False, "Not yet implemented."
-    p /= temperature
-    sampled = p.random.rand(p.shape) > p
+    axis = 3
+    pp = np.concatenate((p, (1-p)), axis=3)
+    logpp = np.log(pp)
+    logpp /= temperature
+    logpp -= logpp.max(axis=axis, keepdims=True)
+    #p = np.where(logpp > 0, 
+    #             1 / (1 + np.exp(-logpp)), 
+    #             np.exp(logpp) / (np.exp(logpp) + 1))
+    p = np.exp(logpp)
+    p /= p.sum(axis=axis, keepdims=True)
+    p = p[:, :, :, :1]
+    print 'after p.shape', p.shape
+    sampled = np.random.random(p.shape) < p
   return sampled
 
 

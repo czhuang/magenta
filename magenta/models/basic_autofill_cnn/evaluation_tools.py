@@ -82,7 +82,7 @@ def compute_chordwise_loss(wrapped_model, piano_rolls, separate_instruments=True
   def report():
     loss_mean = np.mean(losses)
     #loss_std = np.std(losses)
-    loss_sem = stats.sem(losses)
+    loss_sem = stats.sem(np.array(losses).flat)
     sys.stdout.write("%.5f+-%.5f" % (loss_mean, loss_sem))
 
   for _ in range(num_crops):
@@ -128,7 +128,12 @@ def compute_chordwise_loss(wrapped_model, piano_rolls, separate_instruments=True
       if separate_instruments:
         loss = -np.where(xs_scratch[np.arange(B), t, :, i], np.log(p[np.arange(B), t, :, i]), 0).sum(axis=1)
       else:
-        loss = -np.where(xs_scratch[np.arange(B), t, i, 0], np.log(p[np.arange(B), t, i, 0]), 0).sum()
+        # Multiply by P so that we can frame wise loss mean later.
+        loss = P * -np.where(xs_scratch[np.arange(B), t, i, 0], 
+                         np.log(p[np.arange(B), t, i, 0]), 
+                         np.log(1-p[np.arange(B), t, i, 0]))
+      if np.isinf(loss).any():
+        import pdb; pdb.set_trace()
       losses.append(loss)
 
       # update xs_scratch to contain predictions
@@ -151,6 +156,7 @@ def compute_chordwise_loss(wrapped_model, piano_rolls, separate_instruments=True
       sys.stdout.flush()
     assert np.allclose(mask, 0)
     report()
+    print 'hparams.checkpoint_fpath', hparams.checkpoint_fpath
   sys.stdout.write("\n")
   return losses
 
