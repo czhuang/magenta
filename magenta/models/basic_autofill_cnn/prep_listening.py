@@ -9,12 +9,14 @@ import pylab as plt
 
 from plotgibbs_process import pianoroll_to_midi
 
-
+COLORMAP = "viridis"
+COLORMAP = "bone"
 
 # Second listening test files.
 base_path = '/Users/czhuang/@coconet/compare_sampling/collect_npz'
 base_path = '/Users/czhuang/@coconet/new_generation/npzs'
 base_path = '/Users/czhuang/@coconet_samples/sigmoids/'
+base_path = '/data/lisatmp4/huangche/sigmoids'
 
 fpaths = {'contiguous': 'fromscratch_balanced_by_scaling_init=independent_Gibbs-num-steps-100--masker-ContiguousMasker----schedule-ConstantSchedule-0-5---sampler-SequentialSampler-temperature-1e-05--_20161112185008_284.97min.npz',
           'independent': 'fromscratch_balanced_by_scaling_init=independent_Gibbs-num-steps-100--masker-BernoulliMasker----schedule-YaoSchedule-pmin-0-1--pmax-0-9--alpha-0-7---sampler-IndependentSampler-temperature-1e-05--_20161112233522_4.73min.npz',
@@ -35,8 +37,14 @@ fpaths = {'nade': 'fromscratch_None_init=sequential_Gibbs_num_steps_0__masker_No
 
 fpaths = {'independent-1696': 'fromscratch_None_init=independent_Gibbs_num_steps_1696__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_0_0___20170109143550_24.55min.npz'}
 
+fpaths = {'independent-1696-128T': 'fromscratch_None_init=independent_Gibbs_num_steps_1696__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_0_0___20170109162347_95.92min.npz'}
 
-STEP_WANTED = -1
+fpaths = {'sigmoid_independent_higher_temp': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_20__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_0_0001___20170111154657_0.39min.npz'}
+
+
+#STEPS_WANTED = [0, 25, 50, 75, -1]
+STEPS_WANTED = range(40) + [50, 75, -1]
+STEPS_WANTED = range(20)
 NUM_SAMPLES = 4
 SEPARATE_INSTRUMENTS = False
 
@@ -64,13 +72,17 @@ def get_code(name, coding_dict):
 coding = {'contiguous':'c', 'independent':'i', 'nade':'n', 'bach':'b'}
 method_sample_indices = defaultdict(list)
 m, n = 4, 3
-fig, axes = plt.subplots(m, n)
-print 'axes.shape', axes.shape
 for i,  (method, fpath) in enumerate(fpaths.items()):
   input_fpath = os.path.join(base_path, fpath)
   print 'Loading', input_fpath
-  pianorolls = np.load(input_fpath)['pianorolls']
-  assert pianorolls.ndim == 5
+  pianoroll_steps = np.load(input_fpath)['pianorolls']
+  print pianoroll_steps.shape
+  assert pianoroll_steps.ndim == 5
+  
+  # Choose which indices in the batch to inspect. 
+  random_indices = np.random.randint(100, size=NUM_SAMPLES)
+  method_sample_indices[method] = random_indices
+  
   #if method == 'nade':
   #  assert pianorolls.shape[0] == 1
   #  step_idx = 0
@@ -78,42 +90,46 @@ for i,  (method, fpath) in enumerate(fpaths.items()):
   #  assert pianorolls.shape[0] == 101
   #  step_idx = 100
   #pianorolls = pianorolls[step_idx]
-  print pianorolls.shape
-  pianorolls = pianorolls[STEP_WANTED]
-  print 'shape', pianorolls.shape
-  #assert pianorolls.shape == (100, 32, 53, 4)
-  
-  random_indices = np.random.randint(100, size=NUM_SAMPLES)
-  method_sample_indices[method] = random_indices
-  for count_idx, idx in enumerate(random_indices):
-    print method, idx
-    pianoroll = pianorolls[idx].T
-   
-    code = get_code(method, coding)
-    pp = os.path.join(output_path, "%s_%d.midi" % (code, count_idx))
-    print pp
-    pianoroll_to_midi(pianoroll).write(
-        os.path.join(output_path, "%s_%d.midi" % (code, count_idx)))
-    assert 0 <= pianoroll.min()
-    assert pianoroll.max() <= 1
-    print 'pianoroll.shape', pianoroll.shape
-    if SEPARATE_INSTRUMENTS:
-      assert np.allclose(pianoroll.sum(axis=1), 1)
-    # max across instruments
-    pianoroll = pianoroll.max(axis=0)
-    ax = axes[count_idx, i]
-    ax.imshow(pianoroll, cmap="viridis", interpolation="none", vmin=0, vmax=1, aspect="auto", origin="lower")
-    ax.set_axis_off()
-    ax.set_title('%s' % method)
-  #fig.suptitle("%s %i" % (method, count_idx))
-  fig.set_size_inches(800 / fig.dpi, 600 / fig.dpi)
-  plt.tight_layout()
-  plt.subplots_adjust(hspace=.01, wspace=.01)
+  for step in STEPS_WANTED:
+    pianorolls = pianoroll_steps[step]
+    print 'shape', pianorolls.shape
+    #assert pianorolls.shape == (100, 32, 53, 4)
+    fig, axes = plt.subplots(m, n)
+    print 'axes.shape', axes.shape
+    if len(str(step)) == 1:
+      step_str = '0%d' % step
+    else:
+      step_str = '%d' % step
+    
+    for count_idx, idx in enumerate(random_indices):
+      print method, idx
+      pianoroll = pianorolls[idx].T
+     
+      code = get_code(method, coding)
+      pp = os.path.join(
+          output_path, "%s_%d_step_%s.midi" % (code, count_idx, step_str))
+      print pp
+      pianoroll_to_midi(pianoroll).write(pp)
+      assert 0 <= pianoroll.min()
+      assert pianoroll.max() <= 1
+      print 'pianoroll.shape', pianoroll.shape
+      if SEPARATE_INSTRUMENTS:
+        assert np.allclose(pianoroll.sum(axis=1), 1)
+      # max across instruments
+      pianoroll = pianoroll.max(axis=0)
+      ax = axes[count_idx, i]
+      ax.imshow(pianoroll, cmap=COLORMAP, interpolation="none", vmin=0, vmax=1, aspect="auto", origin="lower")
+      ax.set_axis_off()
+      ax.set_title('%s' % method)
+    #fig.suptitle("%s %i" % (method, count_idx))
+    fig.set_size_inches(800 / fig.dpi, 600 / fig.dpi)
+    #plt.tight_layout()
+    plt.subplots_adjust(hspace=.01, wspace=.01)
 #plt.show()
-plot_fpath = os.path.join(output_path, "plots.png")
-print 'Writing to', plot_fpath
-plt.savefig(plot_fpath, bbox_inches="tight")
-plt.close(fig)
+    plot_fpath = os.path.join(output_path, "plots-step_%s.png" % step_str)
+    print 'Writing to', plot_fpath
+    plt.savefig(plot_fpath, bbox_inches="tight")
+    plt.close(fig)
 
 pickle_fpath = os.path.join(output_path, 'chosen_sample_indices.pkl')
 print 'Writing to', pickle_fpath

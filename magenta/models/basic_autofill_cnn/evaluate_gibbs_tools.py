@@ -15,8 +15,8 @@ from magenta.models.basic_autofill_cnn.generate_tools import AutofillStep
 
 def get_fpath():
   # short test example
-  fname = '0_generate_gibbs_like-0-4.73min-2016-11-07_00:33:00-random_medium-0-empty-None.npz'
   path = '/Tmp/huangche/new_generation/2016-11-07_00:33:00-random_medium'
+  fname = '0_generate_gibbs_like-0-4.73min-2016-11-07_00:33:00-random_medium-0-empty-None.npz'
 
   # real long example, 100*4 full gibbs iterations
 #  fname = '0_generate_gibbs_like-0-156.86min-2016-11-07_02:03:00-balanced_by_scaling-0-empty-None.npz'
