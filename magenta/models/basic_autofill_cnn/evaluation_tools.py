@@ -108,8 +108,8 @@ def compute_chordwise_loss(wrapped_model, piano_rolls, separate_instruments=True
       D = P
     orders = orders[:, :, None] * D + np.arange(D, dtype=np.int32)[None, None, :]
     for i in range(B):
-      for d in range(D):
-        np.random.shuffle(orders[i, d])
+      for t in range(T):
+        np.random.shuffle(orders[i, t])
     orders = orders.reshape([B, T * D])
 
     for bahh, j in enumerate(orders.T):
@@ -132,8 +132,8 @@ def compute_chordwise_loss(wrapped_model, piano_rolls, separate_instruments=True
         loss = P * -np.where(xs_scratch[np.arange(B), t, i, 0], 
                          np.log(p[np.arange(B), t, i, 0]), 
                          np.log(1-p[np.arange(B), t, i, 0]))
-      if np.isinf(loss).any():
-        import pdb; pdb.set_trace()
+      #if np.isinf(loss).any():
+      #  import pdb; pdb.set_trace()
       losses.append(loss)
 
       # update xs_scratch to contain predictions
@@ -234,15 +234,19 @@ def main(argv):
               chordwise=compute_chordwise_loss,
               mingreedy_notewise=compute_mingreedy_notewise_loss,
               maxgreedy_notewise=compute_maxgreedy_notewise_loss)[FLAGS.kind]
+    # Retrieve model and hparams.
     wrapped_model = retrieve_model_tools.retrieve_model(model_name=FLAGS.model_name)
     hparams = wrapped_model.hparams
     print 'model_name', hparams.model_name
+    print hparams.checkpoint_fpath
     # TODO: model_name in hparams is the conv spec class name, not retrieve model_name
     #assert wrapped_model.config.hparams.model_name == FLAGS.model_name
+   
+    # Get data to evaluate on. 
+    piano_rolls = data_tools.get_data_as_pianorolls(FLAGS.input_dir, hparams, FLAGS.fold)
+    print sorted(pianoroll.shape[0] for pianoroll in piano_rolls)
     
-    sequences = list(data_tools.get_note_sequence_data(FLAGS.input_dir, FLAGS.fold))
-    encoder = pianorolls_lib.PianorollEncoderDecoder(separate_instruments=hparams.separate_instruments)
-    piano_rolls = [encoder.encode(sequence) for sequence in sequences]
+    # Evaluate!
     fn(wrapped_model, piano_rolls, hparams.separate_instruments, FLAGS.num_crops)
     print "%s done" % hparams.model_name
   except:

@@ -58,6 +58,7 @@ class Hyperparameters(object):
       mask_indicates_context=False,
       eval_freq = 5,
       num_epochs = 0,
+      patience = 5,
       # Runtime configs.
       run_dir=None,
       log_process=True,
@@ -101,7 +102,7 @@ class Hyperparameters(object):
       self.input_depth = 1 * 2
     self.output_depth = self.input_depth // 2    
 
-    if not self.separate_instruments and self.num_instruments > 1:
+    if not self.separate_instruments and (self.num_instruments > 1 or self.num_instruments == 0):
       self.use_softmax_loss = False
 
     # Check if pitch range is expanded if data augmentation on pitch is desired.
@@ -124,9 +125,14 @@ class Hyperparameters(object):
     #self.run_id = get_current_time_as_str()
     #self.log_subdir_str = '%s_%s_%s' % (self.conv_arch.name, self.__str__(),
     #                                    self.run_id)
-    self.log_subdir_str = '%s_%s' % (self.conv_arch.name, self.__str__())
-    print 'Model Specification: %s' % self.log_subdir_str
-
+  
+  @property
+  def log_subdir_str(self):
+    return '%s_%s' % (self.conv_arch.name, self.__str__())
+  
+  @property
+  def name(self):
+    return self.conv_arch.name
 
   @property
   def input_data_shape(self):
@@ -134,8 +140,13 @@ class Hyperparameters(object):
     return (self.crop_piece_len, self.num_pitches, self.input_depth)
 
   @property
-  def name(self):
-    return self.conv_arch.name
+  def raw_pianoroll_shape(self):
+    """Returns the shape of raw pianorolls."""
+    if self.separate_instruments:
+      return (self.crop_piece_len, self.num_pitches, self.num_instruments)
+    else:
+      return (self.crop_piece_len, self.num_pitches, 1)
+
 
   #@property
   #def params_to_serialize(self):
@@ -152,9 +163,9 @@ class Hyperparameters(object):
     sorted_keys = sorted(param_keys)
     # Filter out some parameters so that string repr won't be too long for
     # directory name.
-    # Want to show 'input_depth', and use_softmax_loss, learning rate
+    # Want to show 'dataset', input_depth', and use_softmax_loss, learning rate, 'batch_size'
     keys_to_filter_out = [
-        'batch_size', 'border', 'num_layers', 'num_filters', 'eval_freq',
+        'border', 'num_layers', 'num_filters', 'eval_freq',
         'output_depth', 'model_name', 'run_id', 'checkpoint_name',
         'batch_norm_variance_epsilon', 'batch_norm_gamma', 'batch_norm',
         'init_scale', 'crop_piece_len',
@@ -162,14 +173,18 @@ class Hyperparameters(object):
         'augment_by_halfing_doubling_durations', 'augment_by_transposing',
         'mask_indicates_context', 'denoise_mode', 
         'run_dir', 'num_epochs', 'log_process', 'save_model_secs',
-        'dataset',
     ]
     keys_to_include_last = ['maskout_method', 'corrupt_ratio']
-    line = (','.join('%s=%s' % (key, self.__dict__[key]) for key in sorted_keys
-                     if (key not in keys_to_filter_out 
-                         and key not in keys_to_include_last)))
+    key_to_shorthand = {
+        'batch_size': 'bs', 'learning_rate': 'lr', 
+        'corrupt_ratio': 'corrupt', 'input_depth': 'in', 
+        'use_softmax_loss': 'soft', 'num_instruments': 'num_i'}
+
+    line = (','.join('%s=%s' % (
+        key if key not in key_to_shorthand else key_to_shorthand[key], 
+        self.__dict__[key]) for key in sorted_keys if (key not in keys_to_filter_out and key not in keys_to_include_last)))
     line += ','
-    line += (','.join('%s=%s' % (key, self.__dict__[key]) for key in sorted_keys
+    line += (','.join('%s=%s' % (key if key not in key_to_shorthand else key_to_shorthand[key], self.__dict__[key]) for key in sorted_keys
                      if key in keys_to_include_last))
     return line
 

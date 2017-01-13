@@ -25,7 +25,7 @@ def random_double_or_halftime_pianoroll_from_note_sequence(
     sequence, augment_by_halfing_doubling_durations, encoder):
   if not augment_by_halfing_doubling_durations:
     return encoder.encode(sequence)
-
+  assert isinstance(sequence, music_pb2.NoteSequence), 'No support for dataaugmentation on non-NoteSequence data yet.'
   durations = set(note.end_time - note.start_time for note in sequence.notes)
   longest_to_double = 4
   shortest_to_half = 0.25
@@ -160,58 +160,118 @@ def make_data_feature_maps(sequences, hparams, encoder, start_crop_index=None):
   return input_data, targets
 
 
-def get_pianoroll_from_note_sequence_data(path, type_, len_from_beginning=None):
-  """Retrieves NoteSequences from a TFRecord and returns piano rolls.
+#def get_pianoroll_from_note_sequence_data(path, type_, len_from_beginning=None):
+#  """Retrieves NoteSequences from a TFRecord and returns piano rolls.
+#
+#  Args:
+#    path: The absolute path to the TFRecord file.
+#    type_: The name of the TFRecord file which also specifies the type of data.
+#
+#  Yields:
+#    3D binary numpy arrays.
+#
+#  Raises:
+#    DataProcessingError: If the type_ specified is not one of train, test or
+#        valid.
+#  """
+#  if type_ not in ['train', 'test', 'valid']:
+#    raise DataProcessingError(
+#        'Data is grouped by train, test or valid. Please specify one.')
+#  fpath = os.path.join(path, '%s.tfrecord' % type_)
+#  encoder = PianorollEncoderDecoder()
+#  seq_reader = note_sequence_record_iterator(fpath)
+#  for seq in seq_reader:
+#    pianoroll = encoder.encode(seq)
+#    if len_from_beginning is None:
+#      yield pianoroll
+#    elif pianoroll.shape[0] >= len_from_beginning:
+#      yield pianoroll[:len_from_beginning]
+#    else:
+#      continue
 
-  Args:
-    path: The absolute path to the TFRecord file.
-    type_: The name of the TFRecord file which also specifies the type of data.
 
-  Yields:
-    3D binary numpy arrays.
-
-  Raises:
-    DataProcessingError: If the type_ specified is not one of train, test or
-        valid.
-  """
-  if type_ not in ['train', 'test', 'valid']:
-    raise DataProcessingError(
-        'Data is grouped by train, test or valid. Please specify one.')
-  fpath = os.path.join(path, '%s.tfrecord' % type_)
-  encoder = PianorollEncoderDecoder()
-  seq_reader = note_sequence_record_iterator(fpath)
-  for seq in seq_reader:
-    pianoroll = encoder.encode(seq)
-    if len_from_beginning is None:
-      yield pianoroll
-    elif pianoroll.shape[0] >= len_from_beginning:
-      yield pianoroll[:len_from_beginning]
-    else:
-      continue
+DATASET_PARAMS = {
+    'Nottingham': {
+        'pitch_ranges': [31, 93], 'shortest_duration': 0.25}, 
+    'MuseData': {
+        'pitch_ranges': [21, 105], 'shortest_duration': 0.25}, 
+    'Piano-midi.de': {
+        'pitch_ranges': [21, 108], 'shortest_duration': 0.25, 
+        'batch_size': 12},
+    'JSB_Chorales': {
+        'pitch_ranges': [43, 96], 'shortest_duration': 0.5,
+        'crop_piece_len': 32},
+    '4part_Bach_chorales': {
+        'pitch_ranges': [36, 88], 'shortest_duration': 0.125, 
+        'relative_path': 'bach/qbm120/instrs=4_duration=0.125_sep=True'}
+}
 
 
-def get_note_sequence_data(path, type_):
-  """Retrieves NoteSequences from a TFRecord.
+def get_data_as_pianorolls(basepath, hparams, fold):
+  seqs, encoder = get_data_and_update_hparams(
+      basepath, hparams, fold, update_hparams=False, return_encoder=True)
+  return [encoder.encode(seq) for seq in seqs]
 
-  Args:
-    path: The absolute path to the TFRecord file.
-    type_: The name of the TFRecord file which also specifies the type of data.
 
-  Yields:
-    NoteSequences.
+def get_data_and_update_hparams(basepath, hparams, fold, 
+                                update_hparams=True, return_encoder=True):
+  """Returns NoteSequences for '4_part_JSB_Chorales' and list of lists for the rest, and updates dataset specific hparams."""
+  dataset_name = hparams.dataset
+  separate_instruments = hparams.separate_instruments
+  # TODO: Read dataset params from JSON file or the like.
+  params = DATASET_PARAMS[dataset_name]
+  pitch_range = params['pitch_ranges']
+  if dataset_name == '4part_Bach_chorales':
+    fpath = os.path.join(basepath, params['relative_path'], '%s.tfrecord' % fold)
+    seqs = list(note_sequence_record_iterator(fpath))
+  else:
+    fpath = os.path.join(basepath, dataset_name+'.npz')
+    data = np.load(fpath)
+    seqs = data[fold]
+  if return_encoder:
+    encoder = PianorollEncoderDecoder(
+        shortest_duration=params['shortest_duration'],
+        min_pitch=pitch_range[0],
+        max_pitch=pitch_range[1],
+        separate_instruments=separate_instruments)
+  
+  # Update hparams.
+  if update_hparams:
+    hparams.num_pitches = pitch_range[1] - pitch_range[0] + 1
+    #TODO: loop over, and can also avoid typo.
+    if 'batch_size' in params:
+      hparams.batch_size = params['batch_size']
+    if 'crop_piece_len' in params:
+      hparams.crop_piece_len = params['crop_piece_len']
 
-  Raises:
-    DataProcessingError: If the type_ specified is not one of train, test or
-        valid.
-  """
-  if type_ not in ['train', 'test', 'valid']:
-    raise DataProcessingError(
-        'Data is grouped by train, test or valid. Please specify one.')
-  fpath = os.path.join(path, '%s.tfrecord' % type_)
-  print 'fpath', fpath
-  #seq_reader = note_sequence_record_iterator(fpath)
-  #for seq in seq_reader:
-  #  yield seq
-  reader = tf.python_io.tf_record_iterator(fpath)
-  for serialized_sequence in reader:
-    yield music_pb2.NoteSequence.FromString(serialized_sequence)
+  if return_encoder:
+    return seqs, encoder
+  else:
+    return seqs
+
+
+#def get_note_sequence_data(path, type_):
+#  """Retrieves NoteSequences from a TFRecord.
+#
+#  Args:
+#    path: The absolute path to the TFRecord file.
+#    type_: The name of the TFRecord file which also specifies the type of data.
+#
+#  Yields:
+#    NoteSequences.
+#
+#  Raises:
+#    DataProcessingError: If the type_ specified is not one of train, test or
+#        valid.
+#  """
+#  if type_ not in ['train', 'test', 'valid']:
+#    raise DataProcessingError(
+#        'Data is grouped by train, test or valid. Please specify one.')
+#  fpath = os.path.join(path, '%s.tfrecord' % type_)
+#  print 'fpath', fpath
+#  #seq_reader = note_sequence_record_iterator(fpath)
+#  #for seq in seq_reader:
+#  #  yield seq
+#  reader = tf.python_io.tf_record_iterator(fpath)
+#  for serialized_sequence in reader:
+#    yield music_pb2.NoteSequence.FromString(serialized_sequence)

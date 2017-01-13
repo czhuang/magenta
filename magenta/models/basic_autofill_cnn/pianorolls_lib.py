@@ -167,6 +167,7 @@ class PianorollEncoderDecoder(object):
     self.shortest_duration = shortest_duration
     self.min_pitch = min_pitch
     self.max_pitch = max_pitch
+
     if sequence_iterator is not None:
       sequences = list(sequence_iterator)
       self.shortest_duration = find_shortest_duration(sequences)
@@ -185,6 +186,43 @@ class PianorollEncoderDecoder(object):
     return int(time / self.shortest_duration)
 
   def encode(self,
+             sequence,
+             duration_ratio=1,
+             return_program_to_pianoroll_map=False):
+    """Encode sequence into pianoroll."""
+    # list of lists
+    if (isinstance(sequence, list) and 
+        (isinstance(sequence[0], list) or isinstance(sequence[0], tuple))):
+      return self.encode_list_of_lists(
+          sequence, duration_ratio=duration_ratio)
+    elif isinstance(sequence, music_pb2.NoteSequence):
+      return self.encode_NoteSequences(
+          sequence, duration_ratio=duration_ratio,
+          return_program_to_pianoroll_map=return_program_to_pianoroll_map)
+    else:
+      assert False, 'Type %s not yet supported.' % type(sequence)
+     
+  def encode_list_of_lists(self,
+             sequence,
+             duration_ratio=1):
+    assert not self.separate_instruments, 'Converting list of lists into separate instrument pianorolls not yet supported.'
+    #TODO: duration_ratio not yet used.
+    T = len(sequence)
+    P = self.max_pitch - self.min_pitch + 1
+    roll = np.zeros((T, P, 1))
+    for t, chord in enumerate(sequence):
+      for pitch in chord:
+        if pitch > self.max_pitch or pitch < self.min_pitch:
+          raise PitchOutOfEncodeRangeError(
+              '%s is out of specified range [%s, %s].' % (
+                  pitch, self.min_pitch, self.max_pitch))
+        p = pitch - self.min_pitch
+        roll[t, p, 0] = 1
+    num_notes = np.sum(len(chord) for chord in sequence)
+    assert num_notes == np.sum(roll), '%d != %d' % (num_notes, np.sum(roll))
+    return roll
+  
+  def encode_NoteSequences(self,
              sequence,
              duration_ratio=1,
              return_program_to_pianoroll_map=False):

@@ -351,7 +351,7 @@ class Gibbs(object):
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_integer("num_steps", None, "number of gibbs steps to take")
 tf.app.flags.DEFINE_string("generation_type", None, "unconditioned, inpainting")
-tf.app.flags.DEFINE_string("context_source", "bach", "bach")
+tf.app.flags.DEFINE_string("context_source", "originals", "originals to use the validation piece of the dataset on which the model was trained.")
 tf.app.flags.DEFINE_string("sampler", None, "independent or sequential or bisecting")
 tf.app.flags.DEFINE_string("masker", None, "bernoulli or contiguous or bernoulli_inpainting")
 tf.app.flags.DEFINE_string("context_kind", None, "bernoulli, harmonization, transition, inner_voices, tenor")
@@ -420,22 +420,24 @@ def main(unused_argv):
     )[FLAGS.masker]
 
   wmodel = retrieve_model_tools.retrieve_model(model_name=FLAGS.model_name)
-  if FLAGS.separate_instruments:
-    B, T, P, I = [100, FLAGS.piece_length, 53, 4]
-  else:
-    B, T, P, I = [100, FLAGS.piece_length, 53, 1]
 
+  hparams = wmodel.hparams
+  B = 100
+  T, P, I = hparams.raw_pianoroll_shape
   print B, T, P, I
+  hparams.crop_piece_len = FLAGS.piece_length
   
   intermediates = defaultdict(list)
 
   # Sets up context and blank slate.  
   if FLAGS.generation_type == "inpainting":
-    if FLAGS.context_source == "bach":
-      print "Loading Bach chorales..."
-      pianorolls = np.asarray(list(data_tools.get_pianoroll_from_note_sequence_data(
-          FLAGS.validation_set_dir, "valid", FLAGS.piece_length)))
-      # Logs initial complete bach chorale.
+    if FLAGS.context_source == "originals":
+      print "Loading validation pieces from %s..." % hparams.dataset
+      piano_rolls = data_tools.get_data_as_pianorolls(FLAGS.input_dir, hparams, 'valid')
+      #pianorolls = np.asarray(list(data_tools.get_data_from(
+      #    FLAGS.validation_set_dir, "valid", FLAGS.piece_length)))
+      
+      # Logs initial complete pieces.
       intermediates["pianorolls"].append(pianorolls.copy())
       intermediates["masks"].append(np.zeros_like(pianorolls))
       intermediates["predictions"].append(np.zeros_like(pianorolls))
