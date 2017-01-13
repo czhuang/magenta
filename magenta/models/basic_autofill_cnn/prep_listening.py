@@ -41,10 +41,28 @@ fpaths = {'independent-1696-128T': 'fromscratch_None_init=independent_Gibbs_num_
 
 fpaths = {'sigmoid_independent_higher_temp': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_20__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_0_0001___20170111154657_0.39min.npz'}
 
+fpaths = {
+    'independent-temp0001': 'fromscratch_None_init=independent_Gibbs_num_steps_424__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_0_0001___20170111160253_6.25min.npz',
+    'independent-temp01': 'fromscratch_None_init=independent_Gibbs_num_steps_424__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_0_01___20170111160944_6.27min.npz',
+    'independent-temp1': 'fromscratch_None_init=independent_Gibbs_num_steps_424__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___20170111161634_6.28min.npz'}
 
+
+# Other datasets
+fpaths = {
+    'independent-piano-32-steps20': 'fromscratch_None_init=independent_Gibbs_num_steps_20__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___20170112143304_1.27min.npz'}
+
+fpaths = {
+    'independent-piano-32_steps20-temp01': 'fromscratch_None_init=independent_Gibbs_num_steps_20__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_0_1___20170112143950_1.27min.npz'}
+
+fpaths = {
+    'independent-piano-32-steps200-temp1': 'fromscratch_None_init=independent_Gibbs_num_steps_200__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___20170112144529_9.59min.npz'}
+    
 #STEPS_WANTED = [0, 25, 50, 75, -1]
 STEPS_WANTED = range(40) + [50, 75, -1]
-STEPS_WANTED = range(20)
+STEPS_WANTED = range(20) + [200/4., 200/2., 200*3/4, -1] 
+#STEPS_WANTED = range(20)
+STEPS_WANTED = range(0, 200, 20)
+#STEPS_WANTED = [0, 424/4., 424/2., 424*3/4, -1]
 NUM_SAMPLES = 4
 SEPARATE_INSTRUMENTS = False
 
@@ -62,10 +80,11 @@ os.makedirs(output_path)
 def get_code(name, coding_dict):
   # hack.
   for code_key, code in coding_dict.items():
+    postfix = name.split(code_key)[-1]
     if code_key in name and code != 'bach':
-      return code
+      return code + postfix
     elif code_key in name and code == 'bach':
-      return code
+      return code + postfix
   assert False, 'Match for %s was not found' % name
             
 
