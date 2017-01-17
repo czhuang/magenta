@@ -5,6 +5,8 @@ import tensorflow as tf
 
 from magenta.models.basic_autofill_cnn import pianorolls_lib
 from magenta.models.basic_autofill_cnn import mask_tools, retrieve_model_tools, data_tools
+from magenta.models.basic_autofill_cnn.data_tools import DataProcessingError
+
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('fold', None, 'data fold on which to evaluate (valid or test)')
