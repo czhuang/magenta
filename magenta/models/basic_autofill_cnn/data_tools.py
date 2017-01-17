@@ -104,6 +104,21 @@ def random_crop_pianoroll(pianoroll,
   return shifted_pianoroll
 
 
+def random_crop_pianoroll_pad(pianoroll,
+                              crop_len,
+                              start_crop_index=None):
+  length = len(pianoroll)
+  pad_length = crop_len - len(pianoroll)
+  if pad_length > 0:
+    pianoroll = np.pad(pianoroll, [(0, pad_length)] + [(0, 0)] * (pianoroll.ndim - 1), mode="constant")
+  if start_crop_index is not None:
+    start_time_idx = start_crop_index
+  else:
+    start_time_idx = np.random.randint(len(pianoroll) - crop_len + 1)
+  pianoroll = pianoroll[start_time_idx:start_time_idx + crop_len]
+  return pianoroll, length
+
+
 def make_data_feature_maps(sequences, hparams, encoder, start_crop_index=None):
   """Return input and output pairs of masked out and full pianorolls.
 
