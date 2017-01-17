@@ -97,7 +97,7 @@ def get_checkpoint_hparams(model_name):
     # FIXME: change in hparams the checkpoint name to just be best_model.ckpt so that can be the same for all
     hparams.checkpoint_fpath = os.path.join(
         FLAGS.run_dir, FLAGS.checkpoint_dir,
-        'DeepStraightConvSpecs-64-128-best_model.ckpt')
+        'DeepStraightConvSpecs-%i-%i-best_model.ckpt' % (hparams.num_layers, hparams.num_filters))
     print 'Will load checkpoint from ', hparams.checkpoint_fpath
     #checkpoint_fpath = os.path.join(tf.resource_loader.get_data_files_path(),
     #                                'checkpoints',

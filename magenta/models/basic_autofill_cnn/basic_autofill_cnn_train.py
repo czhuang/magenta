@@ -338,6 +338,7 @@ def main(unused_argv):
     with sv.PrepareSession() as sess:
       epoch_count = 0
       time_since_improvement = 0
+      true_time_since_improvement = 0
       while epoch_count < FLAGS.num_epochs or not FLAGS.num_epochs:
         if sv.should_stop():
           break
@@ -353,13 +354,18 @@ def main(unused_argv):
           if new_best_validation_loss < best_validation_loss:
             best_validation_loss = new_best_validation_loss
             time_since_improvement = 0
+            true_time_since_improvement = 0
           else:
             time_since_improvement += 1
+            true_time_since_improvement += 1
             if time_since_improvement > FLAGS.patience:
               sess.run(m.decay_op)
               time_since_improvement = 0
+            if true_time_since_improvement > 5 * FLAGS.patience:
+              break
         epoch_count += 1
 
+    print "best validation loss", best_validation_loss
     return best_validation_loss
 
 

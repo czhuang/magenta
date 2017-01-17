@@ -1,7 +1,6 @@
 """Evaluations for comparing against prior work."""
 import os, sys, traceback
 import numpy as np
-import scipy.stats as stats
 import tensorflow as tf
 
 from magenta.models.basic_autofill_cnn import pianorolls_lib
@@ -11,6 +10,14 @@ FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('fold', None, 'data fold on which to evaluate (valid or test)')
 tf.app.flags.DEFINE_string('kind', None, 'notewise or chordwise loss, or maxgreedy_notewise or mingreedy_notewise')
 tf.app.flags.DEFINE_integer('num_crops', 5, 'number of random crops to consider')
+# already defined in basic_autofill_cnn_train.py which comes in through retrieve_model_tools (!)
+#tf.app.flags.DEFINE_integer('crop_piece_len', None, 'length of random crops (short pieces are padded in case of chordwise)')
+
+class InfiniteLoss(Exception):
+  pass
+
+def sem(xs):
+  return np.std(xs) / np.sqrt(np.asarray(xs).size)
 
 def compute_maxgreedy_notewise_loss(wrapped_model, piano_rolls):
   return compute_greedy_notewise_loss(wrapped_model, piano_rolls, sign=+1)
@@ -27,12 +34,13 @@ def compute_greedy_notewise_loss(wrapped_model, piano_rolls, sign):
   def report():
     loss_mean = np.mean(losses)
     #loss_std = np.std(losses)
-    loss_sem = stats.sem(losses)
+    loss_sem = sem(losses)
     sys.stdout.write("%.5f+-%.5f" % (loss_mean, loss_sem))
 
   num_crops = 5
+  crop_piece_len = FLAGS.crop_piece_len if FLAGS.crop_piece_len is not None else hparams.crop_piece_len
   for _ in range(num_crops):
-    xs = np.array([data_tools.random_crop_pianoroll(x, hparams.crop_piece_len)
+    xs = np.array([data_tools.random_crop_pianoroll(x, crop_piece_len)
                    for x in piano_rolls], dtype=np.float32)
 
     B, T, P, I = xs.shape
@@ -79,15 +87,18 @@ def compute_chordwise_loss(wrapped_model, piano_rolls, separate_instruments=True
   session = wrapped_model.sess
 
   losses = []
-  def report():
+  def report(final=False):
     loss_mean = np.mean(losses)
     #loss_std = np.std(losses)
-    loss_sem = stats.sem(np.array(losses).flat)
-    sys.stdout.write("%.5f+-%.5f" % (loss_mean, loss_sem))
+    loss_sem = sem(losses)
+    print "%s%.5f+-%.5f" % ("FINAL " if final else "", loss_mean, loss_sem)
 
+  crop_piece_len = FLAGS.crop_piece_len if FLAGS.crop_piece_len is not None else hparams.crop_piece_len
   for _ in range(num_crops):
-    xs = np.array([data_tools.random_crop_pianoroll(x, hparams.crop_piece_len)
-                   for x in piano_rolls], dtype=np.float32)
+    xs, lengths = list(zip(*[data_tools.random_crop_pianoroll_pad(x, crop_piece_len)
+                             for x in piano_rolls]))
+    xs = np.array(xs, dtype=np.float32)
+    lengths = np.array(lengths, dtype=int)
     # working copy to fill in model's own predictions of chord notes
     xs_scratch = np.copy(xs)
 
@@ -125,16 +136,30 @@ def compute_chordwise_loss(wrapped_model, piano_rolls, separate_instruments=True
                     for x, m in zip(xs_scratch, mask)]
       p = session.run(model.predictions,
                       feed_dict={model.input_data: input_data})
+
+      # in both cases, loss is a vector over batch examples
       if separate_instruments:
+        # batched loss at time/instrument pair, summed over pitches
         loss = -np.where(xs_scratch[np.arange(B), t, :, i], np.log(p[np.arange(B), t, :, i]), 0).sum(axis=1)
       else:
-        # Multiply by P so that we can frame wise loss mean later.
+        # batched loss at time/pitch pair, single instrument
+
+        # multiply by P to counteract the division by P when we take the mean loss;
+        # we want to sum over pitches, not average.
         loss = P * -np.where(xs_scratch[np.arange(B), t, i, 0], 
-                         np.log(p[np.arange(B), t, i, 0]), 
-                         np.log(1-p[np.arange(B), t, i, 0]))
-      #if np.isinf(loss).any():
-      #  import pdb; pdb.set_trace()
+                             np.log(p[np.arange(B), t, i, 0]), 
+                             np.log(1-p[np.arange(B), t, i, 0]))
+
+      # don't judge predictions of padded elements
+      loss = np.where(t < lengths, loss, 0)
+
       losses.append(loss)
+
+      print "%i: %.5f < %.5f < %.5f < %.5f < %.5g" % (bahh, np.min(loss), np.percentile(loss, 25), np.percentile(loss, 50), np.percentile(loss, 75), np.max(loss))
+
+      if np.isinf(loss).any():
+        report(final=True)
+        raise InfiniteLoss()
 
       # update xs_scratch to contain predictions
       if separate_instruments:
@@ -142,7 +167,7 @@ def compute_chordwise_loss(wrapped_model, piano_rolls, separate_instruments=True
         mask[np.arange(B), t, :, i] = 0
       else:
         #FIXME: check this comparison
-        xs_scratch[np.arange(B), t, i, 0] = np.where(p[np.arange(B), t, i, 0]>0.5, 1, 0)
+        xs_scratch[np.arange(B), t, i, 0] = p[np.arange(B), t, i, 0] > 0.5
         mask[np.arange(B), t, i, 0] = 0
       assert np.unique(mask.sum(axis=(1, 2, 3))).size == 1
 
@@ -151,13 +176,10 @@ def compute_chordwise_loss(wrapped_model, piano_rolls, separate_instruments=True
 
       if len(losses) % 100 == 0:
         report()
-
-      sys.stdout.write(".")
-      sys.stdout.flush()
     assert np.allclose(mask, 0)
     report()
     print 'hparams.checkpoint_fpath', hparams.checkpoint_fpath
-  sys.stdout.write("\n")
+  report(final=True)
   return losses
 
 
@@ -245,9 +267,12 @@ def main(argv):
     # Get data to evaluate on. 
     piano_rolls = data_tools.get_data_as_pianorolls(FLAGS.input_dir, hparams, FLAGS.fold)
     print sorted(pianoroll.shape[0] for pianoroll in piano_rolls)
-    
+
     # Evaluate!
-    fn(wrapped_model, piano_rolls, hparams.separate_instruments, FLAGS.num_crops)
+    try:
+      fn(wrapped_model, piano_rolls, hparams.separate_instruments, FLAGS.num_crops)
+    except InfiniteLoss:
+      print "infinite loss"
     print "%s done" % hparams.model_name
   except:
     exc_type, exc_value, exc_traceback = sys.exc_info()
