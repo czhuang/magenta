@@ -31,6 +31,7 @@ class Hyperparameters(object):
       crop_piece_len=64, #128, #64, #32,
       num_instruments=4,
       separate_instruments=True,
+      encode_silences=False,
       #input_depth=None, #8,
       #output_depth=None, #4,
       # Batch norm parameters.
@@ -117,7 +118,13 @@ class Hyperparameters(object):
       return self.input_depth // 2    
     else:
       return self.input_depth
-     
+  
+  @property
+  def num_extra_encodings(self):
+    if self.encode_silences:
+      return 1
+    return 0   
+  
   @property
   def num_pitches(self):
     if self.augment_by_transposing:
@@ -141,17 +148,25 @@ class Hyperparameters(object):
     return self.conv_arch.name
 
   @property
-  def input_data_shape(self):
+  def input_shape(self):
     """Returns the shape of input data."""
-    return (self.crop_piece_len, self.num_pitches, self.input_depth)
+    return [self.crop_piece_len, self.num_pitches, self.input_depth]
 
+  @property
+  def output_shape(self):
+    """Returns the shape of input data."""
+    if self.encode_silences:
+      return [self.crop_piece_len, self.num_pitches+1, self.input_depth]
+    else:
+      return [self.crop_piece_len, self.num_pitches, self.output_depth]
+  
   @property
   def raw_pianoroll_shape(self):
     """Returns the shape of raw pianorolls."""
     if self.separate_instruments:
-      return (self.crop_piece_len, self.num_pitches, self.num_instruments)
+      return [self.crop_piece_len, self.num_pitches, self.num_instruments]
     else:
-      return (self.crop_piece_len, self.num_pitches, 1)
+      return [self.crop_piece_len, self.num_pitches, 1]
 
   @property
   def use_softmax_loss(self):

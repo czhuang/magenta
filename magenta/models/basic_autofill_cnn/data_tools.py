@@ -260,7 +260,8 @@ def get_data_and_update_hparams(basepath, hparams, fold,
         min_pitch=pitch_range[0],
         max_pitch=pitch_range[1],
         separate_instruments=separate_instruments,
-        num_instruments=hparams.num_instruments)
+        num_instruments=hparams.num_instruments,
+        encode_silences=hparams.encode_silences)
   
   if return_encoder:
     return seqs, encoder

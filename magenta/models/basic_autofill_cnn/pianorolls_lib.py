@@ -41,7 +41,7 @@ else:
   _DEFAULT_QPM = 120
 
 class PitchOutOfEncodeRangeError(Exception):
-  """Exception for when pitch of note is out of encoding range."""
+  """Exception for when pitch of note is out of encodings range."""
   pass
 
 
@@ -164,8 +164,10 @@ class PianorollEncoderDecoder(object):
                sequence_iterator=None,
                separate_instruments=True,
                augment_by_transposing=False,
-               num_instruments=None):
+               num_instruments=None,
+               encode_silences=None):
     assert num_instruments is not None
+    assert encode_silences is not None
     self.shortest_duration = shortest_duration
     self.min_pitch = min_pitch
     self.max_pitch = max_pitch
@@ -181,6 +183,7 @@ class PianorollEncoderDecoder(object):
     self.shortest_duration = float(self.shortest_duration)
     self.separate_instruments = separate_instruments
     self.num_instruments = num_instruments
+    self.encode_silences = encode_silences
 
   def get_timestep(self, time):
     """Get the pianoroll timestep from seconds."""
@@ -191,49 +194,69 @@ class PianorollEncoderDecoder(object):
   def encode(self,
              sequence,
              duration_ratio=1,
-             return_program_to_pianoroll_map=False):
+             return_program_to_pianoroll_map=False,
+             return_with_additional_encodings=False):
     """Encode sequence into pianoroll."""
     # list of lists
     if (isinstance(sequence, list) and 
         (isinstance(sequence[0], list) or isinstance(sequence[0], tuple))):
       return self.encode_list_of_lists(
-          sequence, duration_ratio=duration_ratio)
+          sequence, duration_ratio=duration_ratio,
+          return_with_additional_encodings=return_with_additional_encodings)
     elif isinstance(sequence, music_pb2.NoteSequence):
       return self.encode_NoteSequences(
           sequence, duration_ratio=duration_ratio,
-          return_program_to_pianoroll_map=return_program_to_pianoroll_map)
+          return_program_to_pianoroll_map=return_program_to_pianoroll_map,
+          return_with_additional_encodings=return_with_additional_encodings)
+          
     else:
       assert False, 'Type %s not yet supported.' % type(sequence)
      
-  def encode_list_of_lists(self,
-             sequence,
-             duration_ratio=1):
+  def encode_list_of_lists(self, sequence, 
+                           duration_ratio=1,
+                           return_with_additional_encodings=False):
     #TODO: duration_ratio not yet used.
     T = len(sequence)
     P = self.max_pitch - self.min_pitch + 1
+    if self.encode_silences:
+      P += 1
     if self.separate_instruments:
       roll = np.zeros((T, P, self.num_instruments))
     else:
       roll = np.zeros((T, P, 1))
     for t, chord in enumerate(sequence):
-      for i, pitch in enumerate(chord):
-        if pitch > self.max_pitch or pitch < self.min_pitch:
-          raise PitchOutOfEncodeRangeError(
-              '%s is out of specified range [%s, %s].' % (
-                  pitch, self.min_pitch, self.max_pitch))
-        p = pitch - self.min_pitch
+      for i in range(self.num_instruments):
+        # FIXME: Need better way of aligning voices.
+        if i < len(chord):
+          pitch = chord[i]
+          if pitch > self.max_pitch or pitch < self.min_pitch:
+            raise PitchOutOfEncodeRangeError(
+                '%s is out of specified range [%s, %s].' % (
+                    pitch, self.min_pitch, self.max_pitch))
+          p = pitch - self.min_pitch
+        else:
+          # Then it's a silence
+          p = P - 1
+        
         if self.separate_instruments:
           roll[t, p, i] = 1
         else:
           roll[t, p, 0] = 1
-    num_notes = np.sum(len(chord) for chord in sequence)
+    if self.encode_silences:
+      num_notes = np.sum(len(chord) for chord in sequence)
+    else:
+      num_notes = len(sequence) * self.num_instruments
     assert num_notes == np.sum(roll), '%d != %d' % (num_notes, np.sum(roll))
-    return roll
+    if self.encode_silences and not return_with_additional_encodings:
+      return roll[:, :-1, :]
+    else:
+      return roll      
   
   def encode_NoteSequences(self,
              sequence,
              duration_ratio=1,
-             return_program_to_pianoroll_map=False):
+             return_program_to_pianoroll_map=False,
+             return_with_additional_encodings=False):
     """Encode sequence into pianoroll."""
     # Collect notes into voices.
     parts = defaultdict(list)
