@@ -243,14 +243,7 @@ def get_data_and_update_hparams(basepath, hparams, fold,
     fpath = os.path.join(basepath, dataset_name+'.npz')
     data = np.load(fpath)
     seqs = data[fold]
-  if return_encoder:
-    encoder = PianorollEncoderDecoder(
-        shortest_duration=params['shortest_duration'],
-        min_pitch=pitch_range[0],
-        max_pitch=pitch_range[1],
-        separate_instruments=separate_instruments,
-        num_instruments=params['num_instruments'])
-  
+
   # Update hparams.
   if update_hparams:
     hparams.num_pitches = pitch_range[1] - pitch_range[0] + 1
@@ -261,6 +254,14 @@ def get_data_and_update_hparams(basepath, hparams, fold,
     for key in ['batch_size', 'num_instruments', 'crop_piece_len']:
       if key in params:
         assert getattr(hparams, key) == params[key], 'hparams did not get updated.'
+  if return_encoder:
+    encoder = PianorollEncoderDecoder(
+        shortest_duration=params['shortest_duration'],
+        min_pitch=pitch_range[0],
+        max_pitch=pitch_range[1],
+        separate_instruments=separate_instruments,
+        num_instruments=hparams.num_instruments)
+  
   if return_encoder:
     return seqs, encoder
   else:

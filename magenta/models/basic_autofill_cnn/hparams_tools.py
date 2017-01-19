@@ -177,7 +177,8 @@ class Hyperparameters(object):
         'init_scale', 'prediction_threshold', 'optimize_mask_only', 'conv_arch',
         'augment_by_halfing_doubling_durations', 'augment_by_transposing',
         'mask_indicates_context', 'denoise_mode', 
-        'run_dir', 'num_epochs', 'log_process', 'save_model_secs', '_num_pitches'
+        'run_dir', 'num_epochs', 'log_process', 'save_model_secs', '_num_pitches',
+        'batch_size', 'crop_piece_len', 'input_depth', 'num_instruments', 'num_pitches',
     ]
     keys_to_include_last = ['maskout_method', 'corrupt_ratio']
     key_to_shorthand = {
