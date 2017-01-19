@@ -207,14 +207,14 @@ def make_data_feature_maps(sequences, hparams, encoder, start_crop_index=None):
 
 DATASET_PARAMS = {
     'Nottingham': {
-        'pitch_ranges': [31, 93], 'shortest_duration': 0.25}, 
+        'pitch_ranges': [31, 93], 'shortest_duration': 0.25, 'num_instruments': 9}, 
     'MuseData': {
-        'pitch_ranges': [21, 105], 'shortest_duration': 0.25}, 
+        'pitch_ranges': [21, 105], 'shortest_duration': 0.25, 'num_instruments': 14},
     'Piano-midi.de': {
-        'pitch_ranges': [21, 108], 'shortest_duration': 0.25, 
+        'pitch_ranges': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 12,
         'batch_size': 12},
     'JSB_Chorales': {
-        'pitch_ranges': [43, 96], 'shortest_duration': 0.5,
+        'pitch_ranges': [43, 96], 'shortest_duration': 0.5, 'num_instruments': 4,
         'crop_piece_len': 32},
     '4part_Bach_chorales': {
         'pitch_ranges': [36, 88], 'shortest_duration': 0.125, 
@@ -248,17 +248,19 @@ def get_data_and_update_hparams(basepath, hparams, fold,
         shortest_duration=params['shortest_duration'],
         min_pitch=pitch_range[0],
         max_pitch=pitch_range[1],
-        separate_instruments=separate_instruments)
+        separate_instruments=separate_instruments,
+        num_instruments=params['num_instruments'])
   
   # Update hparams.
   if update_hparams:
     hparams.num_pitches = pitch_range[1] - pitch_range[0] + 1
-    #TODO: loop over, and can also avoid typo.
-    if 'batch_size' in params:
-      hparams.batch_size = params['batch_size']
-    if 'crop_piece_len' in params:
-      hparams.crop_piece_len = params['crop_piece_len']
-
+    for key, value in params.iteritems():
+      if key in hparams.__dict__:
+        setattr(hparams, key, value)
+    #FIXME: just for debug
+    for key in ['batch_size', 'num_instruments', 'crop_piece_len']:
+      if key in params:
+        assert getattr(hparams, key) == params[key], 'hparams did not get updated.'
   if return_encoder:
     return seqs, encoder
   else:

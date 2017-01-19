@@ -163,7 +163,9 @@ class PianorollEncoderDecoder(object):
                max_pitch=88,
                sequence_iterator=None,
                separate_instruments=True,
-               augment_by_transposing=False):
+               augment_by_transposing=False,
+               num_instruments=None):
+    assert num_instruments is not None
     self.shortest_duration = shortest_duration
     self.min_pitch = min_pitch
     self.max_pitch = max_pitch
@@ -178,6 +180,7 @@ class PianorollEncoderDecoder(object):
       self.max_pitch = self.max_pitch + 6
     self.shortest_duration = float(self.shortest_duration)
     self.separate_instruments = separate_instruments
+    self.num_instruments = num_instruments
 
   def get_timestep(self, time):
     """Get the pianoroll timestep from seconds."""
@@ -205,19 +208,24 @@ class PianorollEncoderDecoder(object):
   def encode_list_of_lists(self,
              sequence,
              duration_ratio=1):
-    assert not self.separate_instruments, 'Converting list of lists into separate instrument pianorolls not yet supported.'
     #TODO: duration_ratio not yet used.
     T = len(sequence)
     P = self.max_pitch - self.min_pitch + 1
-    roll = np.zeros((T, P, 1))
+    if self.separate_instruments:
+      roll = np.zeros((T, P, self.num_instruments))
+    else:
+      roll = np.zeros((T, P, 1))
     for t, chord in enumerate(sequence):
-      for pitch in chord:
+      for i, pitch in enumerate(chord):
         if pitch > self.max_pitch or pitch < self.min_pitch:
           raise PitchOutOfEncodeRangeError(
               '%s is out of specified range [%s, %s].' % (
                   pitch, self.min_pitch, self.max_pitch))
         p = pitch - self.min_pitch
-        roll[t, p, 0] = 1
+        if self.separate_instruments:
+          roll[t, p, i] = 1
+        else:
+          roll[t, p, 0] = 1
     num_notes = np.sum(len(chord) for chord in sequence)
     assert num_notes == np.sum(roll), '%d != %d' % (num_notes, np.sum(roll))
     return roll

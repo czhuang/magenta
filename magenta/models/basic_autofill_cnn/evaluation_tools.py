@@ -83,10 +83,14 @@ def compute_greedy_notewise_loss(wrapped_model, piano_rolls, sign):
   return losses
 
 
-def compute_chordwise_loss(wrapped_model, piano_rolls, separate_instruments=True, num_crops=5):
+def compute_chordwise_loss(wrapped_model, piano_rolls, num_crops=5):
+  
   hparams = wrapped_model.hparams
   model = wrapped_model.model
   session = wrapped_model.sess
+
+  separate_instruments = hparams.separate_instruments
+  print 'separate_instruments', separate_instruments
 
   losses = []
   def report(final=False):
@@ -96,6 +100,8 @@ def compute_chordwise_loss(wrapped_model, piano_rolls, separate_instruments=True
     print "%s%.5f+-%.5f" % ("FINAL " if final else "", loss_mean, loss_sem)
 
   crop_piece_len = FLAGS.crop_piece_len if FLAGS.crop_piece_len is not None else hparams.crop_piece_len
+  if crop_piece_len != hparams.crop_piece_len:
+    print 'WARNING: crop_piece_len %r,  hparams.crop_piece_len %r, mismatch' % (crop_piece_len, hparams.crop_piece_len)
   for _ in range(num_crops):
     xs, lengths = list(zip(*[data_tools.random_crop_pianoroll_pad(x, crop_piece_len)
                              for x in piano_rolls]))
@@ -105,6 +111,7 @@ def compute_chordwise_loss(wrapped_model, piano_rolls, separate_instruments=True
     xs_scratch = np.copy(xs)
 
     B, T, P, I = xs.shape
+    print xs.shape
     mask = np.ones([B, T, P, I], dtype=np.float32)
     assert separate_instruments or (not separate_instruments and I == 1)
 
@@ -142,10 +149,9 @@ def compute_chordwise_loss(wrapped_model, piano_rolls, separate_instruments=True
       # in both cases, loss is a vector over batch examples
       if separate_instruments:
         # batched loss at time/instrument pair, summed over pitches
-        loss = -np.where(xs_scratch[np.arange(B), t, :, i], np.log(p[np.arange(B), t, :, i]), 0).sum(axis=1)
+        loss = I * -np.where(xs_scratch[np.arange(B), t, :, i], np.log(p[np.arange(B), t, :, i]), 0).sum(axis=1)
       else:
         # batched loss at time/pitch pair, single instrument
-
         # multiply by P to counteract the division by P when we take the mean loss;
         # we want to sum over pitches, not average.
         loss = P * -np.where(xs_scratch[np.arange(B), t, i, 0], 
@@ -272,7 +278,7 @@ def main(argv):
 
     # Evaluate!
     try:
-      fn(wrapped_model, piano_rolls, hparams.separate_instruments, FLAGS.num_crops)
+      fn(wrapped_model, piano_rolls, FLAGS.num_crops)
     except InfiniteLoss:
       print "infinite loss"
     print "%s done" % hparams.model_name
