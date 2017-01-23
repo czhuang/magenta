@@ -12,6 +12,7 @@ FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('fold', None, 'data fold on which to evaluate (valid or test)')
 tf.app.flags.DEFINE_string('kind', None, 'notewise or chordwise loss, or maxgreedy_notewise or mingreedy_notewise')
 tf.app.flags.DEFINE_integer('num_crops', 5, 'number of random crops to consider')
+tf.app.flags.DEFINE_integer('evaluation_batch_size', 1000, 'Batch size for evaluation.')
 # already defined in basic_autofill_cnn_train.py which comes in through retrieve_model_tools (!)
 #tf.app.flags.DEFINE_integer('crop_piece_len', None, 'length of random crops (short pieces are padded in case of chordwise)')
 
@@ -83,7 +84,8 @@ def compute_greedy_notewise_loss(wrapped_model, piano_rolls, sign):
   return losses
 
 
-def compute_chordwise_loss(wrapped_model, piano_rolls, num_crops=5):
+def compute_chordwise_loss(wrapped_model, piano_rolls, crop_piece_len, 
+                           num_crops=5, **kwargs):
   
   hparams = wrapped_model.hparams
   model = wrapped_model.model
@@ -99,9 +101,6 @@ def compute_chordwise_loss(wrapped_model, piano_rolls, num_crops=5):
     loss_sem = sem(losses)
     print "%s%.5f+-%.5f" % ("FINAL " if final else "", loss_mean, loss_sem)
 
-  crop_piece_len = FLAGS.crop_piece_len if FLAGS.crop_piece_len is not None else hparams.crop_piece_len
-  if crop_piece_len != hparams.crop_piece_len:
-    print 'WARNING: crop_piece_len %r,  hparams.crop_piece_len %r, mismatch' % (crop_piece_len, hparams.crop_piece_len)
   for _ in range(num_crops):
     xs, lengths = list(zip(*[data_tools.random_crop_pianoroll_pad(x, crop_piece_len)
                              for x in piano_rolls]))
@@ -191,65 +190,81 @@ def compute_chordwise_loss(wrapped_model, piano_rolls, num_crops=5):
   return losses
 
 
-def compute_notewise_loss(wrapped_model, piano_rolls, separate_instruments=True, num_crops=5):
+def compute_notewise_loss(wrapped_model, piano_rolls, crop_piece_len, 
+                          num_crops=5, imagewise=False, eval_batch_size=1000, **kwargs):
   hparams = wrapped_model.hparams
   model = wrapped_model.model
   session = wrapped_model.sess
+  separate_instruments = hparams.separate_instruments
 
   losses = []
-  def report():
+  def report(final=False):
     loss_mean = np.mean(losses)
-    loss_std = np.std(losses)
-    sys.stdout.write("%.5f+-%.5f" % (loss_mean, loss_std))
-
+    loss_sem = sem(losses)
+    #loss_std = np.std(losses)
+    if imagewise:
+      pixel_count = crop_piece_len * hparams.input_shape[1]
+      #FIXME: other image datasets will have diff dimensions
+      assert 28*28 == pixel_count
+      loss_mean *= pixel_count 
+      loss_sem *= pixel_count
+    print "%s%.5f+-%.5f" % ("FINAL " if final else "", loss_mean, loss_sem)
+  
   for _ in range(num_crops):
-    xs = np.array([data_tools.random_crop_pianoroll(x, hparams.crop_piece_len)
+    xs_all = np.array([data_tools.random_crop_pianoroll(x, crop_piece_len)
                    for x in piano_rolls], dtype=np.float32)
+    B_all, T, P, I = xs_all.shape
+    assert B_all % eval_batch_size == 0
+    num_batches = B_all / eval_batch_size
+    for bi in range(num_batches):
+      start_idx = bi * eval_batch_size
+      end_idx = (bi + 1) * eval_batch_size
+      xs = xs_all[start_idx:end_idx]
+      B = xs.shape[0]
+      mask = np.ones([B, T, P, I], dtype=np.float32)
+      assert separate_instruments or (not separate_instruments and I == 1)
 
-    B, T, P, I = xs.shape
-    mask = np.ones([B, T, P, I], dtype=np.float32)
-    assert separate_instruments or (not separate_instruments and I == 1)
-
-    # each example has its own ordering
-    if separate_instruments:
-      D = T * I
-    else:
-      D = T * P
-    orders = np.ones([B, 1], dtype=np.int32) * np.arange(D, dtype=np.int32)
-    # yuck
-    for i in range(B):
-      np.random.shuffle(orders[i])
-
-    for j in orders.T:
-      # NOTE: j is a vector with an index for each example in the batch
+      # each example has its own ordering
       if separate_instruments:
-        t = j // I
-        i = j % I
+        D = T * I
       else:
-        t = j // P
-        p = j % P
-      input_data = [mask_tools.apply_mask_and_stack(x, m)
-                    for x, m in zip(xs, mask)]
-      preds = session.run(model.predictions,
-                      feed_dict={model.input_data: input_data})
-      if separate_instruments:
-        loss = -np.where(xs[np.arange(B), t, :, i], np.log(preds[np.arange(B), t, :, i]), 0).sum(axis=1)
-        #loss = -(np.log(p[np.arange(B), t, :, i]) * xs[np.arange(B), t, :, i]).sum(axis=1)
-      else:
-        loss = -np.where(xs[np.arange(B), t, p, 0], np.log(preds[np.arange(B), t, p, 0]), 0).sum()
-        
-      losses.append(loss)
-      if separate_instruments:
-        mask[np.arange(B), t, :, i] = 0
-      else:
-        mask[np.arange(B), t, p, 0] = 0
-      assert np.unique(mask.sum(axis=(1, 2, 3))).size == 1
+        D = T * P
+      orders = np.ones([B, 1], dtype=np.int32) * np.arange(D, dtype=np.int32)
+      # yuck
+      for i in range(B):
+        np.random.shuffle(orders[i])
 
-      if len(losses) % 100 == 0:
-        report()
+      for j in orders.T:
+        # NOTE: j is a vector with an index for each example in the batch
+        if separate_instruments:
+          t = j // I
+          i = j % I
+        else:
+          t = j // P
+          p = j % P
+        input_data = [mask_tools.apply_mask_and_stack(x, m)
+                      for x, m in zip(xs, mask)]
+        preds = session.run(model.predictions,
+                        feed_dict={model.input_data: input_data})
+        if separate_instruments:
+          loss = -np.where(xs[np.arange(B), t, :, i], np.log(preds[np.arange(B), t, :, i]), 0).sum(axis=1)
+          #loss = -(np.log(p[np.arange(B), t, :, i]) * xs[np.arange(B), t, :, i]).sum(axis=1)
+        else:
+          loss = -np.where(xs[np.arange(B), t, i, 0], 
+                           np.log(preds[np.arange(B), t, i, 0]), 
+                           np.log(1-preds[np.arange(B), t, i, 0]))
+        losses.append(loss)
+        if separate_instruments:
+          mask[np.arange(B), t, :, i] = 0
+        else:
+          mask[np.arange(B), t, p, 0] = 0
+        assert np.unique(mask.sum(axis=(1, 2, 3))).size == 1
 
-      sys.stdout.write(".")
-      sys.stdout.flush()
+        if len(losses) % 1 == 0:
+          report()
+
+        sys.stdout.write(".")
+        sys.stdout.flush()
     assert np.allclose(mask, 0)
     report()
   sys.stdout.write("\n")
@@ -258,10 +273,12 @@ def compute_notewise_loss(wrapped_model, piano_rolls, separate_instruments=True,
 
 def main(argv):
   try:
-    print FLAGS.model_name, FLAGS.fold, FLAGS.kind, FLAGS.num_crops
+    print FLAGS.model_name, FLAGS.fold, FLAGS.kind, 
+    print FLAGS.num_crops, FLAGS.crop_piece_len, FLAGS.evaluation_batch_size
     print FLAGS.checkpoint_dir
     fn = dict(notewise=compute_notewise_loss,
               chordwise=compute_chordwise_loss,
+              imagewise=compute_notewise_loss,
               mingreedy_notewise=compute_mingreedy_notewise_loss,
               maxgreedy_notewise=compute_maxgreedy_notewise_loss)[FLAGS.kind]
     # Retrieve model and hparams.
@@ -274,11 +291,25 @@ def main(argv):
    
     # Get data to evaluate on. 
     piano_rolls = data_tools.get_data_as_pianorolls(FLAGS.input_dir, hparams, FLAGS.fold)
-    print sorted(pianoroll.shape[0] for pianoroll in piano_rolls)
+    B, T, P, I = piano_rolls.shape
+    print pianorolls.shape
+    print np.unique(sorted(pianoroll.shape[0] for pianoroll in piano_rolls))
 
+    print FLAGS.crop_piece_len, hparams.crop_piece_len
+    crop_piece_len = FLAGS.crop_piece_len if FLAGS.crop_piece_len is not None else hparams.crop_piece_len
+    if crop_piece_len != hparams.crop_piece_len:
+      print 'WARNING: crop_piece_len %r,  hparams.crop_piece_len %r, mismatch' % (crop_piece_len, hparams.crop_piece_len)
+    print 'crop_piece_len', crop_piece_len
+
+    eval_batch_size = FLAGS.evaluation_batch_size if B > FLAGS.evaluation_batch_size else B
+    if eval_batch_size != hparams.batch_size:
+      print 'Using batch size %r for evaluation instead of %r' % (eval_batch_size, hparams.batch_size)
+    print 'eval_batch_size', eval_batch_size    
     # Evaluate!
     try:
-      fn(wrapped_model, piano_rolls, FLAGS.num_crops)
+      #TODO: notewise does not take crop_piece_len yet
+      fn(wrapped_model, piano_rolls, crop_piece_len, FLAGS.num_crops,
+         FLAGS.kind == 'imagewise', eval_batch_size=eval_batch_size)
     except InfiniteLoss:
       print "infinite loss"
     print "%s done" % hparams.model_name
