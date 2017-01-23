@@ -141,8 +141,12 @@ def make_data_feature_maps(sequences, hparams, encoder, start_crop_index=None):
   targets = []
   seq_count = 0
   for sequence in sequences:
-    pianoroll = random_double_or_halftime_pianoroll_from_note_sequence(
-        sequence, hparams.augment_by_halfing_doubling_durations, encoder)
+    if encoder is not None:
+      pianoroll = random_double_or_halftime_pianoroll_from_note_sequence(
+          sequence, hparams.augment_by_halfing_doubling_durations, encoder)
+    else:
+      # For images, no encoder, already in pianoroll-like form.
+      pianoroll = sequence
     try:
       cropped_pianoroll = random_crop_pianoroll(
           pianoroll, hparams.crop_piece_len, start_crop_index,
@@ -218,43 +222,72 @@ DATASET_PARAMS = {
         'crop_piece_len': 32},
     '4part_Bach_chorales': {
         'pitch_ranges': [36, 88], 'shortest_duration': 0.125, 
-        'relative_path': 'bach/qbm120/instrs=4_duration=0.125_sep=True'}
+        'relative_path': 'bach/qbm120/instrs=4_duration=0.125_sep=True'},
+    'MNIST': {'crop_piece_len': 28, 'num_pitches': 28},
 }
+
+IMAGE_DATASETS = ['MNIST']
 
 
 def get_data_as_pianorolls(basepath, hparams, fold):
   seqs, encoder = get_data_and_update_hparams(
       basepath, hparams, fold, update_hparams=False, return_encoder=True)
-  return [encoder.encode(seq) for seq in seqs]
+  if hparams.dataset not in IMAGE_DATASETS:
+    return [encoder.encode(seq) for seq in seqs]
+  return seqs
+
+
+def get_image_data(dataset_name, fold):
+  if dataset_name == 'MNIST':
+    from tensorflow.examples.tutorials.mnist import input_data
+    print 'Downloading or unpacking MNIST data...'
+    mnist = input_data.read_data_sets("MNIST_data/", one_hot=True)
+    if fold == 'valid':
+      fold = 'validation'
+    data = getattr(mnist, fold).images
+    data = np.reshape(data, (-1, 28, 28, 1))
+    print 'MNIST', data.shape
+    # binarize
+    return data > 0.5  
+  else:
+    assert False, 'Dataset %s not yet supported.' % dataset_name
 
 
 def get_data_and_update_hparams(basepath, hparams, fold, 
-                                update_hparams=True, return_encoder=True):
+                                update_hparams=True, 
+                                return_encoder=False):
   """Returns NoteSequences for '4_part_JSB_Chorales' and list of lists for the rest, and updates dataset specific hparams."""
   dataset_name = hparams.dataset
-  separate_instruments = hparams.separate_instruments
-  # TODO: Read dataset params from JSON file or the like.
   params = DATASET_PARAMS[dataset_name]
-  pitch_range = params['pitch_ranges']
-  if dataset_name == '4part_Bach_chorales':
-    fpath = os.path.join(basepath, params['relative_path'], '%s.tfrecord' % fold)
-    seqs = list(note_sequence_record_iterator(fpath))
+  
+  IMAGE_DATASET_NAMES = ['MNIST']
+  if dataset_name in IMAGE_DATASET_NAMES: 
+    # for image datasets
+    seqs = get_image_data(dataset_name, fold)
   else:
-    fpath = os.path.join(basepath, dataset_name+'.npz')
-    data = np.load(fpath)
-    seqs = data[fold]
+    separate_instruments = hparams.separate_instruments
+    # TODO: Read dataset params from JSON file or the like.
+    pitch_range = params['pitch_ranges']
+    if dataset_name == '4part_Bach_chorales':
+      fpath = os.path.join(basepath, params['relative_path'], '%s.tfrecord' % fold)
+      seqs = list(note_sequence_record_iterator(fpath))
+    else:
+      fpath = os.path.join(basepath, dataset_name+'.npz')
+      data = np.load(fpath)
+      seqs = data[fold]
 
   # Update hparams.
   if update_hparams:
-    hparams.num_pitches = pitch_range[1] - pitch_range[0] + 1
+    if dataset_name not in IMAGE_DATASET_NAMES:
+      hparams.num_pitches = pitch_range[1] - pitch_range[0] + 1
     for key, value in params.iteritems():
-      if key in hparams.__dict__:
+      if hasattr(hparams, key): 
         setattr(hparams, key, value)
     #FIXME: just for debug
-    for key in ['batch_size', 'num_instruments', 'crop_piece_len']:
-      if key in params:
-        assert getattr(hparams, key) == params[key], 'hparams did not get updated.'
-  if return_encoder:
+    for key in params:
+      if hasattr(hparams, key):
+        assert getattr(hparams, key) == params[key], 'hparams did not get updated, %r!=%r' % (getattr(hparams, key), params[key])
+  if return_encoder and dataset_name not in IMAGE_DATASET_NAMES:
     encoder = PianorollEncoderDecoder(
         shortest_duration=params['shortest_duration'],
         min_pitch=pitch_range[0],
@@ -262,6 +295,8 @@ def get_data_and_update_hparams(basepath, hparams, fold,
         separate_instruments=separate_instruments,
         num_instruments=hparams.num_instruments,
         encode_silences=hparams.encode_silences)
+  else:
+    encoder = None
   
   if return_encoder:
     return seqs, encoder

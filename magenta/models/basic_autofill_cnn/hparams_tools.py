@@ -30,7 +30,7 @@ class Hyperparameters(object):
       num_pitches=53,  #53 + 11
       crop_piece_len=64, #128, #64, #32,
       num_instruments=4,
-      separate_instruments=True,
+      separate_instruments=False,
       encode_silences=False,
       #input_depth=None, #8,
       #output_depth=None, #4,
@@ -57,7 +57,7 @@ class Hyperparameters(object):
       #learning_rate=2**-6,
       learning_rate=2**-4, #for sigmoids
       mask_indicates_context=False,
-      eval_freq = 5,
+      eval_freq = 1,
       num_epochs = 0,
       patience = 5,
       # Runtime configs.

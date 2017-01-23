@@ -287,7 +287,7 @@ def main(unused_argv):
   # Get data.
   # TODO(annahuang): Use queues.
   train_data, pianoroll_encoder = data_tools.get_data_and_update_hparams(
-      FLAGS.input_dir, hparams, 'train')
+      FLAGS.input_dir, hparams, 'train', return_encoder=True)
   valid_data = data_tools.get_data_and_update_hparams(
       FLAGS.input_dir, hparams, 'valid', return_encoder=False)
   print '# of train_data:', len(train_data)
