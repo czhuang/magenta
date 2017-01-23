@@ -50,7 +50,6 @@ def sample_masks(shape, separate_instruments=None, pm=None, k=None):
 
 def sample_bernoulli(p, temperature):
   B, T, P, I = p.shape
-  print 'before p.shape', p.shape
   assert I == 1
   if temperature == 0.:
     sampled = p > 0.5
@@ -66,7 +65,6 @@ def sample_bernoulli(p, temperature):
     p = np.exp(logpp)
     p /= p.sum(axis=axis, keepdims=True)
     p = p[:, :, :, :1]
-    print 'after p.shape', p.shape
     sampled = np.random.random(p.shape) < p
   return sampled
 
@@ -361,12 +359,14 @@ tf.app.flags.DEFINE_float("schedule_yao_pmax", 0.9, "")
 tf.app.flags.DEFINE_float("schedule_yao_alpha", 0.7, "")
 tf.app.flags.DEFINE_float("schedule_constant_p", None, "")
 tf.app.flags.DEFINE_float("temperature", 1, "softmax temperature")
-tf.app.flags.DEFINE_string("initialization", "random", "how to obtain initial piano roll; random or independent or nade")
+tf.app.flags.DEFINE_string("initialization", "random", "how to obtain initial piano roll; random or independent or sequential")
 tf.app.flags.DEFINE_integer("piece_length", 32, "num of time steps in generated piece")
 # already defined in generate_tools.py
 #tf.app.flags.DEFINE_string(
 #    "generation_output_dir", "/Tmp/cooijmat/autofill/generate",
 #    "Output directory for storing the generated Midi.")
+tf.app.flags.DEFINE_float("log_percent", 0.05, "Percentage of intermediate generation steps to save.")
+
 
 def main(unused_argv):
   timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -441,6 +441,7 @@ def main(unused_argv):
       intermediates["pianorolls"].append(pianorolls.copy())
       intermediates["masks"].append(np.zeros_like(pianorolls))
       intermediates["predictions"].append(np.zeros_like(pianorolls))
+      intermediates["step_idx"].append(-1)
     else:
       assert False, 'context source option %s not yet supported' % FLAGS.context_source
     # if doing inpainting, masker must expose inpainting masks
@@ -452,6 +453,7 @@ def main(unused_argv):
     intermediates["pianorolls"].append(pianorolls.copy())
     intermediates["masks"].append(masks.copy())
     intermediates["predictions"].append(np.zeros_like(pianorolls))
+    intermediates["step_idx"].append(-1)
   elif FLAGS.generation_type == "unconditioned":
     pianorolls = np.zeros([B, T, P, I], dtype=np.float32)
     masks = np.ones_like(pianorolls)
@@ -467,13 +469,25 @@ def main(unused_argv):
     intermediates["pianorolls"].append(pianorolls.copy())
     intermediates["masks"].append(masks.copy())
     intermediates["predictions"].append(np.zeros_like(pianorolls))
+    intermediates["step_idx"].append(-1)
   else: 
     # sample once to populate masked-out portion
+    if FLAGS.initialization == 'sequential':
+      B, T, P, I = pianorolls.shape
+      log_denominator = int(T * P * FLAGS.log_percent)
+      last_step = T * P
+      print 'log_denominator', log_denominator
+    iter_idx = 0
     for pianorolls, masks, predictions in init_sampler(wmodel, pianorolls, masks):
-      intermediates["pianorolls"].append(pianorolls.copy())
-      intermediates["masks"].append(masks.copy())
-      intermediates["predictions"].append(predictions.copy())
-  
+      print iter_idx,
+      if FLAGS.initialization != 'sequential' or (
+          iter_idx % log_denominator == 0 or iter_idx == last_step - 1):
+        print 'Logging step', iter_idx
+        intermediates["pianorolls"].append(pianorolls.copy())
+        intermediates["masks"].append(masks.copy())
+        intermediates["predictions"].append(predictions.copy())
+        intermediates["step_idx"].append(iter_idx)
+      iter_idx += 1
 
   gibbs = Gibbs(num_steps=FLAGS.num_steps,
                 masker=masker,
@@ -483,9 +497,13 @@ def main(unused_argv):
   iter_idx = 0
   for pianorolls, masks, predictions in gibbs(wmodel, pianorolls):
     print iter_idx,
-    intermediates["pianorolls"].append(pianorolls.copy())
-    intermediates["masks"].append(masks.copy())
-    intermediates["predictions"].append(predictions.copy())
+    if (iter_idx % int(FLAGS.log_percent * FLAGS.num_steps) == 0 or
+        FLAGS.num_steps - 1 == iter_idx):
+      print 'Logging step', iter_idx
+      intermediates["pianorolls"].append(pianorolls.copy())
+      intermediates["masks"].append(masks.copy())
+      intermediates["predictions"].append(predictions.copy())
+      intermediates["step_idx"].append(iter_idx)
     iter_idx += 1
     #sys.stderr.write(".")
     #sys.stderr.flush()
