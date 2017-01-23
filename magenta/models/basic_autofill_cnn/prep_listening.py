@@ -56,16 +56,36 @@ fpaths = {
 
 fpaths = {
     'independent-piano-32-steps200-temp1': 'fromscratch_None_init=independent_Gibbs_num_steps_200__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___20170112144529_9.59min.npz'}
-    
+   
+fpaths = {
+    'images-mnist-steps10-temp1': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_10__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___20170122213121_0.24min.npz'}
+
+fpaths = {
+    'images-mnist-nade-temp1': 'fromscratch_None_init=sequential_Gibbs_num_steps_0__masker_None__schedule_None__sampler_None__20170122220809_10.43min.npz'}
+
+fpaths = {
+    'images-mnist-iGibbs-step700-temp1': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_700__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___20170122234852_9.35min.npz'}
+
+ 
 #STEPS_WANTED = [0, 25, 50, 75, -1]
 STEPS_WANTED = range(40) + [50, 75, -1]
 STEPS_WANTED = range(20) + [200/4., 200/2., 200*3/4, -1] 
 #STEPS_WANTED = range(20)
 STEPS_WANTED = range(0, 200, 20)
 #STEPS_WANTED = [0, 424/4., 424/2., 424*3/4, -1]
+STEPS_WANTED = range(10)
+STEPS_WANTED = range(0, 700, 100) + [-1]
+STEPS_WANTED = [-1]
 NUM_SAMPLES = 4
+NUM_SAMPLES = 100
+PLOT_FLAT = True
 SEPARATE_INSTRUMENTS = False
 
+if PLOT_FLAT and len(fpaths.keys()) != 1:
+  assert False, 'must only have one file to plot to flatten subplots'
+
+def is_image(run_name):
+  return "image" in run_name
 
 # check correct fnames.
 #for method, fpath in fpaths.items():
@@ -88,9 +108,14 @@ def get_code(name, coding_dict):
   assert False, 'Match for %s was not found' % name
             
 
-coding = {'contiguous':'c', 'independent':'i', 'nade':'n', 'bach':'b'}
+coding = {'contiguous':'c', 'independent':'i', 'nade':'n', 'bach':'b',
+          'mnist':'m'}
 method_sample_indices = defaultdict(list)
 m, n = 4, 3
+if PLOT_FLAT:
+  assert NUM_SAMPLES == 100, 'to plot flat'
+  m, n = 10, 10 
+
 for i,  (method, fpath) in enumerate(fpaths.items()):
   input_fpath = os.path.join(base_path, fpath)
   print 'Loading', input_fpath
@@ -99,7 +124,10 @@ for i,  (method, fpath) in enumerate(fpaths.items()):
   assert pianoroll_steps.ndim == 5
   
   # Choose which indices in the batch to inspect. 
-  random_indices = np.random.randint(100, size=NUM_SAMPLES)
+  if NUM_SAMPLES == 100:
+    random_indices = np.arange(NUM_SAMPLES)
+  else:
+    random_indices = np.random.randint(100, size=NUM_SAMPLES)
   method_sample_indices[method] = random_indices
   
   #if method == 'nade':
@@ -114,6 +142,8 @@ for i,  (method, fpath) in enumerate(fpaths.items()):
     print 'shape', pianorolls.shape
     #assert pianorolls.shape == (100, 32, 53, 4)
     fig, axes = plt.subplots(m, n)
+    if PLOT_FLAT:
+      axes = np.ravel(axes)
     print 'axes.shape', axes.shape
     if len(str(step)) == 1:
       step_str = '0%d' % step
@@ -121,14 +151,16 @@ for i,  (method, fpath) in enumerate(fpaths.items()):
       step_str = '%d' % step
     
     for count_idx, idx in enumerate(random_indices):
-      print method, idx
+      print method, idx, count_idx
       pianoroll = pianorolls[idx].T
      
       code = get_code(method, coding)
-      pp = os.path.join(
-          output_path, "%s_%d_step_%s.midi" % (code, count_idx, step_str))
-      print pp
-      pianoroll_to_midi(pianoroll).write(pp)
+      if not is_image(method):
+        pp = os.path.join(
+            output_path, "%s_%d_step_%s.midi" % (code, count_idx, step_str))
+        print pp
+        pianoroll_to_midi(pianoroll).write(pp)
+
       assert 0 <= pianoroll.min()
       assert pianoroll.max() <= 1
       print 'pianoroll.shape', pianoroll.shape
@@ -136,11 +168,25 @@ for i,  (method, fpath) in enumerate(fpaths.items()):
         assert np.allclose(pianoroll.sum(axis=1), 1)
       # max across instruments
       pianoroll = pianoroll.max(axis=0)
-      ax = axes[count_idx, i]
-      ax.imshow(pianoroll, cmap=COLORMAP, interpolation="none", vmin=0, vmax=1, aspect="auto", origin="lower")
+      if PLOT_FLAT:
+        ax = axes[count_idx]
+      else:
+        ax = axes[count_idx, i]
+      origin = "lower"
+      if not is_image(method):
+        aspect = "auto"
+        #origin = "lower"
+      else:
+        aspect = "equal"
+        #origin = "higher"
+        #pianoroll = np.fliplr(pianoroll.T)
+        pianoroll = np.rot90(pianoroll)
+      ax.imshow(pianoroll, cmap=COLORMAP, interpolation="none", vmin=0, vmax=1, 
+                aspect=aspect, origin=origin)
       ax.set_axis_off()
-      ax.set_title('%s' % method)
+      #ax.set_title('%s' % method)
     #fig.suptitle("%s %i" % (method, count_idx))
+    fig.suptitle("Samples from %s" % (method))
     fig.set_size_inches(800 / fig.dpi, 600 / fig.dpi)
     #plt.tight_layout()
     plt.subplots_adjust(hspace=.01, wspace=.01)
