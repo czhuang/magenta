@@ -125,6 +125,7 @@ py_binary(
     deps = [
         ":test_tools",
         "//magenta/music:midi_io",
+        "//magenta/protobuf:music_py_pb2",
     ],
 )
 

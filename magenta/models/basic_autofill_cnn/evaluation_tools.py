@@ -22,13 +22,13 @@ class InfiniteLoss(Exception):
 def sem(xs):
   return np.std(xs) / np.sqrt(np.asarray(xs).size)
 
-def compute_maxgreedy_notewise_loss(wrapped_model, piano_rolls):
-  return compute_greedy_notewise_loss(wrapped_model, piano_rolls, sign=+1)
+def compute_maxgreedy_notewise_loss(wrapped_model, pianorolls):
+  return compute_greedy_notewise_loss(wrapped_model, pianorolls, sign=+1)
 
-def compute_mingreedy_notewise_loss(wrapped_model, piano_rolls):
-  return compute_greedy_notewise_loss(wrapped_model, piano_rolls, sign=-1)
+def compute_mingreedy_notewise_loss(wrapped_model, pianorolls):
+  return compute_greedy_notewise_loss(wrapped_model, pianorolls, sign=-1)
 
-def compute_greedy_notewise_loss(wrapped_model, piano_rolls, sign):
+def compute_greedy_notewise_loss(wrapped_model, pianorolls, sign):
   hparams = wrapped_model.hparams
   model = wrapped_model.model
   session = wrapped_model.sess
@@ -44,7 +44,7 @@ def compute_greedy_notewise_loss(wrapped_model, piano_rolls, sign):
   crop_piece_len = FLAGS.crop_piece_len if FLAGS.crop_piece_len is not None else hparams.crop_piece_len
   for _ in range(num_crops):
     xs = np.array([data_tools.random_crop_pianoroll(x, crop_piece_len)
-                   for x in piano_rolls], dtype=np.float32)
+                   for x in pianorolls], dtype=np.float32)
 
     B, T, P, I = xs.shape
     mask = np.ones([B, T, P, I], dtype=np.float32)
@@ -84,7 +84,7 @@ def compute_greedy_notewise_loss(wrapped_model, piano_rolls, sign):
   return losses
 
 
-def compute_chordwise_loss(wrapped_model, piano_rolls, crop_piece_len, 
+def compute_chordwise_loss(wrapped_model, pianorolls, crop_piece_len, 
                            num_crops=5, **kwargs):
   
   hparams = wrapped_model.hparams
@@ -103,7 +103,7 @@ def compute_chordwise_loss(wrapped_model, piano_rolls, crop_piece_len,
 
   for _ in range(num_crops):
     xs, lengths = list(zip(*[data_tools.random_crop_pianoroll_pad(x, crop_piece_len)
-                             for x in piano_rolls]))
+                             for x in pianorolls]))
     xs = np.array(xs, dtype=np.float32)
     lengths = np.array(lengths, dtype=int)
     # working copy to fill in model's own predictions of chord notes
@@ -241,7 +241,7 @@ def compute_notewise_loss(wrapped_model, piano_rolls, crop_piece_len,
           i = j % I
         else:
           t = j // P
-          p = j % P
+          i = j % P
         input_data = [mask_tools.apply_mask_and_stack(x, m)
                       for x, m in zip(xs, mask)]
         preds = session.run(model.predictions,
