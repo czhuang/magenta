@@ -190,14 +190,33 @@ def compute_chordwise_loss(wrapped_model, pianorolls, crop_piece_len,
   return losses
 
 
-def compute_notewise_loss(wrapped_model, piano_rolls, crop_piece_len, 
-                          num_crops=5, imagewise=False, eval_batch_size=1000, **kwargs):
+def compute_notewise_loss(wrapped_model, pianorolls, crop_piece_len, num_crops=5, eval_data=None, 
+                          imagewise=False, eval_batch_size=1000, eval_fpath=None, **kwargs):
   hparams = wrapped_model.hparams
   model = wrapped_model.model
   session = wrapped_model.sess
   separate_instruments = hparams.separate_instruments
+  assert eval_fpath is not None
+  if eval_data is not None:
+    losses = list(eval_data["losses"])
+    crop_sofar, batch_sofar = eval_data["current_position"]
+  else:
+    losses = [] 
+    crop_sofar, batch_sofar = [0] * 2
+  
+  if imagewise:
+    # FIXME: just for debugging, remove later
+    la = np.asarray(losses)
+    print '(re)starting:', la.size, la.shape, 'current_position', crop_sofar, batch_sofar
+    if len(losses) > 0:
+      print 'passing assert? ...'
+      assert la.size == 28*28*(crop_sofar * pianorolls.shape[0] + batch_sofar * eval_batch_size)
+      print 'passed.'
 
-  losses = []
+  def store(current_position):
+    print 'Storing image losses to', eval_fpath
+    np.savez_compressed(eval_fpath, **{'losses':losses, 'current_position':current_position})
+
   def report(final=False):
     loss_mean = np.mean(losses)
     loss_sem = sem(losses)
@@ -208,15 +227,17 @@ def compute_notewise_loss(wrapped_model, piano_rolls, crop_piece_len,
       assert 28*28 == pixel_count
       loss_mean *= pixel_count 
       loss_sem *= pixel_count
-    print "%s%.5f+-%.5f" % ("FINAL " if final else "", loss_mean, loss_sem)
+    print "%s%.5f+-%.5f " % ("FINAL " if final else "", loss_mean, loss_sem),
   
-  for _ in range(num_crops):
+  for ci in range(num_crops)[crop_sofar:]:
+    print 'crop idx', ci
     xs_all = np.array([data_tools.random_crop_pianoroll(x, crop_piece_len)
-                   for x in piano_rolls], dtype=np.float32)
+                   for x in pianorolls], dtype=np.float32)
     B_all, T, P, I = xs_all.shape
     assert B_all % eval_batch_size == 0
     num_batches = B_all / eval_batch_size
-    for bi in range(num_batches):
+    for bi in range(num_batches)[batch_sofar:]:
+      print 'batch idx, started at this batch', bi, batch_sofar
       start_idx = bi * eval_batch_size
       end_idx = (bi + 1) * eval_batch_size
       xs = xs_all[start_idx:end_idx]
@@ -229,6 +250,7 @@ def compute_notewise_loss(wrapped_model, piano_rolls, crop_piece_len,
         D = T * I
       else:
         D = T * P
+      print 'D', D
       orders = np.ones([B, 1], dtype=np.int32) * np.arange(D, dtype=np.int32)
       # yuck
       for i in range(B):
@@ -257,16 +279,21 @@ def compute_notewise_loss(wrapped_model, piano_rolls, crop_piece_len,
         if separate_instruments:
           mask[np.arange(B), t, :, i] = 0
         else:
-          mask[np.arange(B), t, p, 0] = 0
+          mask[np.arange(B), t, i, 0] = 0
         assert np.unique(mask.sum(axis=(1, 2, 3))).size == 1
 
         if len(losses) % 1 == 0:
-          report()
+          report(final=False)
 
         sys.stdout.write(".")
         sys.stdout.flush()
-    assert np.allclose(mask, 0)
-    report()
+      assert np.allclose(mask, 0)
+      report(final=False)
+      store([ci, bi+1])
+    # After running possbily less # of batches b/c continuing from last logged point,
+    # reset to 0.
+    batch_sofar = 0
+  report(final=True)
   sys.stdout.write("\n")
   return losses
 
@@ -284,17 +311,40 @@ def main(argv):
     # Retrieve model and hparams.
     wrapped_model = retrieve_model_tools.retrieve_model(model_name=FLAGS.model_name)
     hparams = wrapped_model.hparams
+    
+
     print 'model_name', hparams.model_name
     print hparams.checkpoint_fpath
     # TODO: model_name in hparams is the conv spec class name, not retrieve model_name
     #assert wrapped_model.config.hparams.model_name == FLAGS.model_name
    
     # Get data to evaluate on. 
-    piano_rolls = data_tools.get_data_as_pianorolls(FLAGS.input_dir, hparams, FLAGS.fold)
-    B, T, P, I = piano_rolls.shape
+    pianorolls = data_tools.get_data_as_pianorolls(FLAGS.input_dir, hparams, FLAGS.fold)
+    B, T, P, I = pianorolls.shape
+    pianorolls = pianorolls[:2]
     print pianorolls.shape
-    print np.unique(sorted(pianoroll.shape[0] for pianoroll in piano_rolls))
+    print np.unique(sorted(pianoroll.shape[0] for pianoroll in pianorolls))
 
+    # Get folder for previous runs for this config.
+    dir_name = '%s-%s-roll_shape=%r-num_crops=%r-crop_len=%r-eval_bs=%r' % (
+        FLAGS.fold, FLAGS.kind, pianorolls.shape, FLAGS.num_crops, 
+        FLAGS.crop_piece_len, FLAGS.evaluation_batch_size)
+
+    # Check to see if there's previous evaluation losses.
+    eval_path = os.path.join(FLAGS.checkpoint_dir, dir_name)
+    eval_fpath = os.path.join(eval_path, 'evaluations.npz')
+    print eval_fpath
+    if not os.path.exists(eval_path):
+      os.mkdir(eval_path)
+      eval_data = None
+      print '\nMade directory.  No previous log.\n'
+    else: 
+      if os.path.exists(eval_fpath):
+        print '\nPrevious log exists.'
+        print 'Loading'
+        eval_data = np.load(eval_fpath)
+      else:
+        print '\nNo previous log.\n'
     print FLAGS.crop_piece_len, hparams.crop_piece_len
     crop_piece_len = FLAGS.crop_piece_len if FLAGS.crop_piece_len is not None else hparams.crop_piece_len
     if crop_piece_len != hparams.crop_piece_len:
@@ -307,9 +357,9 @@ def main(argv):
     print 'eval_batch_size', eval_batch_size    
     # Evaluate!
     try:
-      #TODO: notewise does not take crop_piece_len yet
-      fn(wrapped_model, piano_rolls, crop_piece_len, FLAGS.num_crops,
-         FLAGS.kind == 'imagewise', eval_batch_size=eval_batch_size)
+      # TODO: chordwise doesn't save log yet and losses.
+      fn(wrapped_model, pianorolls, crop_piece_len, FLAGS.num_crops, eval_data,
+         FLAGS.kind == 'imagewise', eval_batch_size=eval_batch_size, eval_fpath=eval_fpath)
     except InfiniteLoss:
       print "infinite loss"
     print "%s done" % hparams.model_name
