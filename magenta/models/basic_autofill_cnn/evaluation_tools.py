@@ -22,6 +22,30 @@ class InfiniteLoss(Exception):
 def sem(xs):
   return np.std(xs) / np.sqrt(np.asarray(xs).size)
 
+def store(losses, position, path):
+  print 'Storing image losses to', path
+  np.savez_compressed(path, losses=losses, current_position=position)
+
+def report(losses, final=False):
+  loss_mean = np.mean(losses)
+  loss_sem = sem(losses)
+  print "%s%.5f+-%.5f " % ("FINAL " if final else "", loss_mean, loss_sem)
+  
+def batches(xs, k):
+  assert len(xs) % k == 0
+  for a in range(0, len(xs), k):
+    yield xs[a:a+k]
+
+def pad(xs):
+  shape = xs[0].shape[1:]
+  # all should have equal shape in all but the first dimension
+  assert all(x.shape[1:] == shape for x in xs)
+  lengths = np.array(list(map(len, xs)), dtype=int)
+  ys = np.zeros([len(xs), max(lengths)] + list(shape), dtype=np.float32)
+  for i, x in enumerate(xs):
+    ys[i, :lengths[i]] = x
+  return ys, lengths
+
 def compute_maxgreedy_notewise_loss(wrapped_model, pianorolls):
   return compute_greedy_notewise_loss(wrapped_model, pianorolls, sign=+1)
 
@@ -85,7 +109,7 @@ def compute_greedy_notewise_loss(wrapped_model, pianorolls, sign):
 
 
 def compute_chordwise_loss(wrapped_model, pianorolls, crop_piece_len, 
-                           num_crops=5, **kwargs):
+                           num_crops=5, batch_size=None, eval_data=None, eval_fpath=None, chronological=False, chronological_margin=0, **kwargs):
   
   hparams = wrapped_model.hparams
   model = wrapped_model.model
@@ -94,107 +118,129 @@ def compute_chordwise_loss(wrapped_model, pianorolls, crop_piece_len,
   separate_instruments = hparams.separate_instruments
   print 'separate_instruments', separate_instruments
 
+  if batch_size is None:
+    batch_size = len(pianorolls)
+
+  assert eval_fpath is not None
+  if eval_data is not None:
+    losses = list(eval_data["losses"])
+    crop_sofar, batch_sofar = eval_data["current_position"]
+  else:
+    losses = [] 
+    crop_sofar, batch_sofar = 0, 0
+
   losses = []
 
-  for _ in range(num_crops):
-    xs, lengths = list(zip(*[data_tools.random_crop_pianoroll_pad(x, crop_piece_len)
-                             for x in pianorolls]))
-    xs = np.array(xs, dtype=np.float32)
-    lengths = np.array(lengths, dtype=int)
-    # working copy to fill in model's own predictions of chord notes
-    xs_scratch = np.copy(xs)
+  if chronological:
+    # no point in doing multiple passes
+    assert num_crops == 1
 
-    B, T, P, I = xs.shape
-    mask = np.ones([B, T, P, I], dtype=np.float32)
-    assert separate_instruments or I == 1
+  for ci in range(num_crops)[crop_sofar:]:
+    print 'crop idx', ci
 
-    # each example has its own ordering
-    orders = np.ones([B, 1], dtype=np.int32) * np.arange(T, dtype=np.int32)[None, :]
-    # random time orderings
-    for i in range(B):
-      np.random.shuffle(orders[i])
-    # random variable orderings within each time step
-    D = I if separate_instruments else P
-    orders = orders[:, :, None] * D + np.arange(D, dtype=np.int32)[None, None, :]
-    for i in range(B):
-      for t in range(T):
-        np.random.shuffle(orders[i, t])
-    orders = orders.reshape([B, T * D])
+    for bi, xs in list(enumerate(batches(pianorolls, batch_size)))[batch_sofar:]:
+      xs, lengths = pad(xs)
 
-    for bahh, j in enumerate(orders.T):
-      # NOTE: j is a vector with an index for each example in the batch
-      t = j // D
-      i = j % D
+      B, T, P, I = xs.shape
+      mask = np.ones([B, T, P, I], dtype=np.float32)
+      assert separate_instruments or I == 1
+  
+      # each example has its own ordering
+      orders = np.ones([B, 1], dtype=np.int32) * np.arange(T, dtype=np.int32)[None, :]
+      if not chronological:
+        # random time orderings
+        for i in range(B):
+          np.random.shuffle(orders[i])
+      # random variable orderings within each time step
+      D = I if separate_instruments else P
+      orders = orders[:, :, None] * D + np.arange(D, dtype=np.int32)[None, None, :]
+      for i in range(B):
+        for t in range(T):
+          np.random.shuffle(orders[i, t])
+      orders = orders.reshape([B, T * D])
+  
+      # working copy to fill in model's own predictions of chord notes
+      xs_scratch = np.copy(xs)
+  
+      for bahh, j in enumerate(orders.T):
+        # NOTE: j is a vector with an index for each example in the batch
+        t = j // D
+        i = j % D
+  
+        # replace model predictions with ground truth when starting a fresh timestep
+        if bahh % D == 0:
+          xs_scratch = np.copy(xs)
 
-      # replace model predictions with ground truth when starting a fresh timestep
-      if bahh % D == 0:
-        xs_scratch = np.copy(xs)
+        # crop_piece_len is taken the indicate the maximum input length the model can deal with (in
+        # terms of gpu memory).  if we cannot feed in the entire input, feed in a temporal crop
+        # centered on the current timestep.
 
-      input_data = [mask_tools.apply_mask_and_stack(x, m) for x, m in zip(xs_scratch, mask)]
-      p = session.run(model.predictions, feed_dict={model.input_data: input_data})
+        # FIXME: put assertions
+        if chronological:
+          t0 = t - crop_piece_len - chronological_margin
+        else:
+          t0 = t - crop_piece_len / 2.,
+        # restrict to valid indices
+        t0 = np.astype(np.round(np.clip(t0, 0, T - crop_piece_len)), np.int32)
 
-      # in both cases, loss is a vector over batch examples
-      if separate_instruments:
-        # batched loss at time/instrument pair, summed over pitches
-        loss = -np.where(xs_scratch[np.arange(B), t, :, i],
-                         np.log(p[np.arange(B), t, :, i]),
-                         0).sum(axis=1)
-      else:
-        # batched loss at time/pitch pair, single instrument
-        loss = -np.where(xs_scratch[np.arange(B), t, i, 0], 
-                         np.log(p[np.arange(B), t, i, 0]), 
-                         np.log(1-p[np.arange(B), t, i, 0]))
-
-      # at the end we take the mean of the losses. multiply by D
-      # because we want to sum over the D axis (instruments or
-      # pitches), not average.
-      loss *= D
-
-      # don't judge predictions of padded elements
-      loss = np.where(t < lengths, loss, 0)
-
-      losses.append(loss)
-
-      print "%i: %.5f < %.5f < %.5f < %.5f < %.5g" % (bahh, np.min(loss), np.percentile(loss, 25), np.percentile(loss, 50), np.percentile(loss, 75), np.max(loss))
-
-      if np.isinf(loss).any():
-        report(losses, final=True)
-        raise InfiniteLoss()
-
-      # update xs_scratch to contain predictions
-      if separate_instruments:
-        xs_scratch[np.arange(B), t, :, i] = np.eye(P)[np.argmax(p[np.arange(B), t, :, i], axis=1)]
-        mask[np.arange(B), t, :, i] = 0
-      else:
-        xs_scratch[np.arange(B), t, i, 0] = p[np.arange(B), t, i, 0] > 0.5
-        mask[np.arange(B), t, i, 0] = 0
-      assert np.unique(mask.sum(axis=(1, 2, 3))).size == 1
-
-      #print
-      #mask_tools.print_mask(mask[0])
-
-      if len(losses) % 100 == 0:
-        report(losses)
-    assert np.allclose(mask, 0)
-    report(losses)
-    print 'hparams.checkpoint_fpath', hparams.checkpoint_fpath
+        input_data = [mask_tools.apply_mask_and_stack(x[:, t0:t0 + crop_piece_len],
+                                                      m[:, t0:t0 + crop_piece_len])
+                      for x, m in zip(xs_scratch, mask)]
+        # ensure resulting crop is the correct size. this can fail if all pieces in the batch are
+        # shorter than crop_piece_len, so allow length of longest piece (= T) as well.
+        assert input_data[0].shape[0] in [crop_piece_len, T]
+        p = session.run(model.predictions, feed_dict={model.input_data: input_data})
+  
+        # in both cases, loss is a vector over batch examples
+        if separate_instruments:
+          # batched loss at time/instrument pair, summed over pitches
+          loss = -np.where(xs_scratch[np.arange(B), t, :, i],
+                           np.log(p[np.arange(B), t - t0, :, i]),
+                           0).sum(axis=1)
+        else:
+          # batched loss at time/pitch pair, single instrument
+          loss = -np.where(xs_scratch[np.arange(B), t, i, 0], 
+                           np.log(p[np.arange(B), t - t0, i, 0]), 
+                           np.log(1-p[np.arange(B), t - t0, i, 0]))
+  
+        # at the end we take the mean of the losses. multiply by D because we want to sum over the D
+        # axis (instruments or pitches), not average.
+        loss *= D
+  
+        # don't judge predictions of padded elements
+        loss = np.where(t < lengths, loss, 0)
+  
+        losses.append(loss)
+  
+        print "%i: %.5f < %.5f < %.5f < %.5f < %.5g" % (bahh, np.min(loss), np.percentile(loss, 25), np.percentile(loss, 50), np.percentile(loss, 75), np.max(loss))
+  
+        if np.isinf(loss).any():
+          report(losses, final=True)
+          raise InfiniteLoss()
+  
+        # update xs_scratch to contain predictions
+        if separate_instruments:
+          xs_scratch[np.arange(B), t, :, i] = np.eye(P)[np.argmax(p[np.arange(B), t, :, i], axis=1)]
+          mask[np.arange(B), t, :, i] = 0
+        else:
+          xs_scratch[np.arange(B), t, i, 0] = p[np.arange(B), t, i, 0] > 0.5
+          mask[np.arange(B), t, i, 0] = 0
+        assert np.unique(mask.sum(axis=(1, 2, 3))).size == 1
+  
+        #print
+        #mask_tools.print_mask(mask[0])
+  
+        if len(losses) % 100 == 0:
+          report(losses)
+      assert np.allclose(mask, 0)
+      report(losses)
+      store(losses=losses, position=[ci, bi+1], path=eval_fpath)
+    # After running possbily less # of batches b/c continuing from last logged point,
+    # reset to 0.
+    batch_sofar = 0
   report(final=True)
   return losses
 
-
-def store(losses, position, path):
-  print 'Storing image losses to', path
-  np.savez_compressed(path, losses=losses, current_position=position)
-
-def report(losses, final=False):
-  loss_mean = np.mean(losses)
-  loss_sem = sem(losses)
-  print "%s%.5f+-%.5f " % ("FINAL " if final else "", loss_mean, loss_sem)
-  
-def batches(xs, k):
-  assert len(xs) % k == 0
-  for a in range(0, len(xs), k):
-    yield xs[a:a+k]
 
 def compute_notewise_loss(wrapped_model, pianorolls, crop_piece_len, num_crops=5, eval_data=None, 
                           imagewise=False, eval_batch_size=1000, eval_fpath=None, **kwargs):
