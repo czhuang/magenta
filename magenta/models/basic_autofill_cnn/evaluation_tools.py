@@ -108,14 +108,9 @@ def compute_greedy_notewise_loss(wrapped_model, pianorolls, sign):
   return losses
 
 
-def compute_chordwise_loss(wrapped_model, pianorolls, crop_piece_len, 
-                           num_crops=5, batch_size=None, eval_data=None, eval_fpath=None, chronological=False, chronological_margin=0, **kwargs):
+def compute_chordwise_loss(predictor, pianorolls, crop_piece_len, 
+                           num_crops=5, batch_size=None, eval_data=None, eval_fpath=None, chronological=False, chronological_margin=0, separate_instruments=True, **kwargs):
   
-  hparams = wrapped_model.hparams
-  model = wrapped_model.model
-  session = wrapped_model.sess
-
-  separate_instruments = hparams.separate_instruments
   print 'separate_instruments', separate_instruments
 
   if batch_size is None:
@@ -183,13 +178,12 @@ def compute_chordwise_loss(wrapped_model, pianorolls, crop_piece_len,
         # restrict to valid indices
         t0 = np.astype(np.round(np.clip(t0, 0, T - crop_piece_len)), np.int32)
 
-        input_data = [mask_tools.apply_mask_and_stack(x[:, t0:t0 + crop_piece_len],
-                                                      m[:, t0:t0 + crop_piece_len])
-                      for x, m in zip(xs_scratch, mask)]
+        cropped_xs_scratch = xs_scratch[:, t0:t0 + crop_piece_len]
+        cropped_mask = mask[:, t0:t0 + crop_piece_len]
         # ensure resulting crop is the correct size. this can fail if all pieces in the batch are
         # shorter than crop_piece_len, so allow length of longest piece (= T) as well.
-        assert input_data[0].shape[0] in [crop_piece_len, T]
-        p = session.run(model.predictions, feed_dict={model.input_data: input_data})
+        assert cropped_xs_scratch[0].shape[0] in [crop_piece_len, T]
+        p = predictor(cropped_xs_scratch, cropped_mask)
   
         # in both cases, loss is a vector over batch examples
         if separate_instruments:
@@ -242,12 +236,9 @@ def compute_chordwise_loss(wrapped_model, pianorolls, crop_piece_len,
   return losses
 
 
-def compute_notewise_loss(wrapped_model, pianorolls, crop_piece_len, num_crops=5, eval_data=None, 
-                          imagewise=False, eval_batch_size=1000, eval_fpath=None, **kwargs):
-  hparams = wrapped_model.hparams
-  model = wrapped_model.model
-  session = wrapped_model.sess
-  separate_instruments = hparams.separate_instruments
+def compute_notewise_loss(predictor, pianorolls, crop_piece_len, num_crops=5, eval_data=None, 
+                          imagewise=False, separate_instruments=True,
+                          eval_batch_size=1000, eval_fpath=None, **kwargs):
   assert eval_fpath is not None
   if eval_data is not None:
     losses = list(eval_data["losses"])
@@ -283,8 +274,7 @@ def compute_notewise_loss(wrapped_model, pianorolls, crop_piece_len, num_crops=5
         else:
           t = j // P
           i = j % P
-        input_data = [mask_tools.apply_mask_and_stack(x, m) for x, m in zip(xs, mask)]
-        preds = session.run(model.predictions, feed_dict={model.input_data: input_data})
+        preds = predictor(xs, mask)
         if separate_instruments:
           loss = -np.where(xs[np.arange(B), t, :, i], np.log(preds[np.arange(B), t, :, i]), 0).sum(axis=1)
           mask[np.arange(B), t, :, i] = 0
@@ -375,9 +365,15 @@ def main(argv):
     print 'eval_batch_size', eval_batch_size    
     # Evaluate!
     try:
-      # TODO: chordwise doesn't save log yet and losses.
-      fn(wrapped_model, pianorolls, crop_piece_len, FLAGS.num_crops, eval_data,
-         FLAGS.kind == 'imagewise', eval_batch_size=eval_batch_size, eval_fpath=eval_fpath)
+      def predictor(xs, masks):
+        input_data = [mask_tools.apply_mask_and_stack(x, mask) for x, mask in zip(xs, masks)]
+        p = session.run(model.predictions, feed_dict={model.input_data: input_data})
+        return p
+
+      fn(predictor, pianorolls, crop_piece_len, FLAGS.num_crops, eval_data,
+         imagewise=FLAGS.kind == 'imagewise',
+         separate_instruments=hparams.separate_instruments,
+         eval_batch_size=eval_batch_size, eval_fpath=eval_fpath)
     except InfiniteLoss:
       print "infinite loss"
     print "%s done" % hparams.model_name
