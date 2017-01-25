@@ -190,6 +190,20 @@ def compute_chordwise_loss(wrapped_model, pianorolls, crop_piece_len,
   return losses
 
 
+def store(losses, position, path):
+  print 'Storing image losses to', path
+  np.savez_compressed(path, losses=losses, current_position=position)
+
+def report(losses, final=False):
+  loss_mean = np.mean(losses)
+  loss_sem = sem(losses)
+  print "%s%.5f+-%.5f " % ("FINAL " if final else "", loss_mean, loss_sem)
+  
+def batches(xs, k):
+  assert len(xs) % k == 0
+  for a in range(0, len(xs), k):
+    yield xs[a:a+k]
+
 def compute_notewise_loss(wrapped_model, pianorolls, crop_piece_len, num_crops=5, eval_data=None, 
                           imagewise=False, eval_batch_size=1000, eval_fpath=None, **kwargs):
   hparams = wrapped_model.hparams
@@ -202,59 +216,26 @@ def compute_notewise_loss(wrapped_model, pianorolls, crop_piece_len, num_crops=5
     crop_sofar, batch_sofar = eval_data["current_position"]
   else:
     losses = [] 
-    crop_sofar, batch_sofar = [0] * 2
-  
-  if imagewise:
-    # FIXME: just for debugging, remove later
-    la = np.asarray(losses)
-    print '(re)starting:', la.size, la.shape, 'current_position', crop_sofar, batch_sofar
-    if len(losses) > 0:
-      print 'passing assert? ...'
-      assert la.size == 28*28*(crop_sofar * pianorolls.shape[0] + batch_sofar * eval_batch_size)
-      print 'passed.'
-
-  def store(current_position):
-    print 'Storing image losses to', eval_fpath
-    np.savez_compressed(eval_fpath, **{'losses':losses, 'current_position':current_position})
-
-  def report(final=False):
-    loss_mean = np.mean(losses)
-    loss_sem = sem(losses)
-    #loss_std = np.std(losses)
-    if imagewise:
-      pixel_count = crop_piece_len * hparams.input_shape[1]
-      #FIXME: other image datasets will have diff dimensions
-      assert 28*28 == pixel_count
-      loss_mean *= pixel_count 
-      loss_sem *= pixel_count
-    print "%s%.5f+-%.5f " % ("FINAL " if final else "", loss_mean, loss_sem),
+    crop_sofar, batch_sofar = 0, 0
   
   for ci in range(num_crops)[crop_sofar:]:
     print 'crop idx', ci
     xs_all = np.array([data_tools.random_crop_pianoroll(x, crop_piece_len)
                    for x in pianorolls], dtype=np.float32)
-    B_all, T, P, I = xs_all.shape
-    assert B_all % eval_batch_size == 0
-    num_batches = B_all / eval_batch_size
-    for bi in range(num_batches)[batch_sofar:]:
+    for bi, xs in list(enumerate(batches(pianorolls, eval_batch_size)))[batch_sofar:]:
       print 'batch idx, started at this batch', bi, batch_sofar
-      start_idx = bi * eval_batch_size
-      end_idx = (bi + 1) * eval_batch_size
-      xs = xs_all[start_idx:end_idx]
-      B = xs.shape[0]
-      mask = np.ones([B, T, P, I], dtype=np.float32)
-      assert separate_instruments or (not separate_instruments and I == 1)
 
-      # each example has its own ordering
-      if separate_instruments:
-        D = T * I
-      else:
-        D = T * P
+      B, T, P, I = xs.shape
+      mask = np.ones([B, T, P, I], dtype=np.float32)
+      assert separate_instruments or I == 1
+
+      # number of variables
+      D = T * (I if separate_instruments else P)
       print 'D', D
+      # each example has its own ordering
       orders = np.ones([B, 1], dtype=np.int32) * np.arange(D, dtype=np.int32)
-      # yuck
       for i in range(B):
-        np.random.shuffle(orders[i])
+        np.random.shuffle(orders[i]) # yuck
 
       for j in orders.T:
         # NOTE: j is a vector with an index for each example in the batch
@@ -264,37 +245,36 @@ def compute_notewise_loss(wrapped_model, pianorolls, crop_piece_len, num_crops=5
         else:
           t = j // P
           i = j % P
-        input_data = [mask_tools.apply_mask_and_stack(x, m)
-                      for x, m in zip(xs, mask)]
-        preds = session.run(model.predictions,
-                        feed_dict={model.input_data: input_data})
+        input_data = [mask_tools.apply_mask_and_stack(x, m) for x, m in zip(xs, mask)]
+        preds = session.run(model.predictions, feed_dict={model.input_data: input_data})
         if separate_instruments:
           loss = -np.where(xs[np.arange(B), t, :, i], np.log(preds[np.arange(B), t, :, i]), 0).sum(axis=1)
-          #loss = -(np.log(p[np.arange(B), t, :, i]) * xs[np.arange(B), t, :, i]).sum(axis=1)
+          mask[np.arange(B), t, :, i] = 0
         else:
           loss = -np.where(xs[np.arange(B), t, i, 0], 
                            np.log(preds[np.arange(B), t, i, 0]), 
                            np.log(1-preds[np.arange(B), t, i, 0]))
-        losses.append(loss)
-        if separate_instruments:
-          mask[np.arange(B), t, :, i] = 0
-        else:
           mask[np.arange(B), t, i, 0] = 0
+
+        if imagewise:
+          pixel_count = crop_piece_len * hparams.input_shape[1]
+          #FIXME: other image datasets will have diff dimensions
+          assert 28*28 == pixel_count
+          loss *= pixel_count
+
+        losses.append(loss)
         assert np.unique(mask.sum(axis=(1, 2, 3))).size == 1
 
         if len(losses) % 1 == 0:
-          report(final=False)
+          report(losses, final=False)
 
-        sys.stdout.write(".")
-        sys.stdout.flush()
       assert np.allclose(mask, 0)
-      report(final=False)
-      store([ci, bi+1])
+      report(losses, final=False)
+      store(losses=losses, position=[ci, bi+1], path=eval_fpath)
     # After running possbily less # of batches b/c continuing from last logged point,
     # reset to 0.
     batch_sofar = 0
-  report(final=True)
-  sys.stdout.write("\n")
+  report(losses, final=True)
   return losses
 
 
