@@ -95,11 +95,6 @@ def compute_chordwise_loss(wrapped_model, pianorolls, crop_piece_len,
   print 'separate_instruments', separate_instruments
 
   losses = []
-  def report(final=False):
-    loss_mean = np.mean(losses)
-    #loss_std = np.std(losses)
-    loss_sem = sem(losses)
-    print "%s%.5f+-%.5f" % ("FINAL " if final else "", loss_mean, loss_sem)
 
   for _ in range(num_crops):
     xs, lengths = list(zip(*[data_tools.random_crop_pianoroll_pad(x, crop_piece_len)
@@ -110,21 +105,16 @@ def compute_chordwise_loss(wrapped_model, pianorolls, crop_piece_len,
     xs_scratch = np.copy(xs)
 
     B, T, P, I = xs.shape
-    print xs.shape
     mask = np.ones([B, T, P, I], dtype=np.float32)
-    assert separate_instruments or (not separate_instruments and I == 1)
+    assert separate_instruments or I == 1
 
     # each example has its own ordering
     orders = np.ones([B, 1], dtype=np.int32) * np.arange(T, dtype=np.int32)[None, :]
     # random time orderings
     for i in range(B):
       np.random.shuffle(orders[i])
-    if separate_instruments:
-      # random instrument orderings within each time step
-      D = I
-    else:
-      # random pitch orderings within each time step
-      D = P
+    # random variable orderings within each time step
+    D = I if separate_instruments else P
     orders = orders[:, :, None] * D + np.arange(D, dtype=np.int32)[None, None, :]
     for i in range(B):
       for t in range(T):
@@ -140,22 +130,25 @@ def compute_chordwise_loss(wrapped_model, pianorolls, crop_piece_len,
       if bahh % D == 0:
         xs_scratch = np.copy(xs)
 
-      input_data = [mask_tools.apply_mask_and_stack(x, m)
-                    for x, m in zip(xs_scratch, mask)]
-      p = session.run(model.predictions,
-                      feed_dict={model.input_data: input_data})
+      input_data = [mask_tools.apply_mask_and_stack(x, m) for x, m in zip(xs_scratch, mask)]
+      p = session.run(model.predictions, feed_dict={model.input_data: input_data})
 
       # in both cases, loss is a vector over batch examples
       if separate_instruments:
         # batched loss at time/instrument pair, summed over pitches
-        loss = I * -np.where(xs_scratch[np.arange(B), t, :, i], np.log(p[np.arange(B), t, :, i]), 0).sum(axis=1)
+        loss = -np.where(xs_scratch[np.arange(B), t, :, i],
+                         np.log(p[np.arange(B), t, :, i]),
+                         0).sum(axis=1)
       else:
         # batched loss at time/pitch pair, single instrument
-        # multiply by P to counteract the division by P when we take the mean loss;
-        # we want to sum over pitches, not average.
-        loss = P * -np.where(xs_scratch[np.arange(B), t, i, 0], 
-                             np.log(p[np.arange(B), t, i, 0]), 
-                             np.log(1-p[np.arange(B), t, i, 0]))
+        loss = -np.where(xs_scratch[np.arange(B), t, i, 0], 
+                         np.log(p[np.arange(B), t, i, 0]), 
+                         np.log(1-p[np.arange(B), t, i, 0]))
+
+      # at the end we take the mean of the losses. multiply by D
+      # because we want to sum over the D axis (instruments or
+      # pitches), not average.
+      loss *= D
 
       # don't judge predictions of padded elements
       loss = np.where(t < lengths, loss, 0)
@@ -165,7 +158,7 @@ def compute_chordwise_loss(wrapped_model, pianorolls, crop_piece_len,
       print "%i: %.5f < %.5f < %.5f < %.5f < %.5g" % (bahh, np.min(loss), np.percentile(loss, 25), np.percentile(loss, 50), np.percentile(loss, 75), np.max(loss))
 
       if np.isinf(loss).any():
-        report(final=True)
+        report(losses, final=True)
         raise InfiniteLoss()
 
       # update xs_scratch to contain predictions
@@ -173,7 +166,6 @@ def compute_chordwise_loss(wrapped_model, pianorolls, crop_piece_len,
         xs_scratch[np.arange(B), t, :, i] = np.eye(P)[np.argmax(p[np.arange(B), t, :, i], axis=1)]
         mask[np.arange(B), t, :, i] = 0
       else:
-        #FIXME: check this comparison
         xs_scratch[np.arange(B), t, i, 0] = p[np.arange(B), t, i, 0] > 0.5
         mask[np.arange(B), t, i, 0] = 0
       assert np.unique(mask.sum(axis=(1, 2, 3))).size == 1
@@ -182,9 +174,9 @@ def compute_chordwise_loss(wrapped_model, pianorolls, crop_piece_len,
       #mask_tools.print_mask(mask[0])
 
       if len(losses) % 100 == 0:
-        report()
+        report(losses)
     assert np.allclose(mask, 0)
-    report()
+    report(losses)
     print 'hparams.checkpoint_fpath', hparams.checkpoint_fpath
   report(final=True)
   return losses
