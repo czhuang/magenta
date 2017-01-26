@@ -224,9 +224,11 @@ DATASET_PARAMS = {
         'pitch_ranges': [36, 88], 'shortest_duration': 0.125, 
         'relative_path': 'bach/qbm120/instrs=4_duration=0.125_sep=True'},
     'MNIST': {'crop_piece_len': 28, 'num_pitches': 28},
+    'BinaryMNIST': {'crop_piece_len': 28, 'num_pitches': 28, 
+                    'path': '/data/lisatmp4/BinaryMNIST'},
 }
 
-IMAGE_DATASETS = ['MNIST']
+IMAGE_DATASETS = ['MNIST', 'BinaryMNIST']
 
 
 def get_data_as_pianorolls(basepath, hparams, fold):
@@ -237,7 +239,7 @@ def get_data_as_pianorolls(basepath, hparams, fold):
   return seqs
 
 
-def get_image_data(dataset_name, fold):
+def get_image_data(dataset_name, fold, params):
   if dataset_name == 'MNIST':
     from tensorflow.examples.tutorials.mnist import input_data
     print 'Downloading or unpacking MNIST data...'
@@ -247,8 +249,16 @@ def get_image_data(dataset_name, fold):
     data = getattr(mnist, fold).images
     data = np.reshape(data, (-1, 28, 28, 1))
     print 'MNIST', data.shape
-    # binarize
-    return data > 0.5  
+    return data
+  elif dataset_name == 'BinaryMNIST':
+    fpath = os.path.join(params['path'], 'binarized_mnist_%s.amat' % fold)
+    print 'Loading BinaryMNIST data from', fpath
+    with open(fpath) as f:
+      lines = f.readlines()
+    data = np.array([[int(i) for i in line.split()] for line in lines])    
+    data = np.reshape(data, (-1, 28, 28, 1))
+    print 'BinaryMNIST', data.shape
+    return data
   else:
     assert False, 'Dataset %s not yet supported.' % dataset_name
 
@@ -260,10 +270,9 @@ def get_data_and_update_hparams(basepath, hparams, fold,
   dataset_name = hparams.dataset
   params = DATASET_PARAMS[dataset_name]
   
-  IMAGE_DATASET_NAMES = ['MNIST']
-  if dataset_name in IMAGE_DATASET_NAMES: 
+  if dataset_name in IMAGE_DATASETS: 
     # for image datasets
-    seqs = get_image_data(dataset_name, fold)
+    seqs = get_image_data(dataset_name, fold, params)
   else:
     separate_instruments = hparams.separate_instruments
     # TODO: Read dataset params from JSON file or the like.
@@ -278,7 +287,7 @@ def get_data_and_update_hparams(basepath, hparams, fold,
 
   # Update hparams.
   if update_hparams:
-    if dataset_name not in IMAGE_DATASET_NAMES:
+    if dataset_name not in IMAGE_DATASETS:
       hparams.num_pitches = pitch_range[1] - pitch_range[0] + 1
     for key, value in params.iteritems():
       if hasattr(hparams, key): 
@@ -287,7 +296,7 @@ def get_data_and_update_hparams(basepath, hparams, fold,
     for key in params:
       if hasattr(hparams, key):
         assert getattr(hparams, key) == params[key], 'hparams did not get updated, %r!=%r' % (getattr(hparams, key), params[key])
-  if return_encoder and dataset_name not in IMAGE_DATASET_NAMES:
+  if return_encoder and dataset_name not in IMAGE_DATASETS:
     encoder = PianorollEncoderDecoder(
         shortest_duration=params['shortest_duration'],
         min_pitch=pitch_range[0],
