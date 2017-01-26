@@ -94,14 +94,11 @@ def get_checkpoint_hparams(model_name):
     hparams_fpath = os.path.join(FLAGS.run_dir, FLAGS.checkpoint_dir, 'config')
     with open(hparams_fpath, 'r') as p:
       hparams = yaml.load(p)
-    # FIXME: change in hparams the checkpoint name to just be best_model.ckpt so that can be the same for all
     hparams.checkpoint_fpath = os.path.join(
         FLAGS.run_dir, FLAGS.checkpoint_dir,
-        'DeepStraightConvSpecs-64-128-best_model.ckpt')
+        'DeepStraightConvSpecs-%d-%d-best_model.ckpt' % (
+            hparams.num_layers, hparams.num_filters))
     print 'Will load checkpoint from ', hparams.checkpoint_fpath
-    #checkpoint_fpath = os.path.join(tf.resource_loader.get_data_files_path(),
-    #                                'checkpoints',
-    #                                hparams.checkpoint_name)
     return hparams
  
   elif model_name not in CHECKPOINT_HPARAMS:

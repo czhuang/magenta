@@ -8,6 +8,9 @@ Example usage:
 """
 import os
 import time
+import sys
+
+import yaml
 
 import numpy as np
 import tensorflow as tf
@@ -26,8 +29,8 @@ from magenta.models.basic_autofill_cnn.hparams_tools import Hyperparameters
 FLAGS = tf.app.flags.FLAGS
 # TODO(annahuang): Set the default input and output_dir to None for opensource.
 tf.app.flags.DEFINE_string(
-    'input_dir', '/data/lisatmp4/huangche/data/bach/qbm120/instrs=4_duration=0.125_sep=True',
-    'Path to the directory that holds the train, valid, test TFRecords.')
+    'input_dir', '/data/lisatmp4/huangche/data/',
+    'Path to the base directory for different datasets.')
 tf.app.flags.DEFINE_string('run_dir', '/u/huangche/logs',
                            'Path to the directory where checkpoints and '
                            'summary events will be saved during training and '
@@ -40,15 +43,16 @@ tf.app.flags.DEFINE_bool('log_progress', True,
                          'statistics.')
 
 # Dataset.
-tf.app.flags.DEFINE_string('dataset', '4_part_JSB_Chorales', '4part_JSB_Chorales,' 
+tf.app.flags.DEFINE_string('dataset', '4part_Bach_chorales', '4part_JSB_Chorales,' 
                            ' JSB_Chorales, MuseData, Nottingham, Piano-midi.de')
 # Later on have a lookup table for different datasets.
 tf.app.flags.DEFINE_integer('num_instruments', 4, 
-                        'Maximum number of instruments that appear in this dataset.')
+                        'Maximum number of instruments that appear in this dataset.  Use 0 if not separating instruments and hence does not matter how many there are.')
 tf.app.flags.DEFINE_bool('separate_instruments', True,
                          'Separate instruments into different input feature'
                          'maps or not.')
 tf.app.flags.DEFINE_integer('crop_piece_len', 64, 'The number of time steps included in a crop')
+tf.app.flags.DEFINE_integer('encode_silences', False, 'Encode silence as the lowest pitch.')
 
 # Model architecture.
 tf.app.flags.DEFINE_string('model_name', None,
@@ -83,6 +87,7 @@ tf.app.flags.DEFINE_bool('mask_indicates_context', True,
                          'Feed inverted mask into convnet so that zero-padding makes sense')
 tf.app.flags.DEFINE_bool('optimize_mask_only', False, 'optimize masked predictions only')
 tf.app.flags.DEFINE_bool('rescale_loss', True, 'Rescale loss based on context size.')
+tf.app.flags.DEFINE_integer('patience', 5, 'Number of epochs to wait for improvement before decaying the learning rate.')
 
 # Data Augmentation.
 tf.app.flags.DEFINE_integer('augment_by_transposing', 0, 'If true during '
@@ -104,6 +109,20 @@ tf.app.flags.DEFINE_integer('num_epochs', 0,
 tf.app.flags.DEFINE_integer('save_model_secs', 30,
                             'The number of seconds between saving each '
                             'checkpoint.')
+
+
+import contextlib
+@contextlib.contextmanager
+def pdb_post_mortem():
+  try:
+    yield
+  except:
+    exc_type, exc_value, exc_traceback = sys.exc_info()
+    if not isinstance(exc_value, (KeyboardInterrupt, SystemExit)):
+      import traceback
+      traceback.print_exception(exc_type, exc_value, exc_traceback)
+      import pdb; pdb.post_mortem()
+
 
 def run_epoch(supervisor,
               sess,
@@ -244,34 +263,35 @@ def main(unused_argv):
 
   # Load hyperparameter settings, configs, and data.
   hparams = Hyperparameters(
+      dataset=FLAGS.dataset,
       num_instruments=FLAGS.num_instruments,
       separate_instruments=FLAGS.separate_instruments,
       crop_piece_len=FLAGS.crop_piece_len,
       model_name=FLAGS.model_name,
       num_layers=FLAGS.num_layers,
       num_filters=FLAGS.num_filters,
+      encode_silences=FLAGS.encode_silences,
       use_residual=FLAGS.use_residual,
       batch_size=FLAGS.batch_size,
       maskout_method=FLAGS.maskout_method,
       mask_indicates_context=FLAGS.mask_indicates_context,
       optimize_mask_only=FLAGS.optimize_mask_only,
       rescale_loss=FLAGS.rescale_loss,
+      patience=FLAGS.patience,
       augment_by_transposing=FLAGS.augment_by_transposing,
       augment_by_halfing_doubling_durations=FLAGS.
       augment_by_halfing_doubling_durations,
       denoise_mode=FLAGS.denoise_mode,
       corrupt_ratio=FLAGS.corrupt_ratio)
-
-  print 'hparams input_depth, output_depth', hparams.input_depth, hparams.output_depth
+  
+  # Get data.
   # TODO(annahuang): Use queues.
-  train_data = list(data_tools.get_note_sequence_data(FLAGS.input_dir, 'train'))
-  valid_data = list(data_tools.get_note_sequence_data(FLAGS.input_dir, 'valid'))
+  train_data, pianoroll_encoder = data_tools.get_data_and_update_hparams(
+      FLAGS.input_dir, hparams, 'train', return_encoder=True)
+  valid_data = data_tools.get_data_and_update_hparams(
+      FLAGS.input_dir, hparams, 'valid', return_encoder=False)
   print '# of train_data:', len(train_data)
   print '# of valid_data:', len(valid_data)
-
-  pianoroll_encoder = pianorolls_lib.PianorollEncoderDecoder(
-      separate_instruments=FLAGS.separate_instruments,
-      augment_by_transposing=FLAGS.augment_by_transposing)
 
   # TODO(annahuang): Set this according to pitch range.
   best_validation_loss = np.inf
@@ -299,10 +319,19 @@ def main(unused_argv):
       saver = None
     best_model_saver = tf.train.Saver()
 
+    # Save hparam configs.
+    logdir = os.path.join(FLAGS.run_dir, hparams.log_subdir_str)
+    if not os.path.exists(logdir):
+      os.mkdir(logdir)
+    config_fpath = os.path.join(logdir, 'config')
+    print 'Writing to', config_fpath
+    with open(config_fpath, 'w') as p:
+      yaml.dump(hparams, p)
+
     # Graph will be finalized after instantiating supervisor.
     sv = tf.train.Supervisor(
         graph=graph,
-        logdir=os.path.join(FLAGS.run_dir, hparams.log_subdir_str),
+        logdir=logdir,
         saver=saver,
         summary_op=None,
         save_model_secs=FLAGS.save_model_secs)
@@ -311,7 +340,7 @@ def main(unused_argv):
     with sv.PrepareSession() as sess:
       epoch_count = 0
       time_since_improvement = 0
-      patience = 5
+      true_time_since_improvement = 0
       while epoch_count < FLAGS.num_epochs or not FLAGS.num_epochs:
         if sv.should_stop():
           break
@@ -327,15 +356,21 @@ def main(unused_argv):
           if new_best_validation_loss < best_validation_loss:
             best_validation_loss = new_best_validation_loss
             time_since_improvement = 0
+            true_time_since_improvement = 0
           else:
             time_since_improvement += 1
-            if time_since_improvement > patience:
+            true_time_since_improvement += 1
+            if time_since_improvement > FLAGS.patience:
               sess.run(m.decay_op)
               time_since_improvement = 0
+            if true_time_since_improvement > 5 * FLAGS.patience:
+              break
         epoch_count += 1
 
+    print "best validation loss", best_validation_loss
     return best_validation_loss
 
 
 if __name__ == '__main__':
-  tf.app.run()
+  with pdb_post_mortem():
+    tf.app.run()

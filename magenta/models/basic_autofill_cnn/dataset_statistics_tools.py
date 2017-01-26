@@ -3,6 +3,7 @@
 A detailed description of dataset_statistics_tools.
 """
 import os
+import sys
 from collections import defaultdict
 
 import numpy as np
@@ -19,6 +20,57 @@ from magenta.models.basic_autofill_cnn import pianorolls_lib
 from magenta.music.note_sequence_io import note_sequence_record_iterator, NoteSequenceRecordWriter
 from magenta.music.midi_io import sequence_proto_to_midi_file, midi_to_sequence_proto
 
+
+import contextlib
+@contextlib.contextmanager
+def pdb_post_mortem():
+  try:
+    yield
+  except:
+    exc_type, exc_value, exc_traceback = sys.exc_info()
+    if not isinstance(exc_value, (KeyboardInterrupt, SystemExit)):
+      import traceback
+      traceback.print_exception(exc_type, exc_value, exc_traceback)
+      import pdb; pdb.post_mortem()
+
+
+# shortest_duration, min_pitch, max_pitch
+base_path = '/data/lisatmp4/huangche/data'
+datasets = ['MuseData', 'Nottingham', 'Piano-midi.de', 'JSB Chorales']
+
+
+def test_pianorolls_lib():
+  data, encoder = data_tools.get_data(base_path, 'Piano-midi.de', 'train', separate_instruments=False)
+  rolls = [encoder.encode(seq) for seq in data]
+  note_densities = []
+  for roll in rolls:
+    note
+    print roll.shape, np.sum(roll), np.sum(roll) / roll.shape[0]
+    
+               
+folds = ['train', 'valid', 'test']
+dataset_params = dict()
+def read_datasets():
+  for dataset in datasets:
+    fpath = os.path.join(base_path, dataset+'.npz')
+    data = np.load(fpath)
+    print data.keys(), type(data)
+    min_pitch = 127
+    max_pitch = 0
+    for fold in data.keys():
+      pieces = data[fold]
+      print len(pieces)
+      for piece in pieces:
+        for chord in piece:
+#          print np.min(chord).shape, np.min(chord)
+          if len(chord) > 0:
+            min_pitch = np.minimum(np.min(chord), min_pitch)
+            max_pitch = np.maximum(np.max(chord), max_pitch)
+          else:
+            print 'empty chord'
+    dataset_params[dataset] = dict(pitch_ranges=[min_pitch, max_pitch])
+    print dataset, min_pitch, max_pitch
+  print dataset_params
 
 def read_midi(): 
   print pretty_midi.__version__
@@ -422,8 +474,13 @@ def main(unused_argv):
 #  match_dataset_split()
 #  retrieve_nicolas_bach_pickle()
 #  test_get_piece_tensor()
-  read_midi()
+#  read_midi()
+#  read_datasets()
+  test_pianorolls_lib()
+
 
 if __name__ == '__main__':
-  tf.app.run()
+  with pdb_post_mortem():
+    tf.app.run()
+
 

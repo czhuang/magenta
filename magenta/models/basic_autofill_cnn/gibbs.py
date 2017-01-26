@@ -54,9 +54,18 @@ def sample_bernoulli(p, temperature):
   if temperature == 0.:
     sampled = p > 0.5
   else:
-    assert False, "Not yet implemented."
-    p /= temperature
-    sampled = p.random.rand(p.shape) > p
+    axis = 3
+    pp = np.concatenate((p, (1-p)), axis=3)
+    logpp = np.log(pp)
+    logpp /= temperature
+    logpp -= logpp.max(axis=axis, keepdims=True)
+    #p = np.where(logpp > 0, 
+    #             1 / (1 + np.exp(-logpp)), 
+    #             np.exp(logpp) / (np.exp(logpp) + 1))
+    p = np.exp(logpp)
+    p /= p.sum(axis=axis, keepdims=True)
+    p = p[:, :, :, :1]
+    sampled = np.random.random(p.shape) < p
   return sampled
 
 
@@ -340,7 +349,7 @@ class Gibbs(object):
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_integer("num_steps", None, "number of gibbs steps to take")
 tf.app.flags.DEFINE_string("generation_type", None, "unconditioned, inpainting")
-tf.app.flags.DEFINE_string("context_source", "bach", "bach")
+tf.app.flags.DEFINE_string("context_source", "originals", "originals to use the validation piece of the dataset on which the model was trained.")
 tf.app.flags.DEFINE_string("sampler", None, "independent or sequential or bisecting")
 tf.app.flags.DEFINE_string("masker", None, "bernoulli or contiguous or bernoulli_inpainting")
 tf.app.flags.DEFINE_string("context_kind", None, "bernoulli, harmonization, transition, inner_voices, tenor")
@@ -350,12 +359,14 @@ tf.app.flags.DEFINE_float("schedule_yao_pmax", 0.9, "")
 tf.app.flags.DEFINE_float("schedule_yao_alpha", 0.7, "")
 tf.app.flags.DEFINE_float("schedule_constant_p", None, "")
 tf.app.flags.DEFINE_float("temperature", 1, "softmax temperature")
-tf.app.flags.DEFINE_string("initialization", "random", "how to obtain initial piano roll; random or independent or nade")
+tf.app.flags.DEFINE_string("initialization", "random", "how to obtain initial piano roll; random or independent or sequential")
 tf.app.flags.DEFINE_integer("piece_length", 32, "num of time steps in generated piece")
 # already defined in generate_tools.py
 #tf.app.flags.DEFINE_string(
 #    "generation_output_dir", "/Tmp/cooijmat/autofill/generate",
 #    "Output directory for storing the generated Midi.")
+tf.app.flags.DEFINE_float("log_percent", 0.05, "Percentage of intermediate generation steps to save.")
+
 
 def main(unused_argv):
   timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -409,25 +420,28 @@ def main(unused_argv):
     )[FLAGS.masker]
 
   wmodel = retrieve_model_tools.retrieve_model(model_name=FLAGS.model_name)
-  if FLAGS.separate_instruments:
-    B, T, P, I = [100, FLAGS.piece_length, 53, 4]
-  else:
-    B, T, P, I = [100, FLAGS.piece_length, 53, 1]
 
+  hparams = wmodel.hparams
+  B = 100
+  T, P, I = hparams.raw_pianoroll_shape
   print B, T, P, I
+  hparams.crop_piece_len = FLAGS.piece_length
   
   intermediates = defaultdict(list)
 
   # Sets up context and blank slate.  
   if FLAGS.generation_type == "inpainting":
-    if FLAGS.context_source == "bach":
-      print "Loading Bach chorales..."
-      pianorolls = np.asarray(list(data_tools.get_pianoroll_from_note_sequence_data(
-          FLAGS.validation_set_dir, "valid", FLAGS.piece_length)))
-      # Logs initial complete bach chorale.
+    if FLAGS.context_source == "originals":
+      print "Loading validation pieces from %s..." % hparams.dataset
+      piano_rolls = data_tools.get_data_as_pianorolls(FLAGS.input_dir, hparams, 'valid')
+      #pianorolls = np.asarray(list(data_tools.get_data_from(
+      #    FLAGS.validation_set_dir, "valid", FLAGS.piece_length)))
+      
+      # Logs initial complete pieces.
       intermediates["pianorolls"].append(pianorolls.copy())
       intermediates["masks"].append(np.zeros_like(pianorolls))
       intermediates["predictions"].append(np.zeros_like(pianorolls))
+      intermediates["step_idx"].append(-1)
     else:
       assert False, 'context source option %s not yet supported' % FLAGS.context_source
     # if doing inpainting, masker must expose inpainting masks
@@ -439,6 +453,7 @@ def main(unused_argv):
     intermediates["pianorolls"].append(pianorolls.copy())
     intermediates["masks"].append(masks.copy())
     intermediates["predictions"].append(np.zeros_like(pianorolls))
+    intermediates["step_idx"].append(-1)
   elif FLAGS.generation_type == "unconditioned":
     pianorolls = np.zeros([B, T, P, I], dtype=np.float32)
     masks = np.ones_like(pianorolls)
@@ -454,13 +469,25 @@ def main(unused_argv):
     intermediates["pianorolls"].append(pianorolls.copy())
     intermediates["masks"].append(masks.copy())
     intermediates["predictions"].append(np.zeros_like(pianorolls))
+    intermediates["step_idx"].append(-1)
   else: 
     # sample once to populate masked-out portion
+    if FLAGS.initialization == 'sequential':
+      B, T, P, I = pianorolls.shape
+      log_denominator = int(T * P * FLAGS.log_percent)
+      last_step = T * P
+      print 'log_denominator', log_denominator
+    iter_idx = 0
     for pianorolls, masks, predictions in init_sampler(wmodel, pianorolls, masks):
-      intermediates["pianorolls"].append(pianorolls.copy())
-      intermediates["masks"].append(masks.copy())
-      intermediates["predictions"].append(predictions.copy())
-  
+      print iter_idx,
+      if FLAGS.initialization != 'sequential' or (
+          iter_idx % log_denominator == 0 or iter_idx == last_step - 1):
+        print 'Logging step', iter_idx
+        intermediates["pianorolls"].append(pianorolls.copy())
+        intermediates["masks"].append(masks.copy())
+        intermediates["predictions"].append(predictions.copy())
+        intermediates["step_idx"].append(iter_idx)
+      iter_idx += 1
 
   gibbs = Gibbs(num_steps=FLAGS.num_steps,
                 masker=masker,
@@ -470,9 +497,13 @@ def main(unused_argv):
   iter_idx = 0
   for pianorolls, masks, predictions in gibbs(wmodel, pianorolls):
     print iter_idx,
-    intermediates["pianorolls"].append(pianorolls.copy())
-    intermediates["masks"].append(masks.copy())
-    intermediates["predictions"].append(predictions.copy())
+    if (iter_idx % int(FLAGS.log_percent * FLAGS.num_steps) == 0 or
+        FLAGS.num_steps - 1 == iter_idx):
+      print 'Logging step', iter_idx
+      intermediates["pianorolls"].append(pianorolls.copy())
+      intermediates["masks"].append(masks.copy())
+      intermediates["predictions"].append(predictions.copy())
+      intermediates["step_idx"].append(iter_idx)
     iter_idx += 1
     #sys.stderr.write(".")
     #sys.stderr.flush()

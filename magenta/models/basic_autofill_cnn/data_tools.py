@@ -25,7 +25,7 @@ def random_double_or_halftime_pianoroll_from_note_sequence(
     sequence, augment_by_halfing_doubling_durations, encoder):
   if not augment_by_halfing_doubling_durations:
     return encoder.encode(sequence)
-
+  assert isinstance(sequence, music_pb2.NoteSequence), 'No support for dataaugmentation on non-NoteSequence data yet.'
   durations = set(note.end_time - note.start_time for note in sequence.notes)
   longest_to_double = 4
   shortest_to_half = 0.25
@@ -104,6 +104,21 @@ def random_crop_pianoroll(pianoroll,
   return shifted_pianoroll
 
 
+def random_crop_pianoroll_pad(pianoroll,
+                              crop_len,
+                              start_crop_index=None):
+  length = len(pianoroll)
+  pad_length = crop_len - len(pianoroll)
+  if pad_length > 0:
+    pianoroll = np.pad(pianoroll, [(0, pad_length)] + [(0, 0)] * (pianoroll.ndim - 1), mode="constant")
+  if start_crop_index is not None:
+    start_time_idx = start_crop_index
+  else:
+    start_time_idx = np.random.randint(len(pianoroll) - crop_len + 1)
+  pianoroll = pianoroll[start_time_idx:start_time_idx + crop_len]
+  return pianoroll, length
+
+
 def make_data_feature_maps(sequences, hparams, encoder, start_crop_index=None):
   """Return input and output pairs of masked out and full pianorolls.
 
@@ -126,8 +141,12 @@ def make_data_feature_maps(sequences, hparams, encoder, start_crop_index=None):
   targets = []
   seq_count = 0
   for sequence in sequences:
-    pianoroll = random_double_or_halftime_pianoroll_from_note_sequence(
-        sequence, hparams.augment_by_halfing_doubling_durations, encoder)
+    if encoder is not None:
+      pianoroll = random_double_or_halftime_pianoroll_from_note_sequence(
+          sequence, hparams.augment_by_halfing_doubling_durations, encoder)
+    else:
+      # For images, no encoder, already in pianoroll-like form.
+      pianoroll = sequence
     try:
       cropped_pianoroll = random_crop_pianoroll(
           pianoroll, hparams.crop_piece_len, start_crop_index,
@@ -160,58 +179,162 @@ def make_data_feature_maps(sequences, hparams, encoder, start_crop_index=None):
   return input_data, targets
 
 
-def get_pianoroll_from_note_sequence_data(path, type_, len_from_beginning=None):
-  """Retrieves NoteSequences from a TFRecord and returns piano rolls.
+#def get_pianoroll_from_note_sequence_data(path, type_, len_from_beginning=None):
+#  """Retrieves NoteSequences from a TFRecord and returns piano rolls.
+#
+#  Args:
+#    path: The absolute path to the TFRecord file.
+#    type_: The name of the TFRecord file which also specifies the type of data.
+#
+#  Yields:
+#    3D binary numpy arrays.
+#
+#  Raises:
+#    DataProcessingError: If the type_ specified is not one of train, test or
+#        valid.
+#  """
+#  if type_ not in ['train', 'test', 'valid']:
+#    raise DataProcessingError(
+#        'Data is grouped by train, test or valid. Please specify one.')
+#  fpath = os.path.join(path, '%s.tfrecord' % type_)
+#  encoder = PianorollEncoderDecoder()
+#  seq_reader = note_sequence_record_iterator(fpath)
+#  for seq in seq_reader:
+#    pianoroll = encoder.encode(seq)
+#    if len_from_beginning is None:
+#      yield pianoroll
+#    elif pianoroll.shape[0] >= len_from_beginning:
+#      yield pianoroll[:len_from_beginning]
+#    else:
+#      continue
 
-  Args:
-    path: The absolute path to the TFRecord file.
-    type_: The name of the TFRecord file which also specifies the type of data.
 
-  Yields:
-    3D binary numpy arrays.
+DATASET_PARAMS = {
+    'Nottingham': {
+        'pitch_ranges': [31, 93], 'shortest_duration': 0.25, 'num_instruments': 9}, 
+    'MuseData': {
+        'pitch_ranges': [21, 105], 'shortest_duration': 0.25, 'num_instruments': 14},
+    'Piano-midi.de': {
+        'pitch_ranges': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 12,
+        'batch_size': 12},
+    'JSB_Chorales': {
+        'pitch_ranges': [43, 96], 'shortest_duration': 0.5, 'num_instruments': 4,
+        'crop_piece_len': 32},
+    '4part_Bach_chorales': {
+        'pitch_ranges': [36, 88], 'shortest_duration': 0.125, 
+        'relative_path': 'bach/qbm120/instrs=4_duration=0.125_sep=True'},
+    'MNIST': {'crop_piece_len': 28, 'num_pitches': 28},
+    'BinaryMNIST': {'crop_piece_len': 28, 'num_pitches': 28, 
+                    'path': '/data/lisatmp4/BinaryMNIST'},
+}
 
-  Raises:
-    DataProcessingError: If the type_ specified is not one of train, test or
-        valid.
-  """
-  if type_ not in ['train', 'test', 'valid']:
-    raise DataProcessingError(
-        'Data is grouped by train, test or valid. Please specify one.')
-  fpath = os.path.join(path, '%s.tfrecord' % type_)
-  encoder = PianorollEncoderDecoder()
-  seq_reader = note_sequence_record_iterator(fpath)
-  for seq in seq_reader:
-    pianoroll = encoder.encode(seq)
-    if len_from_beginning is None:
-      yield pianoroll
-    elif pianoroll.shape[0] >= len_from_beginning:
-      yield pianoroll[:len_from_beginning]
+IMAGE_DATASETS = ['MNIST', 'BinaryMNIST']
+
+
+def get_data_as_pianorolls(basepath, hparams, fold):
+  seqs, encoder = get_data_and_update_hparams(
+      basepath, hparams, fold, update_hparams=False, return_encoder=True)
+  if hparams.dataset not in IMAGE_DATASETS:
+    return [encoder.encode(seq) for seq in seqs]
+  return seqs
+
+
+def get_image_data(dataset_name, fold, params):
+  if dataset_name == 'MNIST':
+    from tensorflow.examples.tutorials.mnist import input_data
+    print 'Downloading or unpacking MNIST data...'
+    mnist = input_data.read_data_sets("MNIST_data/", one_hot=True)
+    if fold == 'valid':
+      fold = 'validation'
+    data = getattr(mnist, fold).images
+    data = np.reshape(data, (-1, 28, 28, 1))
+    print 'MNIST', data.shape
+    return data
+  elif dataset_name == 'BinaryMNIST':
+    fpath = os.path.join(params['path'], 'binarized_mnist_%s.amat' % fold)
+    print 'Loading BinaryMNIST data from', fpath
+    with open(fpath) as f:
+      lines = f.readlines()
+    data = np.array([[int(i) for i in line.split()] for line in lines])    
+    data = np.reshape(data, (-1, 28, 28, 1))
+    print 'BinaryMNIST', data.shape
+    return data
+  else:
+    assert False, 'Dataset %s not yet supported.' % dataset_name
+
+
+def get_data_and_update_hparams(basepath, hparams, fold, 
+                                update_hparams=True, 
+                                return_encoder=False):
+  """Returns NoteSequences for '4_part_JSB_Chorales' and list of lists for the rest, and updates dataset specific hparams."""
+  dataset_name = hparams.dataset
+  params = DATASET_PARAMS[dataset_name]
+  
+  if dataset_name in IMAGE_DATASETS: 
+    # for image datasets
+    seqs = get_image_data(dataset_name, fold, params)
+  else:
+    separate_instruments = hparams.separate_instruments
+    # TODO: Read dataset params from JSON file or the like.
+    pitch_range = params['pitch_ranges']
+    if dataset_name == '4part_Bach_chorales':
+      fpath = os.path.join(basepath, params['relative_path'], '%s.tfrecord' % fold)
+      seqs = list(note_sequence_record_iterator(fpath))
     else:
-      continue
+      fpath = os.path.join(basepath, dataset_name+'.npz')
+      data = np.load(fpath)
+      seqs = data[fold]
+
+  # Update hparams.
+  if update_hparams:
+    if dataset_name not in IMAGE_DATASETS:
+      hparams.num_pitches = pitch_range[1] - pitch_range[0] + 1
+    for key, value in params.iteritems():
+      if hasattr(hparams, key): 
+        setattr(hparams, key, value)
+    #FIXME: just for debug
+    for key in params:
+      if hasattr(hparams, key):
+        assert getattr(hparams, key) == params[key], 'hparams did not get updated, %r!=%r' % (getattr(hparams, key), params[key])
+  if return_encoder and dataset_name not in IMAGE_DATASETS:
+    encoder = PianorollEncoderDecoder(
+        shortest_duration=params['shortest_duration'],
+        min_pitch=pitch_range[0],
+        max_pitch=pitch_range[1],
+        separate_instruments=separate_instruments,
+        num_instruments=hparams.num_instruments,
+        encode_silences=hparams.encode_silences)
+  else:
+    encoder = None
+  
+  if return_encoder:
+    return seqs, encoder
+  else:
+    return seqs
 
 
-def get_note_sequence_data(path, type_):
-  """Retrieves NoteSequences from a TFRecord.
-
-  Args:
-    path: The absolute path to the TFRecord file.
-    type_: The name of the TFRecord file which also specifies the type of data.
-
-  Yields:
-    NoteSequences.
-
-  Raises:
-    DataProcessingError: If the type_ specified is not one of train, test or
-        valid.
-  """
-  if type_ not in ['train', 'test', 'valid']:
-    raise DataProcessingError(
-        'Data is grouped by train, test or valid. Please specify one.')
-  fpath = os.path.join(path, '%s.tfrecord' % type_)
-  print 'fpath', fpath
-  #seq_reader = note_sequence_record_iterator(fpath)
-  #for seq in seq_reader:
-  #  yield seq
-  reader = tf.python_io.tf_record_iterator(fpath)
-  for serialized_sequence in reader:
-    yield music_pb2.NoteSequence.FromString(serialized_sequence)
+#def get_note_sequence_data(path, type_):
+#  """Retrieves NoteSequences from a TFRecord.
+#
+#  Args:
+#    path: The absolute path to the TFRecord file.
+#    type_: The name of the TFRecord file which also specifies the type of data.
+#
+#  Yields:
+#    NoteSequences.
+#
+#  Raises:
+#    DataProcessingError: If the type_ specified is not one of train, test or
+#        valid.
+#  """
+#  if type_ not in ['train', 'test', 'valid']:
+#    raise DataProcessingError(
+#        'Data is grouped by train, test or valid. Please specify one.')
+#  fpath = os.path.join(path, '%s.tfrecord' % type_)
+#  print 'fpath', fpath
+#  #seq_reader = note_sequence_record_iterator(fpath)
+#  #for seq in seq_reader:
+#  #  yield seq
+#  reader = tf.python_io.tf_record_iterator(fpath)
+#  for serialized_sequence in reader:
+#    yield music_pb2.NoteSequence.FromString(serialized_sequence)

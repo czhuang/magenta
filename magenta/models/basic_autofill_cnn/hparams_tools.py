@@ -30,9 +30,10 @@ class Hyperparameters(object):
       num_pitches=53,  #53 + 11
       crop_piece_len=64, #128, #64, #32,
       num_instruments=4,
-      separate_instruments=True,
-      input_depth=None, #8,
-      output_depth=None, #4,
+      separate_instruments=False,
+      encode_silences=False,
+      #input_depth=None, #8,
+      #output_depth=None, #4,
       # Batch norm parameters.
       batch_norm=True,
       batch_norm_variance_epsilon=1e-7,
@@ -50,14 +51,15 @@ class Hyperparameters(object):
       # TODO: currently maskout_method here is not functional, still need to go through config_tools.
       maskout_method='balanced_by_scaling',
       optimize_mask_only=False,
-      use_softmax_loss=True,
+      #use_softmax_loss=True,
       rescale_loss=True,
       # Training.
       #learning_rate=2**-6,
       learning_rate=2**-4, #for sigmoids
       mask_indicates_context=False,
-      eval_freq = 5,
+      eval_freq = 1,
       num_epochs = 0,
+      patience = 5,
       # Runtime configs.
       run_dir=None,
       log_process=True,
@@ -95,82 +97,126 @@ class Hyperparameters(object):
   
     print 'model_name', self.model_name
 
-    if self.separate_instruments:
-      self.input_depth = self.num_instruments * 2
-    else:
-      self.input_depth = 1 * 2
-    self.output_depth = self.input_depth // 2    
-
-    if not self.separate_instruments and self.num_instruments > 1:
-      self.use_softmax_loss = False
-
-    # Check if pitch range is expanded if data augmentation on pitch is desired.
-    if self.augment_by_transposing and self.num_pitches != 53 + 11:
-      self.num_pitches = 53 + 11
-      #raise ValueError("num_pitches should be 53 + 11 if transposing")
-
-    # If denoising mode, then masks are not feed into model.
-    if self.denoise_mode:
-      self.input_depth //= 2
-      if self.input_depth != self.output_depth:
-        raise ValueError('Legacy from before, Input depth needs to be twice as output depth initially to account for mask that is not used in convolution but for computing debug statistics.')
-    else:
-      if self.input_depth // 2 != self.output_depth:
-        raise ValueError('Output depth should be half of that of input.')
-
-    self.conv_arch = self.get_conv_arch()
-
     # Log directory name for Tensorflow supervisor.
     #self.run_id = get_current_time_as_str()
     #self.log_subdir_str = '%s_%s_%s' % (self.conv_arch.name, self.__str__(),
     #                                    self.run_id)
-    self.log_subdir_str = '%s_%s' % (self.conv_arch.name, self.__str__())
-    print 'Model Specification: %s' % self.log_subdir_str
-
 
   @property
-  def input_data_shape(self):
-    """Returns the shape of input data."""
-    return (self.crop_piece_len, self.num_pitches, self.input_depth)
-
+  def input_depth(self):
+    if self.separate_instruments:
+      input_depth = self.num_instruments * 2
+    else:
+      input_depth = 1 * 2
+    if self.denoise_mode:
+      input_depth //= 2
+    return input_depth
+  
+  @property
+  def output_depth(self):
+    if not self.denoise_mode:
+      return self.input_depth // 2    
+    else:
+      return self.input_depth
+  
+  @property
+  def num_extra_encodings(self):
+    if self.encode_silences:
+      return 1
+    return 0   
+  
+  @property
+  def num_pitches(self):
+    if self.augment_by_transposing:
+      return self._num_pitches + 11  
+    return self._num_pitches
+ 
+  @num_pitches.setter
+  def num_pitches(self, num):
+    self._num_pitches = num
+ 
+  @property
+  def conv_arch(self):
+    return self.get_conv_arch()
+  
+  @property
+  def log_subdir_str(self):
+    return '%s_%s' % (self.conv_arch.name, self.__str__())
+  
   @property
   def name(self):
     return self.conv_arch.name
 
-  #@property
-  #def params_to_serialize(self):
-  #  #FIXME: hack.
-  #  params = dict()
-  #  for key in Hyperparameters._defaults.keys():
-  #    params[key] = getattr(self, key)
-  #  return params
+  @property
+  def input_shape(self):
+    """Returns the shape of input data."""
+    return [self.crop_piece_len, self.num_pitches, self.input_depth]
+
+  @property
+  def output_shape(self):
+    """Returns the shape of input data."""
+    if self.encode_silences:
+      return [self.crop_piece_len, self.num_pitches+1, self.input_depth]
+    else:
+      return [self.crop_piece_len, self.num_pitches, self.output_depth]
+  
+  @property
+  def raw_pianoroll_shape(self):
+    """Returns the shape of raw pianorolls."""
+    if self.separate_instruments:
+      return [self.crop_piece_len, self.num_pitches, self.num_instruments]
+    else:
+      return [self.crop_piece_len, self.num_pitches, 1]
+
+  @property
+  def use_softmax_loss(self):
+    if not self.separate_instruments and (
+        self.num_instruments > 1 or self.num_instruments == 0):
+      return False
+    else: 
+      return True
 
   def __str__(self):
     """Get all hyperparameters as a string."""
-    param_keys = self.__dict__.keys()
+    param_keys = self.__dict__.keys() + ["use_softmax_loss", "num_pitches", "input_depth"]
+    #param_keys = [key for key in dir(self) if '__' not in key and key != '_defaults']
     #print param_keys
     sorted_keys = sorted(param_keys)
     # Filter out some parameters so that string repr won't be too long for
     # directory name.
-    # Want to show 'input_depth', and use_softmax_loss, learning rate
+    # Want to show 'dataset', input_depth', and use_softmax_loss, learning rate, 'batch_size'
     keys_to_filter_out = [
-        'batch_size', 'border', 'num_layers', 'num_filters', 'eval_freq',
+        'num_layers', 'num_filters', 'eval_freq',
         'output_depth', 'model_name', 'run_id', 'checkpoint_name',
         'batch_norm_variance_epsilon', 'batch_norm_gamma', 'batch_norm',
-        'init_scale', 'crop_piece_len',
-        'prediction_threshold', 'optimize_mask_only', 'conv_arch',
+        'init_scale', 'prediction_threshold', 'optimize_mask_only', 'conv_arch',
         'augment_by_halfing_doubling_durations', 'augment_by_transposing',
         'mask_indicates_context', 'denoise_mode', 
-        'run_dir', 'num_epochs', 'log_process', 'save_model_secs',
-        'dataset',
+        'run_dir', 'num_epochs', 'log_process', 'save_model_secs', '_num_pitches',
+        'batch_size', 'crop_piece_len', 'input_depth', 'num_instruments', 'num_pitches',
     ]
     keys_to_include_last = ['maskout_method', 'corrupt_ratio']
-    line = (','.join('%s=%s' % (key, self.__dict__[key]) for key in sorted_keys
-                     if (key not in keys_to_filter_out 
-                         and key not in keys_to_include_last)))
+    key_to_shorthand = {
+        'batch_size': 'bs', 'learning_rate': 'lr', 'optimize_mask_only': 'mask_only',
+        'corrupt_ratio': 'corrupt', 'input_depth': 'in', 'crop_piece_len': 'len',
+        'use_softmax_loss': 'soft', 'num_instruments': 'num_i', 'num_pitches': 'n_pch'}
+
+    def _repr(key):
+      return key if key not in key_to_shorthand else key_to_shorthand[key]
+
+    def show_first(key):
+      return key not in keys_to_filter_out and key not in keys_to_include_last
+
+    line = ','.join('%s=%s' % (_repr(key), getattr(self, key)) for key in sorted_keys if show_first(key))
     line += ','
-    line += (','.join('%s=%s' % (key, self.__dict__[key]) for key in sorted_keys
-                     if key in keys_to_include_last))
+    line += ','.join('%s=%s' % (_repr(key), getattr(self, key)) for key in sorted_keys if key in keys_to_include_last)
+
+    #line = (','.join('%s=%s' % (
+    #    key if key not in key_to_shorthand else key_to_shorthand[key], 
+    #    getattr(self, key) for key in sorted_keys if (key not in keys_to_filter_out and key not in keys_to_include_last)))
+    #line += ','
+    #line += (','.join('%s=%s' % (key if key not in key_to_shorthand else key_to_shorthand[key], getattr(self, key)) for key in sorted_keys
+    #                 if key in keys_to_include_last))
     return line
 
 

@@ -137,6 +137,11 @@ fpaths = {
     'sigmoid_bach_nade':'fromscratch_None_init=sequential_Gibbs_num_steps_0__masker_None__schedule_None__sampler_None__20170109121655_24.81min.npz',
     'sigmoid_bach_independent_1696': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_1696__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_0_0___20170109143550_24.55min.npz'}
 
+# test sigmoid higher temperature
+fpaths = {
+    'sigmoid_ind_higher_temp': 'fromscratch_None_init=independent_Gibbs_num_steps_30__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_0_01___20170110000418_0.52min.npz'}
+
+
 set_names = fpaths.keys()
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
