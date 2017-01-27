@@ -364,8 +364,8 @@ class BasicAutofillCNNGraph(object):
 
 def get_placeholders(hparams):
   # NOTE: fixed batch_size because einstein sum can only deal with up to 1 unknown dimension
-  return dict(input_data=tf.placeholder(tf.float32, [None] + hparams.input_shape),
-              targets=tf.placeholder(tf.float32, [None] + hparams.output_shape))
+  return dict(input_data=tf.placeholder(tf.float32, [None, None] + hparams.input_shape[-2:]),
+              targets=tf.placeholder(tf.float32, [None, None] + hparams.output_shape[-2:]))
 
 def build_placeholders_initializers_graph(is_training, hparams, placeholders=None):
   """Builds input and target placeholders, initializer, and training graph."""
