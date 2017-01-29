@@ -109,6 +109,8 @@ tf.app.flags.DEFINE_integer('num_epochs', 0,
 tf.app.flags.DEFINE_integer('save_model_secs', 30,
                             'The number of seconds between saving each '
                             'checkpoint.')
+tf.app.flags.DEFINE_integer('eval_freq', 5,
+                            'The number of training iterations before validation.')
 
 
 import contextlib
@@ -282,7 +284,8 @@ def main(unused_argv):
       augment_by_halfing_doubling_durations=FLAGS.
       augment_by_halfing_doubling_durations,
       denoise_mode=FLAGS.denoise_mode,
-      corrupt_ratio=FLAGS.corrupt_ratio)
+      corrupt_ratio=FLAGS.corrupt_ratio,
+      eval_freq=FLAGS.eval_freq)
   
   # Get data.
   # TODO(annahuang): Use queues.
