@@ -40,7 +40,7 @@ def batches(xs, k):
   for a in range(0, len(xs), k):
     yield xs[a:a+k]
 
-def pad(xs):
+def pad_with_zeros(xs):
   shape = xs[0].shape[1:]
   # all should have equal shape in all but the first dimension
   assert all(x.shape[1:] == shape for x in xs)
@@ -50,7 +50,16 @@ def pad(xs):
     ys[i, :lengths[i]] = x
   return ys, lengths
 
-def wrap(xs):
+
+def pad(xs):
+  lengths = np.array([len(x) for x in xs])
+  max_len = np.max(lengths)
+  pad_lengths = max_len - lengths
+  ys = [np.pad(roll, [(0, pad_lengths[i])] + [(0, 0)] * (xs[0].ndim - 1), mode="wrap") for i, roll in enumerate(xs)]
+  return np.asarray(ys), lengths
+
+
+def breakup_long_pieces(xs):
   num_pieces = len(xs)
   lens = [len(x) for x in xs]
   sorted_lens = np.sort(lens)
@@ -372,12 +381,12 @@ def main(argv):
     print 'lengths', lengths
     
     #print 'WARNING: testing so only using 4 examples'
-    #pianorolls = pianorolls[:4]
+    #pianorolls = pianorolls[:2]
     #lengths = [len(roll) for roll in pianorolls]
     #print 'lengths', lengths
 
-    # Wrapping pieces that are outliers in length
-    pianorolls = wrap(pianorolls)
+    # Breaking up long pieces (that are outliers in length).
+    pianorolls = breakup_long_pieces(pianorolls)
     lengths = [len(roll) for roll in pianorolls]
     print 'lengths', lengths
    
