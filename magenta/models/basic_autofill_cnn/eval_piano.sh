@@ -6,6 +6,7 @@ bazel build evaluation_tools
 --kind chordwise \
 --fold valid \
 --chronological True \
+--chronological_margin 3 \
 --num_crops 1 \
 --crop_piece_len 64 \
 --evaluation_batch_size 600 \ 
