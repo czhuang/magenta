@@ -74,8 +74,8 @@ def wrap(xs):
     xs[i] = temp_x[:max_allowed_len]
     for w in range(1, num_wraps): 
       xs.append(temp_x[w*max_allowed_len:(w+1)*max_allowed_len])
-    added_wraps += num_wraps
-  assert len(xs) == num_pieces + added_wraps - 1
+      added_wraps += 1
+  assert len(xs) == num_pieces + added_wraps
   return xs
 
 
@@ -194,11 +194,11 @@ def evaluation_loop(evaluator, pianorolls, num_crops=5, batch_size=None, eval_da
         losses.append(loss)
         if ts is not None:
           print "%i, %i, %i(%d): %.5f < %.5f < %.5f < %.5f < %.5g, time taken: %.2f, \tmean: %.5f" % (ci, bi, i, ts, np.min(loss), np.percentile(loss, 25), np.percentile(loss, 50), np.percentile(loss, 75), np.max(loss), time.time()-start_time, np.mean(losses))
-          if ts != 0 and ts % 30 == 0:
+          start_time = time.time()
+          if ts != 0 and ts % 100 == 0:
             store(losses=losses, position=[ci, bi, ts+1], path=eval_fpath)
         else:
           print '.',
-        start_time = time.time()
       report(losses)
       store(losses=losses, position=[ci, bi+1, 0], path=eval_fpath)
     # After running possbily less # of batches b/c continuing from last logged point, reset to 0.
@@ -253,7 +253,7 @@ def compute_chordwise_loss(predictor, pianorolls, crop_piece_len,
 
       # FIXME: put more assertions
       if chronological:
-        t0 = t - crop_piece_len - chronological_margin + 1
+        t0 = t - crop_piece_len + chronological_margin + 1
       else:
         t0 = t - crop_piece_len / 2.,
       # restrict to valid indices
@@ -398,9 +398,9 @@ def main(argv):
     print 'eval_batch_size', eval_batch_size
 
     # Get folder for previous runs for this config.
-    dir_name = '%s-%s-num_rolls=%r-num_crops=%r-crop_len=%r-eval_bs=%r' % (
+    dir_name = '%s-%s-num_rolls=%r-num_crops=%r-crop_len=%r-eval_bs=%r-chrono=%s-margin-%s' % (
         FLAGS.fold, FLAGS.kind, B, FLAGS.num_crops, 
-        crop_piece_len, eval_batch_size)
+        crop_piece_len, eval_batch_size, FLAGS.chronological, FLAGS.chronological_margin)
     print 'dir_name:', dir_name
 
     # Check to see if there's previous evaluation losses.
