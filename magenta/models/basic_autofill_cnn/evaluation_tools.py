@@ -1,5 +1,6 @@
 """Evaluations for comparing against prior work."""
 import os, sys, traceback
+import time
 import numpy as np
 import tensorflow as tf
 import functools as ft
@@ -13,7 +14,7 @@ FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('fold', None, 'data fold on which to evaluate (valid or test)')
 tf.app.flags.DEFINE_string('kind', None, 'notewise or chordwise loss, or maxgreedy_notewise or mingreedy_notewise')
 tf.app.flags.DEFINE_integer('num_crops', 5, 'number of random crops to consider')
-tf.app.flags.DEFINE_integer('evaluation_batch_size', 1000, 'Batch size for evaluation.')
+tf.app.flags.DEFINE_integer('evaluation_batch_size', 20, 'Batch size for evaluation.')
 # already defined in basic_autofill_cnn_train.py which comes in through retrieve_model_tools (!)
 #tf.app.flags.DEFINE_integer('crop_piece_len', None, 'length of random crops (short pieces are padded in case of chordwise)')
 tf.app.flags.DEFINE_bool('chronological', False, 'indicates chordwise evaluation should proceed in chronological order')
@@ -26,7 +27,7 @@ def sem(xs):
   return np.std(xs) / np.sqrt(np.asarray(xs).size)
 
 def store(losses, position, path):
-  print 'Storing image losses to', path
+  print 'Storing losses to', path
   np.savez_compressed(path, losses=losses, current_position=position)
 
 def report(losses, final=False):
@@ -48,6 +49,35 @@ def pad(xs):
   for i, x in enumerate(xs):
     ys[i, :lengths[i]] = x
   return ys, lengths
+
+def wrap(xs):
+  num_pieces = len(xs)
+  lens = [len(x) for x in xs]
+  sorted_lens = np.sort(lens)
+  max_allowed_len = sorted_lens[-2]
+  wrap_inds = [i for i, l in enumerate(lens) if l > max_allowed_len]
+
+  # FIXME: just for debugging.
+  lens_too_long = [lens[i] for i in wrap_inds]
+  print 'max_allowed_len, and longest len', max_allowed_len, sorted_lens[-1]
+  print 'lens_too_long', lens_too_long
+
+  added_wraps = 0
+  for i in wrap_inds:
+    len_ = lens[i]
+    num_wraps = int(np.ceil(len_ / float(max_allowed_len)))
+    # if the last wrapped piece is shorter than the shortest piece, then assert.
+    last_wrap_len = len_ % max_allowed_len
+    if last_wrap_len < sorted_lens[0] * 2/3.:
+      assert False, 'Wrapped piece len %d shorter than shortest piece len %d' % (last_wrap_len, sorted_lens[0])
+    temp_x = xs[i]
+    xs[i] = temp_x[:max_allowed_len]
+    for w in range(1, num_wraps): 
+      xs.append(temp_x[w*max_allowed_len:(w+1)*max_allowed_len])
+    added_wraps += num_wraps
+  assert len(xs) == num_pieces + added_wraps - 1
+  return xs
+
 
 def chordwise_ordering(B, T, D, chronological=False):
   # each example has its own ordering
@@ -140,32 +170,37 @@ def evaluation_loop(evaluator, pianorolls, num_crops=5, batch_size=None, eval_da
   if batch_size is None:
     batch_size = len(pianorolls)
 
-  assert eval_fpath is not None
+  assert eval_fpath is not None 
   if eval_data is not None:
     losses = list(eval_data["losses"])
-    crop_sofar, batch_sofar = eval_data["current_position"]
+    crop_sofar, batch_sofar, t_sofar = eval_data["current_position"]
   else:
     losses = [] 
-    crop_sofar, batch_sofar = 0, 0
+    crop_sofar, batch_sofar, t_sofar = 0, 0, 0
+  print 'position from last time', crop_sofar, batch_sofar, t_sofar
 
   for ci in range(num_crops)[crop_sofar:]:
     print 'crop idx', ci
 
     for bi, xs in list(enumerate(batches(pianorolls, batch_size)))[batch_sofar:]:
       print 'batch idx, started at this batch', bi, batch_sofar
-
-      for i, loss in enumerate(evaluator(xs)):
-        print "%i, %i, %i: %.5f < %.5f < %.5f < %.5f < %.5g" % (ci, bi, i, np.min(loss), np.percentile(loss, 25), np.percentile(loss, 50), np.percentile(loss, 75), np.max(loss))
-
+      start_time = time.time()
+      for i, (loss, ts) in enumerate(evaluator(xs, t_sofar)):
+        #FIXME: perhaps evaluator return signal to say end of a time frame so that don't need to pass in D, and chronological etc.
         if np.isinf(loss).any():
           # report losses before inf just for information
           report(losses)
           raise InfiniteLoss()
-
         losses.append(loss)
-
+        if ts is not None:
+          print "%i, %i, %i(%d): %.5f < %.5f < %.5f < %.5f < %.5g, time taken: %.2f, \tmean: %.5f" % (ci, bi, i, ts, np.min(loss), np.percentile(loss, 25), np.percentile(loss, 50), np.percentile(loss, 75), np.max(loss), time.time()-start_time, np.mean(losses))
+          if ts != 0 and ts % 30 == 0:
+            store(losses=losses, position=[ci, bi, ts+1], path=eval_fpath)
+        else:
+          print '.',
+        start_time = time.time()
       report(losses)
-      store(losses=losses, position=[ci, bi+1], path=eval_fpath)
+      store(losses=losses, position=[ci, bi+1, 0], path=eval_fpath)
     # After running possbily less # of batches b/c continuing from last logged point, reset to 0.
     batch_sofar = 0
   report(losses, final=True)
@@ -180,27 +215,38 @@ def compute_chordwise_loss(predictor, pianorolls, crop_piece_len,
     # no point in doing multiple passes
     assert kwargs["num_crops"] == 1
 
-  def varwise_losses(xs):
+  def varwise_losses(xs, t_sofar):
     xs, lengths = pad(xs)
 
     B, T, P, I = xs.shape
     print 'padded shape:', xs.shape
     mask = np.ones([B, T, P, I], dtype=np.float32)
+    assert chronological or t_sofar == 0
+    if chronological:
+      # If starting evaluation mid-way, then should not mask out the before parts.
+      mask[:, :t_sofar, :, :] = 0
 
     assert separate_instruments or I == 1
     D = I if separate_instruments else P
 
-    # working copy to fill in model's own predictions of chord notes
-    xs_scratch = np.copy(xs)
-  
     ts, ds = chordwise_ordering(B, T, D, chronological=chronological)
-    for j, (t, d) in enumerate(zip(ts, ds)):
+    flattened_idx = t_sofar * D
+    for j, (t, d) in enumerate(zip(ts[flattened_idx:], ds[flattened_idx:])):
       # NOTE: t, d are vectors of shape [B]
 
-      # replace model predictions with ground truth when starting a fresh timestep
+      # working copy to fill in model's own predictions of chord notes.
+      # replace model predictions with ground truth when starting a fresh timestep.
       if j % D == 0:
         xs_scratch = np.copy(xs)
 
+      # Checks for debugging.
+      if chronological:
+        if D == I:
+          assert len(np.unique(t)) == 1 
+          unmasked_count = B * P * (t[0] * I + j % D)  
+        else:
+          unmasked_count = B * (t[0] * P + j % D)
+        assert np.product(mask.shape) - np.sum(mask) == unmasked_count
       # crop_piece_len is taken the indicate the maximum input length the model can deal with (in
       # terms of gpu memory).  if we cannot feed in the entire input, feed in a temporal crop
       # centered on the current timestep.
@@ -233,12 +279,12 @@ def compute_chordwise_loss(predictor, pianorolls, crop_piece_len,
       # in both cases, loss is a vector over batch examples
       if separate_instruments:
         # batched loss at time/instrument pair, summed over pitches
-        loss = -np.where(xs_scratch[np.arange(B), t, :, d],
+        loss = -np.where(xs[np.arange(B), t, :, d],
                          np.log(p[np.arange(B), t - t0, :, d]),
                          0).sum(axis=1)
       else:
         # batched loss at time/pitch pair, single instrument
-        loss = -np.where(xs_scratch[np.arange(B), t, d, 0], 
+        loss = -np.where(xs[np.arange(B), t, d, 0], 
                          np.log(p[np.arange(B), t - t0, d, 0]), 
                          np.log(1-p[np.arange(B), t - t0, d, 0]))
 
@@ -248,10 +294,17 @@ def compute_chordwise_loss(predictor, pianorolls, crop_piece_len,
   
       # don't judge predictions of padded elements
       loss = np.where(t < lengths, loss, 0)
-  
-      yield loss
+      # reweight to account for number of valid losses
+      loss *= 1 / (t < lengths).mean()
+
+      if (j+1) % D == 0 and chronological:
+        assert len(np.unique(t)) == 1
+        yield loss, t[0] 
+      else:
+        yield loss, None
     assert np.allclose(mask, 0)
   return evaluation_loop(varwise_losses, pianorolls, **kwargs)
+
 
 def compute_notewise_loss(predictor, pianorolls, crop_piece_len,
                           imagewise=False, separate_instruments=True,
@@ -314,27 +367,24 @@ def main(argv):
     pianorolls = data_tools.get_data_as_pianorolls(FLAGS.input_dir, hparams, FLAGS.fold)
     if isinstance(pianorolls, np.ndarray):
       print pianorolls.shape
+    print '# of total pieces in evaluation set:', len(pianorolls)
+    lengths = [len(roll) for roll in pianorolls]
+    print 'lengths', lengths
+    
+    #print 'WARNING: testing so only using 4 examples'
+    #pianorolls = pianorolls[:4]
+    #lengths = [len(roll) for roll in pianorolls]
+    #print 'lengths', lengths
+
+    # Wrapping pieces that are outliers in length
+    pianorolls = wrap(pianorolls)
+    lengths = [len(roll) for roll in pianorolls]
+    print 'lengths', lengths
+   
+    # Batch size after wrapping. 
     B = len(pianorolls)
-
-    print np.unique(sorted(pianoroll.shape[0] for pianoroll in pianorolls))
-
-    # Get folder for previous runs for this config.
-    dir_name = '%s-%s-num_rolls=%r-num_crops=%r-crop_len=%r-eval_bs=%r' % (
-        FLAGS.fold, FLAGS.kind, B, FLAGS.num_crops, 
-        FLAGS.crop_piece_len, FLAGS.evaluation_batch_size)
-
-    # Check to see if there's previous evaluation losses.
-    eval_path = os.path.join(FLAGS.checkpoint_dir, dir_name)
-    eval_fpath = os.path.join(eval_path, 'evaluations.npz')
-    print eval_fpath
-    if not os.path.exists(eval_path):
-      os.mkdir(eval_path)
-    if os.path.exists(eval_fpath):
-      print 'Loading previous log ', eval_fpath
-      eval_data = np.load(eval_fpath)
-    else:
-      eval_data = None
-      print 'No previous log.'
+    print '# of current pieces used:', len(pianorolls)
+    print 'unique lengths', np.unique(sorted(pianoroll.shape[0] for pianoroll in pianorolls))
 
     print FLAGS.crop_piece_len, hparams.crop_piece_len
     crop_piece_len = FLAGS.crop_piece_len if FLAGS.crop_piece_len is not None else hparams.crop_piece_len
@@ -346,6 +396,26 @@ def main(argv):
     if eval_batch_size != hparams.batch_size:
       print 'Using batch size %r for evaluation instead of %r' % (eval_batch_size, hparams.batch_size)
     print 'eval_batch_size', eval_batch_size
+
+    # Get folder for previous runs for this config.
+    dir_name = '%s-%s-num_rolls=%r-num_crops=%r-crop_len=%r-eval_bs=%r' % (
+        FLAGS.fold, FLAGS.kind, B, FLAGS.num_crops, 
+        crop_piece_len, eval_batch_size)
+    print 'dir_name:', dir_name
+
+    # Check to see if there's previous evaluation losses.
+    eval_path = os.path.join(FLAGS.checkpoint_dir, dir_name)
+    eval_fpath = os.path.join(eval_path, 'evaluations.npz')
+    print eval_fpath
+    if not os.path.exists(eval_path):
+      os.mkdir(eval_path)
+    if os.path.exists(eval_fpath):
+      print '\nLoading previous log \n'
+      print eval_fpath
+      eval_data = np.load(eval_fpath)
+    else:
+      eval_data = None
+      print '\nNo previous log.\n'
 
     # Evaluate!
     try:
