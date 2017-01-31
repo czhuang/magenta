@@ -40,7 +40,8 @@ def batches(xs, k):
   for a in range(0, len(xs), k):
     yield xs[a:a+k]
 
-def pad_with_zeros(xs):
+
+def pad(xs):
   shape = xs[0].shape[1:]
   # all should have equal shape in all but the first dimension
   assert all(x.shape[1:] == shape for x in xs)
@@ -51,7 +52,7 @@ def pad_with_zeros(xs):
   return ys, lengths
 
 
-def pad(xs):
+def pad_with_wrap(xs):
   lengths = np.array([len(x) for x in xs])
   max_len = np.max(lengths)
   pad_lengths = max_len - lengths
