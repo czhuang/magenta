@@ -166,18 +166,18 @@ class BasicAutofillCNNGraph(object):
             layer.betas = tf.get_variable(
                 'beta', [num_target_filters],
                 initializer=tf.constant_initializer(0.0))
-            layer.popmean = tf.Variable(
-                "popmean", shape=[num_target_filters], trainable=False,
-                collections=[tf.GraphKeys.MODEL_VARIABLES, tf.GraphKeys.GLOBAL_VARIABLES],
+            layer.popmean = tf.get_variable(
+                "popmean", shape=[1, 1, 1, num_target_filters], trainable=False,
+                collections=[tf.GraphKeys.MODEL_VARIABLES, tf.GraphKeys.VARIABLES],
                 initializer=tf.constant_initializer(0.0))
-            layer.popvariance = tf.Variable(
-                "popvariance", shape=[num_target_filters], trainable=False,
-                collections=[tf.GraphKeys.MODEL_VARIABLES, tf.GraphKeys.GLOBAL_VARIABLES],
+            layer.popvariance = tf.get_variable(
+                "popvariance", shape=[1, 1, 1, num_target_filters], trainable=False,
+                collections=[tf.GraphKeys.MODEL_VARIABLES, tf.GraphKeys.VARIABLES],
                 initializer=tf.constant_initializer(1.0))
             decay = 0.01
             if self.is_training:
               mean, variance = tf.nn.moments(conv, [0, 1, 2], keep_dims=True)
-              updates = [layer.popmean.assign_sub(decay * (layer.popmean - mean))
+              updates = [layer.popmean.assign_sub(decay * (layer.popmean - mean)),
                          layer.popvariance.assign_sub(decay * (layer.popvariance - variance))]
               # make update happen when mean/variance are used
               with tf.control_dependencies(updates):
