@@ -194,11 +194,11 @@ def run_epoch(supervisor,
   run_stats['loss_total_%s' % experiment_type] = losses_total.mean
   run_stats['loss_%s' % experiment_type] = losses.mean
 
-  run_stats['perplexity_mask_%s' % experiment_type] = np.exp(losses_mask.mean)
-  run_stats['perplexity_unmask_%s' % experiment_type] = (
-      np.exp(losses_unmask.mean))
-  run_stats['perplexity_total_%s' % experiment_type] = np.exp(losses_total.mean)
-  run_stats['perplexity_%s' % experiment_type] = np.exp(losses.mean)
+  #run_stats['perplexity_mask_%s' % experiment_type] = np.exp(losses_mask.mean)
+  #run_stats['perplexity_unmask_%s' % experiment_type] = (
+  #    np.exp(losses_unmask.mean))
+  #run_stats['perplexity_total_%s' % experiment_type] = np.exp(losses_total.mean)
+  #run_stats['perplexity_%s' % experiment_type] = np.exp(losses.mean)
   run_stats['learning_rate'] = float(learning_rate)
 
   # Make summaries.
@@ -227,29 +227,23 @@ def run_epoch(supervisor,
     print 'Storing best model so far with loss %.4f at %s.' % (
         best_validation_loss, save_path)
 
-  tf.logging.info('%s, epoch %d: perplexity, loss (mask): %.4f, %.4f, ' %
+  tf.logging.info('%s, epoch %d: loss (mask): %.4f, ' %
                   (experiment_type, epoch_count,
-                   run_stats['perplexity_mask_%s' % experiment_type],
                    run_stats['loss_mask_%s' % experiment_type]))
-  tf.logging.info('perplexity, loss (unmask): %.4f, %.4f, ' %
-                  (run_stats['perplexity_unmask_%s' % experiment_type],
-                   run_stats['loss_unmask_%s' % experiment_type]))
-  tf.logging.info('perplexity, loss (total): %.4f, %.4f, ' %
-                  (run_stats['perplexity_total_%s' % experiment_type],
-                   run_stats['loss_total_%s' % experiment_type]))
+  tf.logging.info('loss (unmask): %.4f, ' %
+                  (run_stats['loss_unmask_%s' % experiment_type]))
+  tf.logging.info('loss (total): %.4f, ' %
+                  (run_stats['loss_total_%s' % experiment_type]))
   tf.logging.info('log lr: %.4f' % np.log2(run_stats['learning_rate']))
   tf.logging.info('time taken: %.4f' % (time.time() - start_time))
 
   # TODO(annahuang): Remove printouts.
-  print '%s, epoch %d: real loss %.4f perplexity, loss (mask): %.4f, %.4f, ' % (
+  print '%s, epoch %d: real loss: %.4f, loss (mask): %.4f, ' % (
       experiment_type, epoch_count, run_stats['loss_%s' % experiment_type],
-      run_stats['perplexity_mask_%s' % experiment_type],
       run_stats['loss_mask_%s' % experiment_type]),
-  print 'perplexity, loss (unmask): %.4f, %.4f, ' % (
-      run_stats['perplexity_unmask_%s' % experiment_type],
+  print 'loss (unmask): %.4f, ' % (
       run_stats['loss_unmask_%s' % experiment_type]),
-  print 'perplexity, loss (total): %.4f, %.4f, ' % (
-      run_stats['perplexity_total_%s' % experiment_type],
+  print 'loss (total): %.4f, ' % (
       run_stats['loss_total_%s' % experiment_type]),
   print 'log lr: %.4f' % np.log2(run_stats['learning_rate']),
   print 'time taken: %.4f' % (time.time() - start_time)
@@ -369,7 +363,7 @@ def main(unused_argv):
             if time_since_improvement > FLAGS.patience:
               sess.run(m.decay_op)
               time_since_improvement = 0
-            if true_time_since_improvement > 5 * FLAGS.patience:
+            if true_time_since_improvement > 2 * FLAGS.patience:
               break
         epoch_count += 1
 
