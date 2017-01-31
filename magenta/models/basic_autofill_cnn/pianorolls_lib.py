@@ -246,7 +246,8 @@ class PianorollEncoderDecoder(object):
       num_notes = np.sum(len(chord) for chord in sequence)
     else:
       num_notes = len(sequence) * self.num_instruments
-    assert num_notes == np.sum(roll), '%d != %d' % (num_notes, np.sum(roll))
+    if num_notes != np.sum(roll):
+      print 'WARNING: There are some siliences. (%d != %d), %d silences.' % (num_notes, np.sum(roll), num_notes-np.sum(roll))
     if self.encode_silences and not return_with_additional_encodings:
       return roll[:, :-1, :]
     else:
