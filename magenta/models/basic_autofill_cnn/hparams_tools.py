@@ -64,6 +64,7 @@ class Hyperparameters(object):
       run_dir=None,
       log_process=True,
       save_model_secs=30,
+      save_pop_stats=False,
       # Prediction threshold.
       prediction_threshold=0.5)
 
@@ -82,9 +83,7 @@ class Hyperparameters(object):
       **init_hparams: Keyword arguments for setting hyperparameters.
 
     """
-    print 'checking init_hparams model_name'
-    print init_hparams.keys()
-    print init_hparams['model_name']
+    print 'Instantiating hparams:'
     unknown_params = set(init_hparams) - set(Hyperparameters._defaults)
     if unknown_params:
       raise ValueError('Unknown hyperparameters: %s', unknown_params)
@@ -95,7 +94,7 @@ class Hyperparameters(object):
         value = init_hparams[key]
       setattr(self, key, value)
   
-    print 'model_name', self.model_name
+    print self.__str__()
 
     # Log directory name for Tensorflow supervisor.
     #self.run_id = get_current_time_as_str()
@@ -199,7 +198,8 @@ class Hyperparameters(object):
     key_to_shorthand = {
         'batch_size': 'bs', 'learning_rate': 'lr', 'optimize_mask_only': 'mask_only',
         'corrupt_ratio': 'corrupt', 'input_depth': 'in', 'crop_piece_len': 'len',
-        'use_softmax_loss': 'soft', 'num_instruments': 'num_i', 'num_pitches': 'n_pch'}
+        'use_softmax_loss': 'soft', 'num_instruments': 'num_i', 'num_pitches': 'n_pch',
+        'save_pop_stats': 'pop'}
 
     def _repr(key):
       return key if key not in key_to_shorthand else key_to_shorthand[key]
@@ -218,7 +218,6 @@ class Hyperparameters(object):
     #line += (','.join('%s=%s' % (key if key not in key_to_shorthand else key_to_shorthand[key], getattr(self, key)) for key in sorted_keys
     #                 if key in keys_to_include_last))
     return line
-
 
   def get_conv_arch(self):
     """Returns the model architecture."""
