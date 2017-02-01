@@ -110,7 +110,7 @@ def notewise_ordering(B, T, D):
   orders = np.ones([B, 1], dtype=np.int32) * np.arange(T * D, dtype=np.int32)
   for i in range(B):
     np.random.shuffle(orders[i]) # yuck
-  ts, ds = np.unravel_indices(orders.T, dims=(T, D))
+  ts, ds = np.unravel_index(orders.T, dims=(T, D))
   return ts, ds
 
 
@@ -218,7 +218,8 @@ def evaluation_loop(evaluator, pianorolls, num_crops=5, batch_size=None, eval_da
 
 
 def compute_chordwise_loss(predictor, pianorolls, crop_piece_len, 
-                           chronological=False, chronological_margin=0, separate_instruments=True, **kwargs):
+                           chronological=False, chronological_margin=0, 
+                           separate_instruments=True, **kwargs):
   print 'separate_instruments', separate_instruments
 
   if chronological:
@@ -227,10 +228,10 @@ def compute_chordwise_loss(predictor, pianorolls, crop_piece_len,
 
   def varwise_losses(xs, t_sofar):
     xs, lengths = pad(xs)
-
-    B, T, P, I = xs.shape
     print 'padded shape:', xs.shape
+    B, T, P, I = xs.shape
     mask = np.ones([B, T, P, I], dtype=np.float32)
+    
     assert chronological or t_sofar == 0
     if chronological:
       # If starting evaluation mid-way, then should not mask out the before parts.
@@ -316,15 +317,17 @@ def compute_chordwise_loss(predictor, pianorolls, crop_piece_len,
   return evaluation_loop(varwise_losses, pianorolls, **kwargs)
 
 
-def compute_notewise_loss(predictor, pianorolls, crop_piece_len,
-                          imagewise=False, separate_instruments=True,
-                          eval_batch_size=1000, eval_fpath=None, **kwargs):
-  def varwise_losses(xs):
-    xs = np.array([data_tools.random_crop_pianoroll(x, crop_piece_len)
-                   for x in xs], dtype=np.float32)
-
+def compute_notewise_loss(predictor, pianorolls, crop_piece_len, 
+                           chronological=False, chronological_margin=0, 
+                           separate_instruments=True, imagewise=False, **kwargs):
+  #FIXME: not yet supporting chronological.
+  assert not chronological, 'Not yet supporting chronological'
+  def varwise_losses(xs, t_sofar):
+    xs, lengths = pad(xs)
+    print 'padded shape:', xs.shape
     B, T, P, I = xs.shape
     mask = np.ones([B, T, P, I], dtype=np.float32)
+    
     assert separate_instruments or I == 1
     D = I if separate_instruments else P
 
@@ -342,9 +345,9 @@ def compute_notewise_loss(predictor, pianorolls, crop_piece_len,
         mask[np.arange(B), t, d, 0] = 0
 
       if imagewise:
-        pixel_count = crop_piece_len * hparams.input_shape[1]
+        pixel_count = T * P
         #FIXME: other image datasets will have diff dimensions
-        assert 28*28 == pixel_count
+        assert 28*28 == pixel_count 
         loss *= pixel_count
 
       assert np.unique(mask.sum(axis=(1, 2, 3))).size == 1
