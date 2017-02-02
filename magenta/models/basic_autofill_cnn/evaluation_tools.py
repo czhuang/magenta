@@ -33,6 +33,7 @@ def store(losses, position, path):
 def report(losses, final=False):
   loss_mean = np.mean(losses)
   loss_sem = sem(losses)
+  print "%.5f < %.5f < %.5f < %.5f < %.5g" % (np.min(losses), np.percentile(losses, 25), np.percentile(losses, 50), np.percentile(losses, 75), np.max(losses))
   print "%s%.5f+-%.5f " % ("FINAL " if final else "", loss_mean, loss_sem)
   
 def batches(xs, k):
@@ -177,8 +178,7 @@ def compute_greedy_notewise_loss(wrapped_model, pianorolls, sign):
 
 
 def evaluation_loop(evaluator, pianorolls, num_crops=5, batch_size=None, eval_data=None, eval_fpath=None, **kwargs):
-  if batch_size is None:
-    batch_size = len(pianorolls)
+  assert batch_size is not None
 
   assert eval_fpath is not None 
   if eval_data is not None:
@@ -351,7 +351,7 @@ def compute_notewise_loss(predictor, pianorolls, crop_piece_len,
         loss *= pixel_count
 
       assert np.unique(mask.sum(axis=(1, 2, 3))).size == 1
-      yield loss
+      yield loss, None
 
   return evaluation_loop(varwise_losses, pianorolls, **kwargs)
 
@@ -382,7 +382,6 @@ def main(argv):
       print pianorolls.shape
     print '# of total pieces in evaluation set:', len(pianorolls)
     lengths = [len(roll) for roll in pianorolls]
-    print 'lengths', lengths
     
     #print 'WARNING: testing so only using 4 examples'
     #pianorolls = pianorolls[:2]
@@ -392,7 +391,6 @@ def main(argv):
     # Breaking up long pieces (that are outliers in length).
     pianorolls = breakup_long_pieces(pianorolls)
     lengths = [len(roll) for roll in pianorolls]
-    print 'lengths', lengths
    
     # Batch size after wrapping. 
     B = len(pianorolls)
@@ -441,7 +439,7 @@ def main(argv):
 
       fn(predictor, pianorolls, crop_piece_len, num_crops=FLAGS.num_crops, eval_data=eval_data,
          separate_instruments=hparams.separate_instruments,
-         eval_batch_size=eval_batch_size, eval_fpath=eval_fpath,
+         batch_size=eval_batch_size, eval_fpath=eval_fpath,
          chronological=FLAGS.chronological, chronological_margin=FLAGS.chronological_margin)
     except InfiniteLoss:
       print "infinite loss"
