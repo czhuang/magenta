@@ -29,6 +29,7 @@ class Hyperparameters(object):
       batch_size=20,
       num_pitches=53,  #53 + 11
       crop_piece_len=64, #128, #64, #32,
+      pad=False,
       num_instruments=4,
       separate_instruments=False,
       encode_silences=False,

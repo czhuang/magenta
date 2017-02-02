@@ -52,6 +52,7 @@ tf.app.flags.DEFINE_bool('separate_instruments', True,
                          'Separate instruments into different input feature'
                          'maps or not.')
 tf.app.flags.DEFINE_integer('crop_piece_len', 64, 'The number of time steps included in a crop')
+tf.app.flags.DEFINE_bool('pad', False, 'Pad shorter sequences with zero.')
 tf.app.flags.DEFINE_integer('encode_silences', False, 'Encode silence as the lowest pitch.')
 
 # Model architecture.
@@ -140,11 +141,12 @@ def run_epoch(supervisor,
               best_validation_loss=None,
               best_model_saver=None):
   """Runs an epoch of training or evaluate the model on given data."""
-  input_data, targets = data_tools.make_data_feature_maps(raw_data, hparams,
-                                                          encoder)
+  input_data, targets, lengths = data_tools.make_data_feature_maps(
+      raw_data, hparams, encoder)
   permutation = np.random.permutation(len(input_data))
   input_data = input_data[permutation]
   targets = targets[permutation]
+  lengths = lengths[permutation]
 
   # TODO(annahuang): Leaves out last incomplete minibatch, needs wrap around.
   batch_size = m.batch_size
@@ -162,28 +164,30 @@ def run_epoch(supervisor,
     end_idx = start_idx + batch_size
     x = input_data[start_idx:end_idx, :, :, :]
     y = targets[start_idx:end_idx, :, :]
+    lens = lengths[start_idx:end_idx]
 
     # Evaluate the graph and run back propagation.
     results = sess.run([m.predictions, m.loss, m.loss_total, m.loss_mask,
-                        m.mask_size, m.mask, m.loss_unmask, m.unmask_size,
+                        m.reduced_mask_size, m.mask, m.loss_unmask, m.reduced_unmask_size,
                         m.learning_rate, m._lossmask,
                         eval_op], {m.input_data: x,
-                                   m.targets: y})
+                                   m.targets: y,
+                                   m.lengths: lens})
 
-    (predictions, loss, loss_total, loss_mask, mask_size, mask, loss_unmask,
-     unmask_size, learning_rate, lossmask, _) = results
+    (predictions, loss, loss_total, loss_mask, reduced_mask_size, mask, loss_unmask,
+     reduced_unmask_size, learning_rate, lossmask, _) = results
     #print 'predictions', np.sum(predictions) / np.product(predictions.shape)
-    #print 'mask_sizes', mask_size, unmask_size, '%.4f, %.4f, %.4f' % (loss, loss_total, loss_mask)
+    #print 'reduced_mask_sizes', reduced_mask_size, reduced_unmask_size, '%.4f, %.4f, %.4f' % (loss, loss_total, loss_mask)
  
     # Aggregate performances.
     losses_total.add(loss_total, 1)
-    # Multiply the mean loss_mask by mask_size for aggregation as the mask size
+    # Multiply the mean loss_mask by reduced_mask_size for aggregation as the mask size
     # could be different for every batch.
-    losses_mask.add(loss_mask * mask_size, mask_size)
-    losses_unmask.add(loss_unmask * unmask_size, unmask_size)
+    losses_mask.add(loss_mask * reduced_mask_size, reduced_mask_size)
+    losses_unmask.add(loss_unmask * reduced_unmask_size, reduced_unmask_size)
 
     if hparams.optimize_mask_only:
-      losses.add(loss * mask_size, mask_size)
+      losses.add(loss * reduced_mask_size, reduced_mask_size)
     else:
       losses.add(loss, 1)
 
@@ -265,6 +269,7 @@ def main(unused_argv):
       num_instruments=FLAGS.num_instruments,
       separate_instruments=FLAGS.separate_instruments,
       crop_piece_len=FLAGS.crop_piece_len,
+      pad=FLAGS.pad,
       model_name=FLAGS.model_name,
       num_layers=FLAGS.num_layers,
       num_filters=FLAGS.num_filters,
@@ -303,7 +308,7 @@ def main(unused_argv):
     # Builds input and target placeholders, initializer, and training graph.
     graph_objects = build_placeholders_initializers_graph(
         is_training=True, hparams=hparams)
-    input_data, targets, initializer, m = graph_objects
+    input_data, targets, lengths, initializer, m = graph_objects
 
     # Build validation graph, reusing the model parameters from training graph.
     with tf.variable_scope('model', reuse=True, initializer=initializer):
@@ -311,7 +316,8 @@ def main(unused_argv):
           is_training=False,
           hparams=hparams,
           input_data=input_data,
-          targets=targets)
+          targets=targets,
+          lengths=lengths)
 
     # Instantiate a supervisor and use it to start a managed session.
     saver = 0  # Use default saver from supervisor.
