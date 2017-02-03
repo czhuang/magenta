@@ -150,13 +150,16 @@ class Hyperparameters(object):
   @property
   def input_shape(self):
     """Returns the shape of input data."""
-    return [self.crop_piece_len, self.num_pitches, self.input_depth]
+    if self.encode_silences:
+      return [self.crop_piece_len, self.num_pitches+1, self.input_depth]
+    else:
+      return [self.crop_piece_len, self.num_pitches, self.input_depth]
 
   @property
   def output_shape(self):
-    """Returns the shape of input data."""
+    """Returns the shape of output data."""
     if self.encode_silences:
-      return [self.crop_piece_len, self.num_pitches+1, self.input_depth]
+      return [self.crop_piece_len, self.num_pitches+1, self.output_depth]
     else:
       return [self.crop_piece_len, self.num_pitches, self.output_depth]
   
@@ -193,7 +196,7 @@ class Hyperparameters(object):
         'augment_by_halfing_doubling_durations', 'augment_by_transposing',
         'mask_indicates_context', 'denoise_mode', 
         'run_dir', 'num_epochs', 'log_process', 'save_model_secs', '_num_pitches',
-        'batch_size', 'crop_piece_len', 'input_depth', 'num_instruments', 'num_pitches',
+        'batch_size', 'input_depth', 'num_instruments', 'num_pitches',
     ]
     keys_to_include_last = ['maskout_method', 'corrupt_ratio']
     key_to_shorthand = {

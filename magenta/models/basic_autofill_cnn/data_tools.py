@@ -238,8 +238,7 @@ DATASET_PARAMS = {
         'pitch_ranges': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 12,
         'batch_size': 12},
     'JSB_Chorales': {
-        'pitch_ranges': [43, 96], 'shortest_duration': 0.5, 'num_instruments': 4,
-        'crop_piece_len': 64},
+        'pitch_ranges': [43, 96], 'shortest_duration': 0.5, 'num_instruments': 4},
     '4part_Bach_chorales': {
         'pitch_ranges': [36, 88], 'shortest_duration': 0.125, 
         'relative_path': 'bach/qbm120/instrs=4_duration=0.125_sep=True'},
