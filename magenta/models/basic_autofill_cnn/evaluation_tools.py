@@ -1,4 +1,5 @@
 """Evaluations for comparing against prior work."""
+from collections import defaultdict
 import os, sys, traceback
 import time
 import numpy as np
@@ -19,6 +20,11 @@ tf.app.flags.DEFINE_integer('evaluation_batch_size', 20, 'Batch size for evaluat
 #tf.app.flags.DEFINE_integer('crop_piece_len', None, 'length of random crops (short pieces are padded in case of chordwise)')
 tf.app.flags.DEFINE_bool('chronological', False, 'indicates chordwise evaluation should proceed in chronological order')
 tf.app.flags.DEFINE_integer('chronological_margin', 0, 'right-hand margin for chronological evaluation to avoid convnet edge effects')
+# TODO: haven't implemented "pitch" chronological for images.
+tf.app.flags.DEFINE_bool('pitch_chronological', False, 'indicates chordwise evaluation should proceed in chronological order')
+
+
+TEST = False
 
 class InfiniteLoss(Exception):
   pass
@@ -30,40 +36,44 @@ def store(losses, position, path):
   print 'Storing losses to', path
   np.savez_compressed(path, losses=losses, current_position=position)
 
-def report(losses, final=False):
+def report(losses, final=False, tag=''):
   loss_mean = np.mean(losses)
   loss_sem = sem(losses)
   print "%.5f < %.5f < %.5f < %.5f < %.5g" % (np.min(losses), np.percentile(losses, 25), np.percentile(losses, 50), np.percentile(losses, 75), np.max(losses))
-  print "%s%.5f+-%.5f " % ("FINAL " if final else "", loss_mean, loss_sem)
-  
+  print "\n\t\t\t\t\t\t\t\t\t\t\t\t%s%.5f+-%.5f \n" % (tag+" FINAL " if final else "", loss_mean, loss_sem)
+  return loss_mean, loss_sem
+ 
+ 
 def batches(xs, k):
   assert len(xs) % k == 0
   for a in range(0, len(xs), k):
     yield xs[a:a+k]
 
 
-def pad(xs):
-  shape = xs[0].shape[1:]
-  # all should have equal shape in all but the first dimension
-  assert all(x.shape[1:] == shape for x in xs)
+def pad(xs, chronological, crop_piece_len):
+  # TODO: crop_piece_len is ambiguous.  
+  # For chronological evaluation, it refers to the size of the convnet.  
+  # In other cases, it also refers to the crop len for pianorolls to be evaluated.  
+  # For chronological, we always evaluate the whole piece.
+  # TODO: remove TEST after testing.
   lengths = np.array(list(map(len, xs)), dtype=int)
-  ys = np.zeros([len(xs), max(lengths)] + list(shape), dtype=np.float32)
-  for i, x in enumerate(xs):
-    ys[i, :lengths[i]] = x
-  return ys, lengths
-
-
-def pad_with_wrap(xs):
-  lengths = np.array([len(x) for x in xs])
-  max_len = np.max(lengths)
-  pad_lengths = max_len - lengths
-  ys = [np.pad(roll, [(0, pad_lengths[i])] + [(0, 0)] * (xs[0].ndim - 1), mode="wrap") for i, roll in enumerate(xs)]
-  return np.asarray(ys), lengths
+  padded_xs = []
+  lengths = []
+  for x in xs:
+    x, len_ = data_tools.random_crop_pianoroll_pad(
+      x, crop_piece_len)
+    padded_xs.append(x)
+    lengths.append(len_)
+  return np.array(padded_xs), np.array(lengths)
 
 
 def breakup_long_pieces(xs):
   num_pieces = len(xs)
   lens = [len(x) for x in xs]
+  max_len = max(lens)
+  if max_len < 200:
+    return xs, max_len
+
   sorted_lens = np.sort(lens)
   max_allowed_len = sorted_lens[-2]
   wrap_inds = [i for i, l in enumerate(lens) if l > max_allowed_len]
@@ -87,10 +97,10 @@ def breakup_long_pieces(xs):
       xs.append(temp_x[w*max_allowed_len:(w+1)*max_allowed_len])
       added_wraps += 1
   assert len(xs) == num_pieces + added_wraps
-  return xs
+  return xs, max_allowed_lens
 
 
-def chordwise_ordering(B, T, D, chronological=False):
+def chordwise_ordering(B, T, D, chronological=False, pitch_chronological=False):
   # each example has its own ordering
   orders = np.ones([B, 1], dtype=np.int32) * np.arange(T, dtype=np.int32)[None, :]
   if not chronological:
@@ -99,9 +109,11 @@ def chordwise_ordering(B, T, D, chronological=False):
       np.random.shuffle(orders[i])
   # random variable orderings within each time step
   orders = orders[:, :, None] * D + np.arange(D, dtype=np.int32)[None, None, :]
-  for i in range(B):
-    for t in range(T):
-      np.random.shuffle(orders[i, t])
+  # TODO: Not sure if going from bottom pitch to top is the best yet.
+  if not pitch_chronological:
+    for i in range(B):
+      for t in range(T):
+        np.random.shuffle(orders[i, t])
   orders = orders.reshape([B, T * D])
   ts, ds = np.unravel_index(orders.T, dims=(T, D))
   return ts, ds
@@ -177,10 +189,12 @@ def compute_greedy_notewise_loss(wrapped_model, pianorolls, sign):
   return losses
 
 
-def evaluation_loop(evaluator, pianorolls, num_crops=5, batch_size=None, eval_data=None, eval_fpath=None, **kwargs):
+def evaluation_loop(evaluator, pianorolls, num_crops=5, batch_size=None, eval_data=None, eval_fpath=None, chronological=None, crop_piece_len=None, **kwargs):
   assert batch_size is not None
-
+  assert chronological is not None
+  assert crop_piece_len is not None
   assert eval_fpath is not None 
+
   if eval_data is not None:
     losses = list(eval_data["losses"])
     crop_sofar, batch_sofar, t_sofar = eval_data["current_position"]
@@ -189,49 +203,83 @@ def evaluation_loop(evaluator, pianorolls, num_crops=5, batch_size=None, eval_da
     crop_sofar, batch_sofar, t_sofar = 0, 0, 0
   print 'position from last time', crop_sofar, batch_sofar, t_sofar
 
+  intermediates = defaultdict(list)
+
   for ci in range(num_crops)[crop_sofar:]:
     print 'crop idx', ci
-
+    frame_losses = []
     for bi, xs in list(enumerate(batches(pianorolls, batch_size)))[batch_sofar:]:
       print 'batch idx, started at this batch', bi, batch_sofar
       start_time = time.time()
-      for i, (loss, ts) in enumerate(evaluator(xs, t_sofar)):
-        #FIXME: perhaps evaluator return signal to say end of a time frame so that don't need to pass in D, and chronological etc.
+      frame_loss = []
+      for i, (loss, inds) in enumerate(evaluator(xs, t_sofar, intermediates)):
         if np.isinf(loss).any():
           # report losses before inf just for information
           report(losses)
           raise InfiniteLoss()
         losses.append(loss)
-        if ts is not None:
-          print "%i, %i, %i(%d): %.5f < %.5f < %.5f < %.5f < %.5g, time taken: %.2f, \tmean: %.5f" % (ci, bi, i, ts, np.min(loss), np.percentile(loss, 25), np.percentile(loss, 50), np.percentile(loss, 75), np.max(loss), time.time()-start_time, np.mean(losses))
-          start_time = time.time()
-          if ts != 0 and ts % 100 == 0:
-            store(losses=losses, position=[ci, bi, ts+1], path=eval_fpath)
+        frame_loss.append(loss)
+        ts, ds, end_of_frame = inds
+        t_print = ts[0] if len(np.unique(ts)) == 1 else -1
+        d_print = ds[0] if len(np.unique(ds)) == 1 else -1
+        if chronological:
+          print "%i, %i, %i(%d): " % (ci, bi, t_print, d_print),
         else:
-          print '.',
+          print "%i, %i, %i: " % (ci, bi, i),
+
+        print "%.5f < %.5f < %.5f < %.5f < %.5g, \tstep mean: %.5f" % (
+            np.min(loss), np.percentile(loss, 25), np.percentile(loss, 50), 
+            np.percentile(loss, 75), np.max(loss), np.mean(loss))
+        if end_of_frame:
+          print 'time per frame: %.2f' % (time.time() - start_time)
+          print 'Frame loss:'
+          frame_mean, frame_sem = report(frame_loss)
+          print 'Total loss:'
+          report(losses)
+          
+          frame_losses.append([t_print, frame_mean, frame_sem])
+          frame_loss = []
+	  start_time = time.time()
+          if chronological and t_print != 0 and t_print % 100 == 0:
+            store(losses=losses, position=[ci, bi, t+1], path=eval_fpath)
+        #else:
+        #  print '.',
       report(losses)
       store(losses=losses, position=[ci, bi+1, 0], path=eval_fpath)
     # After running possbily less # of batches b/c continuing from last logged point, reset to 0.
     batch_sofar = 0
-  report(losses, final=True)
+
+  # Report how loss progresses over timestep
+  print 'chronological', chronological
+  for t, mean, sem in frame_losses:
+    print '%d: %.5f+-%.5f' % (t, mean, sem)
+
+  report(losses, final=True, tag=eval_fpath)
+
+  # Store intermediates
+  fpath = os.path.join(os.path.dirname(eval_fpath), 'intermediates' + ".npz")
+  print "Writing to", fpath  
+  np.savez_compressed(fpath, **intermediates)
+
   return losses
 
 
 def compute_chordwise_loss(predictor, pianorolls, crop_piece_len, 
                            chronological=False, chronological_margin=0, 
+                           pitch_chronological=False,
                            separate_instruments=True, **kwargs):
   print 'separate_instruments', separate_instruments
 
-  if chronological:
-    # no point in doing multiple passes
-    assert kwargs["num_crops"] == 1
-
-  def varwise_losses(xs, t_sofar):
-    xs, lengths = pad(xs)
+  def varwise_losses(xs, t_sofar, intermediates):
+    print 'before pad # of pieces:', len(xs) 
+    xs, lengths = pad(xs, chronological, crop_piece_len)
     print 'padded shape:', xs.shape
     B, T, P, I = xs.shape
     mask = np.ones([B, T, P, I], dtype=np.float32)
     
+    #TODO: assuming one crop.
+    intermediates['xs'].append(xs) 
+
     assert chronological or t_sofar == 0
     if chronological:
       # If starting evaluation mid-way, then should not mask out the before parts.
@@ -240,15 +288,20 @@ def compute_chordwise_loss(predictor, pianorolls, crop_piece_len,
     assert separate_instruments or I == 1
     D = I if separate_instruments else P
 
-    ts, ds = chordwise_ordering(B, T, D, chronological=chronological)
+    ts, ds = chordwise_ordering(
+        B, T, D, chronological=chronological, pitch_chronological=pitch_chronological)
     flattened_idx = t_sofar * D
     for j, (t, d) in enumerate(zip(ts[flattened_idx:], ds[flattened_idx:])):
-      # NOTE: t, d are vectors of shape [B]
+      assert t.shape == (B,)
+      assert d.shape == (B,)
 
       # working copy to fill in model's own predictions of chord notes.
       # replace model predictions with ground truth when starting a fresh timestep.
       if j % D == 0:
         xs_scratch = np.copy(xs)
+        ground_truth_mask = np.copy(mask)
+      # To make sure indices line up, save the same for all D. 
+      intermediates["context"].append(xs_scratch * (1 - ground_truth_mask))  
 
       # Checks for debugging.
       if chronological:
@@ -266,10 +319,9 @@ def compute_chordwise_loss(predictor, pianorolls, crop_piece_len,
       if chronological:
         t0 = t - crop_piece_len + chronological_margin + 1
       else:
-        t0 = t - crop_piece_len / 2.,
+        t0 = t - crop_piece_len / 2.
       # restrict to valid indices
       t0 = np.round(np.clip(t0, 0, T - crop_piece_len)).astype(np.int32)
-
       slice_ = np.arange(B)[:, None], t0[:, None] + np.arange(crop_piece_len)[None, :]
       cropped_xs_scratch = xs_scratch[slice_]
       cropped_mask = mask[slice_]
@@ -307,14 +359,21 @@ def compute_chordwise_loss(predictor, pianorolls, crop_piece_len,
       loss = np.where(t < lengths, loss, 0)
       # reweight to account for number of valid losses
       loss *= 1 / (t < lengths).mean()
+      
+      # Log intermediates.
+      intermediates["step"].append((t, d)) 
+      intermediates["loss"].append(loss) 
+      intermediates["predictions"].append(p)
+      intermediates["xs_scratch"].append(xs_scratch.copy())
+      intermediates["mask"].append(mask.copy())
 
-      if (j+1) % D == 0 and chronological:
-        assert len(np.unique(t)) == 1
-        yield loss, t[0] 
+      if (j+1) % D == 0:
+        end_of_frame = True
       else:
-        yield loss, None
+        end_of_frame = False
+      yield loss, (t, d, end_of_frame)
     assert np.allclose(mask, 0)
-  return evaluation_loop(varwise_losses, pianorolls, **kwargs)
+  return evaluation_loop(varwise_losses, pianorolls, chronological=chronological, crop_piece_len=crop_piece_len, **kwargs)
 
 
 def compute_notewise_loss(predictor, pianorolls, crop_piece_len, 
@@ -333,7 +392,9 @@ def compute_notewise_loss(predictor, pianorolls, crop_piece_len,
 
     ts, ds = notewise_ordering(B, T, D)
     for t, d in zip(ts, ds):
-      # NOTE: t, d are vectors of shape [B]
+      assert t.shape == (B,)
+      assert d.shape == (B,)
+
       preds = predictor(xs, mask)
       if separate_instruments:
         loss = -np.where(xs[np.arange(B), t, :, d], np.log(preds[np.arange(B), t, :, d]), 0).sum(axis=1)
@@ -382,36 +443,51 @@ def main(argv):
       print pianorolls.shape
     print '# of total pieces in evaluation set:', len(pianorolls)
     lengths = [len(roll) for roll in pianorolls]
-    
-    #print 'WARNING: testing so only using 4 examples'
-    #pianorolls = pianorolls[:2]
-    #lengths = [len(roll) for roll in pianorolls]
-    #print 'lengths', lengths
+    print 'lengths', lengths
+    print 'max_len', max(lengths)
+   
+    if TEST: 
+      N = 4
+      T = 5
+      pianorolls = pianorolls[:N]
+      pianorolls = [roll[:T] for roll in pianorolls]
+      print 'WARNING: testing so only using %d examples' % (len(pianorolls))
+      lengths = [len(roll) for roll in pianorolls]
 
     # Breaking up long pieces (that are outliers in length).
-    pianorolls = breakup_long_pieces(pianorolls)
-    lengths = [len(roll) for roll in pianorolls]
-   
-    # Batch size after wrapping. 
+    pianorolls, max_len = breakup_long_pieces(pianorolls)
+    # Batch size after breaking up long pieces. 
     B = len(pianorolls)
-    print '# of current pieces used:', len(pianorolls)
+    print '# of current pieces used',
+    print 'may be more than original count b/c of breaking up longer pieces:', len(pianorolls)
     print 'unique lengths', np.unique(sorted(pianoroll.shape[0] for pianoroll in pianorolls))
+    print 'shape', pianorolls[0].shape
+  
+    # Updates crop_piece_len to be the max broken-up piece length if 0.
+    # Else warn if training and evaluation lengths are different.
+    if FLAGS.crop_piece_len == 0:
+      # Want to evaluate whole piece.
+      crop_piece_len = max_len
+    else:
+      print FLAGS.crop_piece_len, hparams.crop_piece_len
+      if crop_piece_len != hparams.crop_piece_len:
+        print 'WARNING: crop_piece_len %r,  hparams.crop_piece_len %r, mismatch' % (crop_piece_len, hparams.crop_piece_len)
+    print 'updated crop_piece_len', crop_piece_len
+    if TEST:
+      assert crop_piece_len == 5 
 
-    print FLAGS.crop_piece_len, hparams.crop_piece_len
-    crop_piece_len = FLAGS.crop_piece_len if FLAGS.crop_piece_len is not None else hparams.crop_piece_len
-    if crop_piece_len != hparams.crop_piece_len:
-      print 'WARNING: crop_piece_len %r,  hparams.crop_piece_len %r, mismatch' % (crop_piece_len, hparams.crop_piece_len)
-    print 'crop_piece_len', crop_piece_len
-
+    # Updates eval_batch_size to be the number of pieces available unless FLAGS gives a smaller one.
     eval_batch_size = FLAGS.evaluation_batch_size if B > FLAGS.evaluation_batch_size else B
     if eval_batch_size != hparams.batch_size:
-      print 'Using batch size %r for evaluation instead of %r' % (eval_batch_size, hparams.batch_size)
+      print 'Using batch size %r for evaluation instead of %r' % (
+          eval_batch_size, hparams.batch_size)
     print 'eval_batch_size', eval_batch_size
 
     # Get folder for previous runs for this config.
-    dir_name = '%s-%s-num_rolls=%r-num_crops=%r-crop_len=%r-eval_bs=%r-chrono=%s-margin-%s' % (
+    dir_name = '%s-%s-num_rolls=%r-num_crops=%r-crop_len=%r-eval_bs=%r-chrono=%s-margin-%s-pitch_chrono=%s' % (
         FLAGS.fold, FLAGS.kind, B, FLAGS.num_crops, 
-        crop_piece_len, eval_batch_size, FLAGS.chronological, FLAGS.chronological_margin)
+        crop_piece_len, eval_batch_size, FLAGS.chronological, FLAGS.chronological_margin,
+        FLAGS.pitch_chronological)
     print 'dir_name:', dir_name
 
     # Check to see if there's previous evaluation losses.
@@ -437,10 +513,13 @@ def main(argv):
         p = sess.run(model.predictions, feed_dict={model.input_data: input_data})
         return p
 
-      fn(predictor, pianorolls, crop_piece_len, num_crops=FLAGS.num_crops, eval_data=eval_data,
+      fn(predictor, pianorolls, crop_piece_len, num_crops=FLAGS.num_crops, 
+         eval_data=eval_data,
          separate_instruments=hparams.separate_instruments,
          batch_size=eval_batch_size, eval_fpath=eval_fpath,
-         chronological=FLAGS.chronological, chronological_margin=FLAGS.chronological_margin)
+         chronological=FLAGS.chronological, 
+         chronological_margin=FLAGS.chronological_margin,
+         pitch_chronological=FLAGS.pitch_chronological)
     except InfiniteLoss:
       print "infinite loss"
     print "%s done" % hparams.model_name
