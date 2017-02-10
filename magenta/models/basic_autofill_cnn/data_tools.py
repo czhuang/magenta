@@ -296,7 +296,7 @@ def get_data_and_update_hparams(basepath, hparams, fold,
     separate_instruments = hparams.separate_instruments
     # TODO: Read dataset params from JSON file or the like.
     pitch_range = params['pitch_ranges']
-    if dataset_name == '4part_Bach_chorales':
+    if '4part_Bach_chorales' in dataset_name:
       fpath = os.path.join(basepath, params['relative_path'], '%s.tfrecord' % fold)
       seqs = list(note_sequence_record_iterator(fpath))
     else:
@@ -322,7 +322,8 @@ def get_data_and_update_hparams(basepath, hparams, fold,
         max_pitch=pitch_range[1],
         separate_instruments=separate_instruments,
         num_instruments=hparams.num_instruments,
-        encode_silences=hparams.encode_silences)
+        encode_silences=hparams.encode_silences,
+        quantization_level=hparams.quantization_level)
   else:
     encoder = None
   

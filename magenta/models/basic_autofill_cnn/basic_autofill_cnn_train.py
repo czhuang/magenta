@@ -42,8 +42,11 @@ tf.app.flags.DEFINE_bool('log_progress', True,
                          'statistics.')
 
 # Dataset.
-tf.app.flags.DEFINE_string('dataset', '4part_Bach_chorales', '4part_JSB_Chorales,' 
+tf.app.flags.DEFINE_string('dataset', None, '4part_JSB_Chorales,' 
                            ' JSB_Chorales, MuseData, Nottingham, Piano-midi.de')
+tf.app.flags.DEFINE_float('quantization_level', 0.125, 'Quantization duration.'
+                          'For qpm=120, notated quarter note equals 0.5.')
+
 # Later on have a lookup table for different datasets.
 tf.app.flags.DEFINE_integer('num_instruments', 4, 
                         'Maximum number of instruments that appear in this dataset.  Use 0 if not separating instruments and hence does not matter how many there are.')
@@ -274,6 +277,7 @@ def main(unused_argv):
   # Load hyperparameter settings, configs, and data.
   hparams = Hyperparameters(
       dataset=FLAGS.dataset,
+      quantization_level=FLAGS.quantization_level,
       num_instruments=FLAGS.num_instruments,
       separate_instruments=FLAGS.separate_instruments,
       crop_piece_len=FLAGS.crop_piece_len,

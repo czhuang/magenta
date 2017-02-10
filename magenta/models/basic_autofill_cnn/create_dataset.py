@@ -41,6 +41,8 @@ tf.app.flags.DEFINE_float('shortest_duration_allowed', 0.125,
                           'Only include pieces that do not have note '
                           'durations shorter than the requested value. '
                           'For qpm=120, notated quarter note equals 0.5.')
+tf.app.flags.DEFINE_float('quantization_level', 0.125, 'Quantization duration.'
+                          'For qpm=120, notated quarter note equals 0.5.')
 tf.app.flags.DEFINE_integer('num_instruments_requested', 4,
                             'Only includes pieces with the requested number of '
                             'instruments. To include all pieces regardless of '
@@ -137,7 +139,7 @@ class ToPianorollByInstrumentType(pipeline.Pipeline):
         input_type=music_pb2.NoteSequence, output_type=tensor_pb2.TensorProto)
     self.pianoroll_encoder_decoder = PianorollEncoderDecoder(
         shortest_duration, min_pitch, max_pitch, sequence_iterator,
-        separate_instruments)
+        separate_instruments, quantization_level=FLAGS.quantization_level)
 
   def transform(self, sequence):
     """Transform NoteSequence into pianorolls with one per instrument type.
@@ -180,10 +182,10 @@ def get_pipeline(num_instruments_requested, shortest_duration_allowed,
   partitioner = pipelines_common.RandomPartition(music_pb2.NoteSequence,
                                                  ['train', 'valid', 'test'],
                                                  [0.6, 0.2])
-  dag = {filter_by_num_instruments: dag_pipeline.Input(music_pb2.NoteSequence),
+  dag = {filter_by_num_instruments: dag_pipeline.DagInput(music_pb2.NoteSequence),
          filter_by_shortest_duration: filter_by_num_instruments,
          partitioner: filter_by_shortest_duration,
-         dag_pipeline.Output(): partitioner}
+         dag_pipeline.DagOutput(): partitioner}
   return dag_pipeline.DAGPipeline(dag)
 
 
@@ -210,6 +212,7 @@ def main(unused_argv):
     raise AttributeError('Misspecified flags.')
   if FLAGS.input is None:
     tf.logging.fatal('No input was provided.')
+  tf.logging.set_verbosity(tf.logging.INFO)
   #fpath = os.path.join(tf.resource_loader.get_data_files_path(), FLAGS.input)
   run_pipeline_from_flags()
 

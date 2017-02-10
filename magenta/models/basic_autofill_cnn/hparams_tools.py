@@ -22,6 +22,7 @@ class Hyperparameters(object):
   _defaults = dict(
       # Data.
       dataset=None,
+      quantization_level=0.125,
       augment_by_transposing=0,
       augment_by_halfing_doubling_durations=0,
       corrupt_ratio=0.25,
@@ -95,12 +96,7 @@ class Hyperparameters(object):
         value = init_hparams[key]
       setattr(self, key, value)
   
-    print self.__str__()
-
-    # Log directory name for Tensorflow supervisor.
-    #self.run_id = get_current_time_as_str()
-    #self.log_subdir_str = '%s_%s_%s' % (self.conv_arch.name, self.__str__(),
-    #                                    self.run_id)
+    print self.log_subdir_str
 
   @property
   def input_depth(self):
