@@ -112,8 +112,8 @@ tf.app.flags.DEFINE_integer('save_model_secs', 30,
                             'checkpoint.')
 tf.app.flags.DEFINE_integer('eval_freq', 5,
                             'The number of training iterations before validation.')
-tf.app.flags.DEFINE_bool('save_pop_stats', True,
-                            'Save population statistics for use in evaluation time.')
+tf.app.flags.DEFINE_bool('use_pop_stats', True,
+                         'Save population statistics for use in evaluation time.')
 
 
 import contextlib
@@ -287,7 +287,7 @@ def main(unused_argv):
       denoise_mode=FLAGS.denoise_mode,
       corrupt_ratio=FLAGS.corrupt_ratio,
       eval_freq=FLAGS.eval_freq,
-      save_pop_stats=FLAGS.save_pop_stats)
+      use_pop_stats=FLAGS.use_pop_stats)
   
   # Get data.
   # TODO(annahuang): Use queues.

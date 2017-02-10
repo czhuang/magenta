@@ -65,7 +65,7 @@ class Hyperparameters(object):
       run_dir=None,
       log_process=True,
       save_model_secs=30,
-      save_pop_stats=False,
+      use_pop_stats=False,
       # Prediction threshold.
       prediction_threshold=0.5)
 
@@ -195,15 +195,20 @@ class Hyperparameters(object):
         'init_scale', 'prediction_threshold', 'optimize_mask_only', 'conv_arch',
         'augment_by_halfing_doubling_durations', 'augment_by_transposing',
         'mask_indicates_context', 'denoise_mode', 
-        'run_dir', 'num_epochs', 'log_process', 'save_model_secs', '_num_pitches',
-        'batch_size', 'input_depth', 'num_instruments', 'num_pitches',
+        'run_dir', 'num_epochs', 'log_process', 'save_model_secs', 
+        '_num_pitches', 'batch_size', 'input_depth', 'num_instruments', 
+        'num_pitches', 'start_filter_size',
     ]
     keys_to_include_last = ['maskout_method', 'corrupt_ratio']
     key_to_shorthand = {
         'batch_size': 'bs', 'learning_rate': 'lr', 'optimize_mask_only': 'mask_only',
         'corrupt_ratio': 'corrupt', 'input_depth': 'in', 'crop_piece_len': 'len',
         'use_softmax_loss': 'soft', 'num_instruments': 'num_i', 'num_pitches': 'n_pch',
-        'save_pop_stats': 'pop'}
+        'use_pop_stats': 'pop', 'quantization_level': 'quant', 
+        'encode_silences': 'sil', 'use_residual': 'res',
+        'separate_instruments': 'sep', 'rescale_loss': 'rescale', 
+        'maskout_method': 'mm'}
+
 
     def _repr(key):
       return key if key not in key_to_shorthand else key_to_shorthand[key]

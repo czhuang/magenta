@@ -184,7 +184,11 @@ class BasicAutofillCNNGraph(object):
               with tf.control_dependencies(updates):
                 mean, variance = tf.identity(mean), tf.identity(variance)
             else:
-              mean, variance = layer.popmean, layer.popvariance
+              if hparams.use_pop_stats:
+                mean, variance = layer.popmean, layer.popvariance
+              else:
+                mean, variance = tf.nn.moments(conv, [0, 1, 2], keep_dims=True)
+
             output = tf.nn.batch_normalization(
                 conv, mean, variance, layer.betas, layer.gammas,
                 hparams.batch_norm_variance_epsilon)

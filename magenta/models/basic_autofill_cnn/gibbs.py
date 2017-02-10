@@ -419,10 +419,12 @@ def main(unused_argv):
                   bernoulli_inpainting=BernoulliInpaintingMasker(FLAGS.context_kind)
     )[FLAGS.masker]
 
-  wmodel = retrieve_model_tools.retrieve_model(model_name=FLAGS.model_name)
+  hparam_updates = {'use_pop_stats': FLAGS.use_pop_stats}
+  wmodel = retrieve_model_tools.retrieve_model(
+      model_name=FLAGS.model_name, hparam_updates=hparam_updates)
 
   hparams = wmodel.hparams
-  B = 100
+  B = FLAGS.gen_batch_size
   T, P, I = hparams.raw_pianoroll_shape
   print B, T, P, I
   hparams.crop_piece_len = FLAGS.piece_length
