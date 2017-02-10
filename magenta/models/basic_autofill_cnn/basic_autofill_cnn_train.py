@@ -16,7 +16,6 @@ import numpy as np
 import tensorflow as tf
 
 from magenta.models.basic_autofill_cnn import data_tools
-from magenta.models.basic_autofill_cnn import pianorolls_lib
 from magenta.models.basic_autofill_cnn import summary_tools
 from magenta.models.basic_autofill_cnn.basic_autofill_cnn_graph import BasicAutofillCNNGraph
 from magenta.models.basic_autofill_cnn.basic_autofill_cnn_graph import build_placeholders_initializers_graph
@@ -169,15 +168,24 @@ def run_epoch(supervisor,
     # Evaluate the graph and run back propagation.
     results = sess.run([m.predictions, m.loss, m.loss_total, m.loss_mask,
                         m.reduced_mask_size, m.mask, m.loss_unmask, m.reduced_unmask_size,
+                        m.D, m.reduced_D, m._mask_size, m._unreduced_loss,
                         m.learning_rate, m._lossmask,
                         eval_op], {m.input_data: x,
                                    m.targets: y,
                                    m.lengths: lens})
 
-    (predictions, loss, loss_total, loss_mask, reduced_mask_size, mask, loss_unmask,
-     reduced_unmask_size, learning_rate, lossmask, _) = results
+    (predictions, loss, loss_total, loss_mask, reduced_mask_size, mask, 
+     loss_unmask, reduced_unmask_size, 
+     D, reduced_D, mask_size, unreduced_loss,
+     learning_rate, lossmask, _) = results
     #print 'predictions', np.sum(predictions) / np.product(predictions.shape)
-    #print 'reduced_mask_sizes', reduced_mask_size, reduced_unmask_size, '%.4f, %.4f, %.4f' % (loss, loss_total, loss_mask)
+    #print 'D', reduced_D, mask_size
+    #print 'reduced_mask_sizes', reduced_mask_size, reduced_unmask_size
+    #print 'unreduced_loss, loss, total, mask', '%.4f, %.4f, %.4f, %.4f' % (
+    #    np.mean(unreduced_loss), loss, loss_total, loss_mask)
+
+    if reduced_unmask_size < 0:
+      import pdb; pdb.set_trace()
  
     # Aggregate performances.
     losses_total.add(loss_total, 1)
@@ -356,9 +364,10 @@ def main(unused_argv):
 
         # Run validation.
         if epoch_count % hparams.eval_freq == 0:
-          new_best_validation_loss = run_epoch(sv, sess, mvalid, valid_data, pianoroll_encoder, hparams,
-                                               no_op, 'valid', epoch_count, best_validation_loss,
-                                               best_model_saver)
+          new_best_validation_loss = run_epoch(
+              sv, sess, mvalid, valid_data, pianoroll_encoder, hparams,
+              no_op, 'valid', epoch_count, best_validation_loss, 
+              best_model_saver)
           if new_best_validation_loss < best_validation_loss:
             best_validation_loss = new_best_validation_loss
             time_since_improvement = 0

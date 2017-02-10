@@ -232,8 +232,7 @@ class BasicAutofillCNNGraph(object):
       self._cross_entropy = -tf.log(self._predictions) * self._targets
     else:
       self._predictions = tf.sigmoid(self._logits)
-      self._cross_entropy = tf.nn.sigmoid_cross_entropy_with_logits(
-          self._logits, self._targets)
+      self._cross_entropy = tf.nn.sigmoid_cross_entropy_with_logits(self._logits, self._targets)
 
     self._unreduced_loss = self._cross_entropy
 
@@ -260,6 +259,9 @@ class BasicAutofillCNNGraph(object):
       # #masked out variables
       self._mask_size = tf.reduce_sum(non_pad_mask, reduction_indices=[1, 2], keep_dims=True)
 
+    self.D = D
+    self.reduced_D = reduced_D
+
     if hparams.rescale_loss:
       def compute_scale():
         return D / self._mask_size
@@ -270,13 +272,15 @@ class BasicAutofillCNNGraph(object):
 
     # Compute loss for masked portion.
     self._mask = tf.split(3, 2, self._input_data)[1]
-    self._reduced_mask_size = tf.reduce_sum(self._mask_size)
+    self._reduced_mask_size = tf.reduce_sum(self._mask_size[:, :, 0, :])
     self._loss_mask = tf.reduce_sum(self._mask * self._unreduced_loss) / (
         self._reduced_mask_size)
 
     # Compute loss for out-of-mask (unmask) portion.
     self._unmask = 1 - self._mask
+    self._unmask *= non_pad_indicators 
     self._reduced_unmask_size = reduced_D - self._reduced_mask_size
+    tf.assert_equal(self._reduced_unmask_size, tf.reduce_sum(self._unmask[:, :, 0, :]))
     self._loss_unmask = tf.reduce_sum(self._unmask * self._unreduced_loss) / (
         self._reduced_unmask_size)
 
