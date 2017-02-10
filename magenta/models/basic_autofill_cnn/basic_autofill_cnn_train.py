@@ -69,6 +69,7 @@ tf.app.flags.DEFINE_integer('num_layers', 64,
 tf.app.flags.DEFINE_integer('num_filters', 128,
                             'The number of filters for each convolutional '
                             'layer.')
+tf.app.flags.DEFINE_integer('start_filter_size', 3, 'The filter size for the first layer of convoluation')
 # TODO(annahuang): Some are meant to be booleans.
 tf.app.flags.DEFINE_integer('use_residual', 1,
                             '1 specifies use residual, while 0 specifies not '
@@ -285,6 +286,7 @@ def main(unused_argv):
       model_name=FLAGS.model_name,
       num_layers=FLAGS.num_layers,
       num_filters=FLAGS.num_filters,
+      start_filter_size=FLAGS.start_filter_size,
       encode_silences=FLAGS.encode_silences,
       use_residual=FLAGS.use_residual,
       batch_size=FLAGS.batch_size,

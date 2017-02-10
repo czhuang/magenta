@@ -43,12 +43,13 @@ class Hyperparameters(object):
       # Initialization.
       init_scale=0.1,
       # Model architecture.
+      model_name=None,
       num_layers=28,
       num_filters=256,
-      model_name=None,
-      checkpoint_name=None,
+      start_filter_size=3, 
       use_residual=True,
       denoise_mode=False,
+      checkpoint_name=None,
       # Loss setup.
       # TODO: currently maskout_method here is not functional, still need to go through config_tools.
       maskout_method='balanced_by_scaling',
@@ -215,40 +216,18 @@ class Hyperparameters(object):
     line = ','.join('%s=%s' % (_repr(key), getattr(self, key)) for key in sorted_keys if show_first(key))
     line += ','
     line += ','.join('%s=%s' % (_repr(key), getattr(self, key)) for key in sorted_keys if key in keys_to_include_last)
-
-    #line = (','.join('%s=%s' % (
-    #    key if key not in key_to_shorthand else key_to_shorthand[key], 
-    #    getattr(self, key) for key in sorted_keys if (key not in keys_to_filter_out and key not in keys_to_include_last)))
-    #line += ','
-    #line += (','.join('%s=%s' % (key if key not in key_to_shorthand else key_to_shorthand[key], getattr(self, key)) for key in sorted_keys
-    #                 if key in keys_to_include_last))
     return line
 
   def get_conv_arch(self):
     """Returns the model architecture."""
-    if self.model_name == 'PitchLocallyConnectedConvSpecs':
-      return PitchLocallyConnectedConvSpecs(
-          self.input_depth, self.num_layers, self.num_filters, self.num_pitches, self.output_depth)
-
-    if self.model_name == 'PitchFullyConnectedConvSpecs':
-      return globals()[self.model_name](self.input_depth, self.num_layers, self.num_filters, self.num_pitches, self.output_depth)
-
-    if self.model_name == 'DeepStraightConvSpecs':
-      return DeepStraightConvSpecs(self.input_depth, self.num_layers,
-                                   self.num_filters, self.num_pitches, self.output_depth)
-    elif self.model_name == 'DeepStraightConvSpecsWithEmbedding':
-      return DeepStraightConvSpecsWithEmbedding(self.input_depth,
-                                                self.num_layers,
-                                                self.num_filters,
-                                                self.num_pitches)
-    elif self.model_name == 'PitchFullyConnected':
-      return PitchFullyConnected(self.input_depth, self.num_layers,
-                                 self.num_filters, self.num_pitches)
-    elif self.model_name == 'PitchFullyConnectedWithResidual':
-      return PitchFullyConnectedWithResidual(self.input_depth, self.num_layers,
-                                             self.num_filters, self.num_pitches)
-    else:
+    try:
+      return globals()[self.model_name](
+          self.input_depth, self.num_layers, self.num_filters, 
+          self.num_pitches, output_depth=self.output_depth, 
+          start_filter_size=self.start_filter_size)
+    except ValueError:
       raise ModelMisspecificationError('Model name %s does not exist.' % self.model_name)
+
 
 
 class ReturnIdentity(object):
@@ -278,8 +257,11 @@ class DeepStraightConvSpecs(ConvArchitecture):
   """A convolutional net where each layer has the same number of filters."""
   model_name = 'DeepStraightConvSpecs'
 
-  def __init__(self, input_depth, num_layers, num_filters, num_pitches, output_depth):
+  def __init__(self, input_depth, num_layers, num_filters, num_pitches, 
+               output_depth, start_filter_size=None, **kwargs):
     print self.model_name, input_depth, output_depth
+    if start_filter_size is None:
+      assert False
     if num_layers < 4:
       raise ModelMisspecificationError(
           'The network needs to be at least 4 layers deep, %d given.' %
@@ -287,9 +269,10 @@ class DeepStraightConvSpecs(ConvArchitecture):
     super(DeepStraightConvSpecs, self).__init__()
     self.condensed_specs = [
         dict(
-            filters=[3, 3, input_depth, num_filters],
-            conv_stride=1,
-            conv_pad='SAME'), (num_layers - 3, dict(
+            filters=[start_filter_size, start_filter_size, 
+                     input_depth, num_filters],
+            conv_stride=1, conv_pad='SAME'), 
+        (num_layers - 3, dict(
                 filters=[3, 3, num_filters, num_filters],
                 conv_stride=1,
                 conv_pad='SAME')), dict(
@@ -304,7 +287,8 @@ class DeepStraightConvSpecs(ConvArchitecture):
     ]
     self.specs = self.get_spec()
     assert self.specs
-    self.name = '%s-%d-%d' % (self.model_name, len(self.specs), num_filters)
+    self.name = '%s-%d-%d-start_fs=%d' % (
+        self.model_name, len(self.specs), num_filters, start_filter_size)
   
   def __str__(self):
     #FIXME: a hack.
@@ -315,7 +299,8 @@ class PitchLocallyConnectedConvSpecs(ConvArchitecture):
   """A convolutional net where each layer has the same number of filters."""
   model_name = 'PitchLocallyConnectedConvSpecs'
 
-  def __init__(self, input_depth, num_layers, num_filters, num_pitches, output_depth):
+  def __init__(self, input_depth, num_layers, num_filters, num_pitches, 
+               output_depth, **kwargs):
     num_instruments = output_depth
     if num_layers < 4:
       raise ModelMisspecificationError(
@@ -349,7 +334,8 @@ class PitchFullyConnectedConvSpecs(ConvArchitecture):
   """A convolutional net where each layer has the same number of filters."""
   model_name = 'PitchFullyConnectedConvSpecs'
 
-  def __init__(self, input_depth, num_layers, num_filters, num_pitches, output_depth):
+  def __init__(self, input_depth, num_layers, num_filters, num_pitches, 
+               output_depth, **kwargs):
     num_instruments = output_depth
     if num_layers < 4:
       raise ModelMisspecificationError(
@@ -382,7 +368,8 @@ class DeepStraightConvSpecsWithEmbedding(ConvArchitecture):
   """A convolutional net where each layer has the same number of filters."""
   model_name = 'DeepStraightConvSpecsWithEmbedding'
 
-  def __init__(self, input_depth, num_layers, num_filters, num_pitches):
+  def __init__(self, input_depth, num_layers, num_filters, num_pitches, 
+               **kwargs):
     if num_layers < 4:
       raise ModelMisspecificationError(
           'The network needs to be at least 4 layers deep, %d given.' %
@@ -422,7 +409,8 @@ class PitchFullyConnected(ConvArchitecture):
   """A convolutional net where each layer has the same number of filters."""
   model_name = 'PitchFullyConnected'
 
-  def __init__(self, input_depth, num_layers, num_filters, num_pitches):
+  def __init__(self, input_depth, num_layers, num_filters, num_pitches,
+               **kwargs):
     if num_layers < 4:
       raise ModelMisspecificationError(
           'The network needs to be at least 4 layers deep, %d given.' %
@@ -482,7 +470,8 @@ class PitchFullyConnectedWithResidual(ConvArchitecture):
   """A convolutional net where each layer has the same number of filters."""
   model_name = 'PitchFullyConnected'
 
-  def __init__(self, input_depth, num_layers, num_filters, num_pitches):
+  def __init__(self, input_depth, num_layers, num_filters, num_pitches,
+               **kwargs):
     if num_layers < 4:
       raise ModelMisspecificationError(
           'The network needs to be at least 4 layers deep, %d given.' %
