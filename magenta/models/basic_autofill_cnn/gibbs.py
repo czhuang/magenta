@@ -185,31 +185,29 @@ class ContiguousMasker(object):
     return "ContiguousMasker()"
 
 
-class RandomSampler(object):
-  def __init__(self, temperature=1, separate_instruments=None):
-    self.temperature = temperature
-    assert separate_instruments is not None
+class UniformRandomSampler(object):
+  def __init__(self, separate_instruments=None, **kwargs):
+    assert isinstance(separate_instruments, bool)
     self.separate_instruments = separate_instruments
 
   def __call__(self, wmodel, pianorolls, masks):
     print 'random sampling...'
     #FIXME: a hack
-    predictions = np.random.random((pianorolls.shape))
+    predictions = np.ones(pianorolls.shape) * 0.5
     if self.separate_instruments:
+      #pianorolls = generate_tools.sample_onehot(
+      #    1 + np.random.rand(B, T, P, I), axis=2)
       samples = generate_tools.sample_onehot(predictions, axis=2,
-                                             temperature=self.temperature)
+                                             temperature=1)
       assert (samples * masks).sum() == masks.max(axis=2).sum()
     else:
-      predictions = np.random.random((pianorolls.shape))
-      samples = sample_bernoulli(predictions, self.temperature)
+      samples = sample_bernoulli(predictions, temperature=1)
 
-    #B, T, P, I = pianorolls.shape
-    #assert samples.sum() == B * T * I
     pianorolls = np.where(masks, samples, pianorolls)
     yield pianorolls, masks, predictions
 
   def __repr__(self):
-    return "IndependentSampler(temperature=%r)" % self.temperature
+    return "RandomSampler"
 
 
 class IndependentSampler(object):
@@ -406,16 +404,13 @@ def main(unused_argv):
     assert False, "Please specify generation type: unconditioned or inpainting"
 
   # Setup init sampler.
-  # TODO: not yet supporting random init here.
-  if FLAGS.initialization == 'random':
-    init_sampler = None
-  else:
-    init_sampler = dict(
-        independent=IndependentSampler,
-        sequential=SequentialSampler,
-        bisecting=BisectingSampler
-    )[FLAGS.initialization](temperature=FLAGS.temperature, 
-                            separate_instruments=FLAGS.separate_instruments)
+  init_sampler = dict(
+      random=UniformRandomSampler,
+      independent=IndependentSampler,
+      sequential=SequentialSampler,
+      bisecting=BisectingSampler
+  )[FLAGS.initialization](temperature=FLAGS.temperature, 
+                          separate_instruments=FLAGS.separate_instruments)
   
   # Setup sampler.
   if FLAGS.sampler is None:
@@ -496,31 +491,23 @@ def main(unused_argv):
   # Include initialization time.  Allows us to also time NADE sampling.
   start_time = time.time()
 
-  if FLAGS.initialization == "random":
-    # TODO: not yet support inpainting
-    pianorolls = generate_tools.sample_onehot(1 + np.random.rand(B, T, P, I), axis=2)
-    intermediates["pianorolls"].append(pianorolls.copy())
-    intermediates["masks"].append(masks.copy())
-    intermediates["predictions"].append(np.zeros_like(pianorolls))
-    intermediates["step_idx"].append(-1)
-  else: 
-    # sample once to populate masked-out portion
-    if FLAGS.initialization == 'sequential':
-      B, T, P, I = pianorolls.shape
-      log_denominator = int(T * P * FLAGS.log_percent)
-      last_step = T * P
-      print 'log_denominator', log_denominator
-    iter_idx = 0
-    for pianorolls, masks, predictions in init_sampler(wmodel, pianorolls, masks):
-      print iter_idx,
-      if FLAGS.initialization != 'sequential' or (
-          iter_idx % log_denominator == 0 or iter_idx == last_step - 1):
-        print 'Logging step', iter_idx
-        intermediates["pianorolls"].append(pianorolls.copy())
-        intermediates["masks"].append(masks.copy())
-        intermediates["predictions"].append(predictions.copy())
-        intermediates["step_idx"].append(iter_idx)
-      iter_idx += 1
+  # sample once to populate masked-out portion
+  if FLAGS.initialization == 'sequential':
+    B, T, P, I = pianorolls.shape
+    log_denominator = int(T * P * FLAGS.log_percent)
+    last_step = T * P
+    print 'log_denominator', log_denominator
+  iter_idx = 0
+  for pianorolls, masks, predictions in init_sampler(wmodel, pianorolls, masks):
+    print iter_idx,
+    if FLAGS.initialization != 'sequential' or (
+        iter_idx % log_denominator == 0 or iter_idx == last_step - 1):
+      print 'Logging step', iter_idx
+      intermediates["pianorolls"].append(pianorolls.copy())
+      intermediates["masks"].append(masks.copy())
+      intermediates["predictions"].append(predictions.copy())
+      intermediates["step_idx"].append(iter_idx)
+    iter_idx += 1
 
   gibbs = Gibbs(num_steps=FLAGS.num_steps,
                 masker=masker,
