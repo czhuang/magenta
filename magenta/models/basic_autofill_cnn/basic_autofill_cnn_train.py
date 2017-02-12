@@ -117,7 +117,7 @@ tf.app.flags.DEFINE_integer('eval_freq', 5,
                             'The number of training iterations before validation.')
 tf.app.flags.DEFINE_bool('use_pop_stats', True,
                          'Save population statistics for use in evaluation time.')
-
+tf.app.flags.DEFINE_string('run_id', '', 'A run_id to add to directory names to avoid accidentally overwriting when testing same setups.') 
 
 import contextlib
 @contextlib.contextmanager
@@ -301,7 +301,8 @@ def main(unused_argv):
       denoise_mode=FLAGS.denoise_mode,
       corrupt_ratio=FLAGS.corrupt_ratio,
       eval_freq=FLAGS.eval_freq,
-      use_pop_stats=FLAGS.use_pop_stats)
+      use_pop_stats=FLAGS.use_pop_stats,
+      run_id=FLAGS.run_id)
   
   # Get data.
   # TODO(annahuang): Use queues.
