@@ -263,6 +263,14 @@ def get_image_data(dataset_name, fold, params):
     assert False, 'Dataset %s not yet supported.' % dataset_name
 
 
+def get_bachbot_data(fold, **kwargs):
+  print 'get_bachbot_data'
+  fpath = '/Users/czhuang/packages/bachbot/scratch/concat_corpus.h5'
+  import h5py
+  with h5py.File(fpath, 'r') as p:
+    data = p[fold]
+  print data.shape
+
 def get_data_and_update_hparams(basepath, hparams, fold, 
                                 update_hparams=True, 
                                 return_encoder=False):
@@ -338,3 +346,6 @@ def get_data_and_update_hparams(basepath, hparams, fold,
 #  reader = tf.python_io.tf_record_iterator(fpath)
 #  for serialized_sequence in reader:
 #    yield music_pb2.NoteSequence.FromString(serialized_sequence)
+
+if __name__ == '__main__':
+  get_bachbot_data('train')
