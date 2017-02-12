@@ -66,17 +66,59 @@ fpaths = {
 fpaths = {
     'images-mnist-iGibbs-step700-temp1': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_700__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___20170122234852_9.35min.npz'}
 
- 
-#STEPS_WANTED = [0, 25, 50, 75, -1]
-STEPS_WANTED = range(40) + [50, 75, -1]
-STEPS_WANTED = range(20) + [200/4., 200/2., 200*3/4, -1] 
-#STEPS_WANTED = range(20)
-STEPS_WANTED = range(0, 200, 20)
-#STEPS_WANTED = [0, 424/4., 424/2., 424*3/4, -1]
-STEPS_WANTED = range(10)
-STEPS_WANTED = range(0, 700, 100) + [-1]
-STEPS_WANTED = [-1]
-NUM_SAMPLES = 4
+fpaths = {
+    'Binary-mnist-iGibbs-temp00001': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1e_05___20170205180926_4.11min.npz'}
+
+fpaths = {
+    'Binarymnist-iGibbs-temp1':'/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___20170205183243_4.09min.npz'}
+
+#fpaths = {
+#    'Binarymnist-nade-temp00001': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=sequential_Gibbs_num_steps_0__masker_None__schedule_None__sampler_None__20170205181420_70.28min.npz'}
+#
+#fpaths = {
+#    'Binarymnist-nade-temp1': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___20170205183243_4.09min.npz'}
+#
+#fpaths = {
+#    'binarymnist-nade-temp0.01': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___20170205194545_4.09min.npz'}
+#fpaths = {
+#    'binarymnist-nade-temp_1e-3': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=sequential_Gibbs_num_steps_0__masker_None__schedule_None__sampler_None__20170205200603_4.17min.npz'} 
+
+fpaths = {
+     'binarymnist-iGibbs-temp_1e-2': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_0_01___0.01_20170205202951_4.20min.npz'}
+
+fpaths = {
+     'binarymnist-nade-temp_1e-3': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=sequential_Gibbs_num_steps_0__masker_None__schedule_None__sampler_None__0.0001_20170207135127_5.51min.npz'}
+
+fpaths = {
+    'binarymnist-iGibbs-temp_1e-3': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_0_0001___0.0001_20170207140308_5.57min.npz'}
+
+
+fpaths = {'binarmnist-nade-temp1e-1-wo_pop': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=sequential_Gibbs_num_steps_0__masker_None__schedule_None__sampler_None__0.1_20170207161005_5.60min.npz'}
+
+fpaths = {'binarymnist-iGibbs-temp1e-1-wo_pop': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_0_1___0.1_20170207160738_10.90min.npz'}
+
+fpaths = {'binarymnist-iGibbs-temp0.5-wo_pop': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_0_5___0.5_20170207163021_5.57min.npz'}
+
+fpaths = {'binarymnist-nade-temp0.5-wo_pop': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=sequential_Gibbs_num_steps_0__masker_None__schedule_None__sampler_None__0.5_20170207163441_5.75min.npz'}
+
+fpaths = {'binarymnist-iGibbs-temp0.9-wo_pop': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_0_9___0.9_20170207164350_5.65min.npz'}
+
+fpaths = {'binarymnist-nade-temp0.9-wo_pop': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=sequential_Gibbs_num_steps_0__masker_None__schedule_None__sampler_None__0.9_20170207164437_5.59min.npz'}
+
+# Best looking BinaryMNIST samples. 
+fpaths = {
+    'binarymnist-iGibbs-temp1-wo_pop': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___1.0_20170207141152_10.44min.npz'}
+
+fpaths = {'binarymnist-nade-temp1-wo_pop': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=sequential_Gibbs_num_steps_0__masker_None__schedule_None__sampler_None__1.0_20170207141152_10.61min.npz'}
+
+fpaths = {'BinaryMNIST-iGibbs-392steps-temp1-wo_pop':'/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_392__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___1.0_20170209021316_2.86min.npz'}
+
+#fpaths = {
+#    'BinaryMNIST-iGibbs-temp1_wo_pop-558_steps':'/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_588__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___1.0_20170209021314_4.22min.npz'}
+
+fpaths = {
+    'BinaryMNIST-iGibbs-temp1_wo_pop-392steps-yao_pmin_0.03':'/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_392__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_03__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___1.0_20170209111940_2.72min.npz'}
+
 NUM_SAMPLES = 100
 PLOT_FLAT = True
 SEPARATE_INSTRUMENTS = False
@@ -85,7 +127,7 @@ if PLOT_FLAT and len(fpaths.keys()) != 1:
   assert False, 'must only have one file to plot to flatten subplots'
 
 def is_image(run_name):
-  return "image" in run_name
+  return "image" in run_name or 'mnist' in run_name.lower()
 
 # check correct fnames.
 #for method, fpath in fpaths.items():
@@ -109,7 +151,7 @@ def get_code(name, coding_dict):
             
 
 coding = {'contiguous':'c', 'independent':'i', 'nade':'n', 'bach':'b',
-          'mnist':'m'}
+          'mnist':'m', 'MNIST':'m'}
 method_sample_indices = defaultdict(list)
 m, n = 4, 3
 if PLOT_FLAT:
@@ -122,6 +164,8 @@ for i,  (method, fpath) in enumerate(fpaths.items()):
   pianoroll_steps = np.load(input_fpath)['pianorolls']
   print pianoroll_steps.shape
   assert pianoroll_steps.ndim == 5
+
+  STEPS_WANTED = [-1] + range(len(pianoroll_steps))
   
   # Choose which indices in the batch to inspect. 
   if NUM_SAMPLES == 100:

@@ -65,12 +65,13 @@ class BasicAutofillCNNGraph(object):
   """Model for predicting autofills given context."""
 
   def __init__(self, is_training, hparams, input_data,
-               targets):  #, target_inspection_index):
+               targets, lengths):  #, target_inspection_index):
     self.batch_size = hparams.batch_size
     self.num_pitches = hparams.num_pitches
     self.is_training = is_training
     self._input_data = input_data
     self._targets = targets
+    self._lengths = lengths
     self.prediction_threshold = hparams.prediction_threshold
     input_shape = tf.shape(self._input_data)
     output_depth = input_shape[3] / 2
@@ -166,7 +167,28 @@ class BasicAutofillCNNGraph(object):
             layer.betas = tf.get_variable(
                 'beta', [num_target_filters],
                 initializer=tf.constant_initializer(0.0))
-            mean, variance = tf.nn.moments(conv, [0, 1, 2], keep_dims=True)
+            layer.popmean = tf.get_variable(
+                "popmean", shape=[1, 1, 1, num_target_filters], trainable=False,
+                collections=[tf.GraphKeys.MODEL_VARIABLES, tf.GraphKeys.VARIABLES],
+                initializer=tf.constant_initializer(0.0))
+            layer.popvariance = tf.get_variable(
+                "popvariance", shape=[1, 1, 1, num_target_filters], trainable=False,
+                collections=[tf.GraphKeys.MODEL_VARIABLES, tf.GraphKeys.VARIABLES],
+                initializer=tf.constant_initializer(1.0))
+            decay = 0.01
+            if self.is_training:
+              mean, variance = tf.nn.moments(conv, [0, 1, 2], keep_dims=True)
+              updates = [layer.popmean.assign_sub(decay * (layer.popmean - mean)),
+                         layer.popvariance.assign_sub(decay * (layer.popvariance - variance))]
+              # make update happen when mean/variance are used
+              with tf.control_dependencies(updates):
+                mean, variance = tf.identity(mean), tf.identity(variance)
+            else:
+              if hparams.use_pop_stats:
+                mean, variance = layer.popmean, layer.popvariance
+              else:
+                mean, variance = tf.nn.moments(conv, [0, 1, 2], keep_dims=True)
+
             output = tf.nn.batch_normalization(
                 conv, mean, variance, layer.betas, layer.gammas,
                 hparams.batch_norm_variance_epsilon)
@@ -210,42 +232,57 @@ class BasicAutofillCNNGraph(object):
       self._cross_entropy = -tf.log(self._predictions) * self._targets
     else:
       self._predictions = tf.sigmoid(self._logits)
-      self._cross_entropy = tf.nn.sigmoid_cross_entropy_with_logits(
-          self._logits, self._targets)
+      self._cross_entropy = tf.nn.sigmoid_cross_entropy_with_logits(self._logits, self._targets)
 
     self._unreduced_loss = self._cross_entropy
 
+    # Adjust loss to not include padding part.
+    shape = tf.shape(self._targets)
+    mask = tf.split(3, 2, self._input_data)[1]
+    non_pad_indicators = tf.to_float(tf.range(shape[1])[None, :, None, None]) < (
+        self.lengths[:, None, None, None])
+    non_pad_indicators = tf.to_float(non_pad_indicators)
+    non_pad_mask = mask * non_pad_indicators
+    #TODO: Make sure the padded parts are zeroed out.
+    self._unreduced_loss *= non_pad_indicators
+
+    if hparams.use_softmax_loss:
+      # #timesteps * #instruments
+      D = self.lengths[:, None, None, None] * tf.to_float(shape[3])
+      reduced_D = tf.reduce_sum(self.lengths) * tf.to_float(shape[3])
+      # #masked out variables
+      self._mask_size = tf.reduce_sum(non_pad_mask, reduction_indices=[1, 3], keep_dims=True)
+    else:
+      # #timesteps * #pitches
+      D = self.lengths[:, None, None, None] * tf.to_float(shape[2])
+      reduced_D = tf.reduce_sum(self.lengths) * tf.to_float(shape[2])
+      # #masked out variables
+      self._mask_size = tf.reduce_sum(non_pad_mask, reduction_indices=[1, 2], keep_dims=True)
+
+    self.D = D
+    self.reduced_D = reduced_D
+
     if hparams.rescale_loss:
       def compute_scale():
-        shape = tf.shape(self._targets)
-        mask = tf.split(3, 2, self._input_data)[1]
-        if hparams.use_softmax_loss:
-          # #timesteps * #instruments
-          D = tf.to_float(shape[1] * shape[3])
-          # #masked out variables
-          Dmdp1 = tf.reduce_sum(mask, reduction_indices=[1, 3], keep_dims=True)
-        else:
-          # #timesteps * #pitches
-          D = tf.to_float(shape[1] * shape[2])
-          # #masked out variables
-          Dmdp1 = tf.reduce_sum(mask, reduction_indices=[1, 2], keep_dims=True)
-           
-        return D / Dmdp1
+        return D / self._mask_size
       self._unreduced_loss *= compute_scale()
 
-    self._loss_total = tf.reduce_mean(self._unreduced_loss)
+    # Compute total loss.
+    self._loss_total = tf.reduce_sum(self._unreduced_loss) / reduced_D
 
     # Compute loss for masked portion.
     self._mask = tf.split(3, 2, self._input_data)[1]
-    self._mask_size = tf.reduce_sum(self._mask)
+    self._reduced_mask_size = tf.reduce_sum(self._mask_size[:, :, 0, :])
     self._loss_mask = tf.reduce_sum(self._mask * self._unreduced_loss) / (
-        self._mask_size)
+        self._reduced_mask_size)
 
     # Compute loss for out-of-mask (unmask) portion.
     self._unmask = 1 - self._mask
-    self._unmask_size = tf.reduce_sum(self._unmask)
+    self._unmask *= non_pad_indicators 
+    self._reduced_unmask_size = reduced_D - self._reduced_mask_size
+    tf.assert_equal(self._reduced_unmask_size, tf.reduce_sum(self._unmask[:, :, 0, :]))
     self._loss_unmask = tf.reduce_sum(self._unmask * self._unreduced_loss) / (
-        self._unmask_size)
+        self._reduced_unmask_size)
 
     # Check which loss to use as objective function.
     if hparams.optimize_mask_only:
@@ -319,16 +356,20 @@ class BasicAutofillCNNGraph(object):
     return self._input_data
 
   @property
+  def lengths(self):
+    return self._lengths
+
+  @property
   def mask(self):
     return self._mask
 
   @property
-  def mask_size(self):
-    return self._mask_size
+  def reduced_mask_size(self):
+    return self._reduced_mask_size
 
   @property
-  def unmask_size(self):
-    return self._unmask_size
+  def reduced_unmask_size(self):
+    return self._reduced_unmask_size
 
   @property
   def targets(self):
@@ -364,8 +405,9 @@ class BasicAutofillCNNGraph(object):
 
 def get_placeholders(hparams):
   # NOTE: fixed batch_size because einstein sum can only deal with up to 1 unknown dimension
-  return dict(input_data=tf.placeholder(tf.float32, [None] + hparams.input_shape),
-              targets=tf.placeholder(tf.float32, [None] + hparams.output_shape))
+  return dict(input_data=tf.placeholder(tf.float32, [None, None] + hparams.input_shape[-2:]),
+              targets=tf.placeholder(tf.float32, [None, None] + hparams.output_shape[-2:]),
+              lengths=tf.placeholder(tf.float32, [None]))
 
 def build_placeholders_initializers_graph(is_training, hparams, placeholders=None):
   """Builds input and target placeholders, initializer, and training graph."""
@@ -381,7 +423,7 @@ def build_placeholders_initializers_graph(is_training, hparams, placeholders=Non
         is_training=is_training,
         hparams=hparams,
         **placeholders)
-  return placeholders["input_data"], placeholders["targets"], initializer, train_model
+  return placeholders["input_data"], placeholders["targets"], placeholders["lengths"], initializer, train_model
 
 
 class TFModelWrapper(object):
@@ -404,6 +446,6 @@ class TFModelWrapper(object):
 
 def build_graph(is_training, hparams, placeholders=None):
   """Build BasicAutofillCNNGraph, input output placeholders, and initializer."""
-  _, _, _, model = build_placeholders_initializers_graph(
+  _, _, _, _, model = build_placeholders_initializers_graph(
       is_training, hparams, placeholders=placeholders)
   return TFModelWrapper(model, model.loss.graph, hparams)

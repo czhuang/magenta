@@ -165,7 +165,8 @@ class PianorollEncoderDecoder(object):
                separate_instruments=True,
                augment_by_transposing=False,
                num_instruments=None,
-               encode_silences=None):
+               encode_silences=None,
+               quantization_level=None):
     assert num_instruments is not None
     assert encode_silences is not None
     self.shortest_duration = shortest_duration
@@ -185,11 +186,57 @@ class PianorollEncoderDecoder(object):
     self.num_instruments = num_instruments
     self.encode_silences = encode_silences
 
+    self.quantization_level = quantization_level
+    if quantization_level is None:
+      self.quant_ratio = 1
+    else:
+      self.quant_ratio = self.shortest_duration / self.quantization_level
+    print 'quantization_level, and ratio', self.quantization_level, self.quant_ratio
+
+  def quantize(self, time):
+    # TODO: not yet quantize, but just dividing.
+    return time / self.shortest_duration * self.quant_ratio
+
   def get_timestep(self, time):
     """Get the pianoroll timestep from seconds."""
     # TODO(annahuang): This assumes that everything divides, but may not be
     # the case.
-    return int(time / self.shortest_duration)
+    quantized_timestep = self.quantize(time)
+    assert quantized_timestep % 1.0 == 0.0
+    return int(quantized_timestep)
+
+  def get_quantized_on_off_timesteps(self, onset, offset):
+    onsetq = self.quantize(onset)
+    offsetq = self.quantize(offset)
+    onset_is_onbeat = onsetq % 1.0 == 0.0
+    closest_offbeat = np.ceil(offsetq)
+    #print '--', onset, onsetq, onset_is_onbeat
+    if not onset_is_onbeat:
+      closest_onbeat = np.ceil(onsetq)
+      if closest_offbeat - closest_onbeat > 0:
+        return int(closest_onbeat), int(closest_offbeat)
+      return None, None
+    if closest_offbeat < onsetq:
+      return None, None
+    #if closest_offbeat == onsetq:
+    #  return int(onsetq), int(closest_offbeat) + 1
+    return int(onsetq), int(closest_offbeat)
+
+  def get_quantized_on_off_timesteps_may_overlap_with_other_notes(self, onset, offset):
+    onsetq = self.quantize(onset)
+    offsetq = self.quantize(offset)
+    # The closest current or future beat on quantized grid
+    closest_onbeat = np.ceil(onsetq)
+    if closest_onbeat > offsetq:
+      closest_onbeat = None
+    # The closest previous or current beat on quantized grid
+    closest_offbeat = np.floor(offsetq)
+    if closest_offbeat < onsetq:
+      closest_offbeat = None
+    if closest_onbeat is None or closest_offbeat is None:
+      return None, None
+    else:
+      return int(closest_onbeat), int(closest_offbeat)
 
   def encode(self,
              sequence,
@@ -204,7 +251,8 @@ class PianorollEncoderDecoder(object):
           sequence, duration_ratio=duration_ratio,
           return_with_additional_encodings=return_with_additional_encodings)
     elif isinstance(sequence, music_pb2.NoteSequence):
-      return self.encode_NoteSequences(
+      #return self.encode_NoteSequences(
+      return self.encode_NoteSequences_with_quantization(
           sequence, duration_ratio=duration_ratio,
           return_program_to_pianoroll_map=return_program_to_pianoroll_map,
           return_with_additional_encodings=return_with_additional_encodings)
@@ -246,12 +294,71 @@ class PianorollEncoderDecoder(object):
       num_notes = np.sum(len(chord) for chord in sequence)
     else:
       num_notes = len(sequence) * self.num_instruments
-    assert num_notes == np.sum(roll), '%d != %d' % (num_notes, np.sum(roll))
+    if num_notes != np.sum(roll):
+      print 'WARNING: There are some siliences. (%d != %d), %d silences.' % (num_notes, np.sum(roll), num_notes-np.sum(roll))
     if self.encode_silences and not return_with_additional_encodings:
       return roll[:, :-1, :]
     else:
       return roll      
   
+  def encode_NoteSequences_with_quantization(self,
+             sequence,
+             duration_ratio=1,
+             return_program_to_pianoroll_map=False,
+             return_with_additional_encodings=False):
+    """Encode sequence into pianoroll."""
+    # Collect notes into voices.
+    parts = defaultdict(list)
+    #TODO(annahuang): Check source type and then check for parts if score-based.
+    #print 'encode: source_type is', sequence.source_info.source_type
+    if (sequence.source_info.source_type == 
+        music_pb2.NoteSequence.SourceInfo.SCORE_BASED):
+      attribute_for_program_index = 'part'
+    elif (sequence.source_info.encoding_type == 
+          music_pb2.NoteSequence.SourceInfo.MIDI):
+      attribute_for_program_index = 'program'
+    else:
+      raise ValueError(
+          'Source type or encoding type of sequence not yet supported')
+    for note in sequence.notes:
+      parts[getattr(note, attribute_for_program_index)].append(note)
+    sorted_part_keys = sorted(parts.keys())
+
+    # Map from note sequence (part/program) index to pianoroll depth number.
+    program_to_pianoroll_index = {}
+    num_timesteps = self.get_timestep(sequence.total_time * duration_ratio)
+    pitch_range = self.max_pitch - self.min_pitch + 1
+    if self.separate_instruments:
+      pianoroll = np.zeros((num_timesteps, pitch_range, len(sorted_part_keys)))
+    else:
+      pianoroll = np.zeros((num_timesteps, pitch_range, 1))
+
+    for pianoroll_index, program_index in enumerate(sorted_part_keys):
+      notes = parts[program_index]
+      program_to_pianoroll_index[program_index] = pianoroll_index
+      for note in notes:
+        start_index, end_index = self.get_quantized_on_off_timesteps(
+            note.start_time * duration_ratio, note.end_time * duration_ratio)
+        #print note.start_time, start_index, note.end_time, end_index
+        if start_index is None or end_index is None: 
+          continue
+        if note.pitch > self.max_pitch or note.pitch < self.min_pitch:
+          raise PitchOutOfEncodeRangeError(
+              '%s is out of specified range [%s, %s].' % (
+                  note.pitch, self.min_pitch, self.max_pitch))
+        pitch_index = note.pitch - self.min_pitch
+        if self.separate_instruments:
+          pianoroll[start_index:end_index, pitch_index, pianoroll_index] = 1
+        else:
+          pianoroll[start_index:end_index, pitch_index, 0] = 1
+    # TODO(annahuang): Put this constraint somewhere else.
+    if self.separate_instruments and not are_instruments_monophonic(pianoroll):
+      raise ValueError('This encoder only expects monophonic instruments.')
+    if return_program_to_pianoroll_map:
+      return pianoroll, program_to_pianoroll_index
+    return pianoroll
+
+
   def encode_NoteSequences(self,
              sequence,
              duration_ratio=1,

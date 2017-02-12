@@ -71,7 +71,7 @@ GENERATED_COLORS = np.array([[  4.17642000e-01,   5.64000000e-04,   6.58390000e-
           1.00000000e+00],
        [  9.88260000e-01,   6.52325000e-01,   2.11364000e-01,
           1.00000000e+00]])
-CONTEXT_COLORS = GENERATED_COLORS
+#CONTEXT_COLORS = GENERATED_COLORS
 
 
 def get_fpath(context_kind, sampling_method):
@@ -144,12 +144,15 @@ def set_axes_style(ax, total_time, subplots, pitch_lb=None, pitch_ub=None):
     labelsize=7
   ax.tick_params(axis='both', which='major', labelsize=labelsize)
   ax.tick_params(axis='both', which='minor', labelsize=labelsize)
-  pitch_base = 37  # the label is actually one above 36, since starts with 0, ends at 88
+  # For 4part plots:
+  #pitch_base =  pitch_lb + 1 # the label is actually one above 36=37, since starts with 0, ends at 88
+  # TODO: seems we can just use pitch_lb instead of pitch_base.
+  pitch_base = pitch_lb
   #TODO: hack to fix one-off
   # DID NOT WORK
   #pitch_base = 36
   c_ticks = [12*i + 11 for i in range(4)] 
-  y_ticks = [0] + c_ticks + [89-pitch_base]
+  y_ticks = [0] + c_ticks + [pitch_ub - pitch_base]
 
   # blabel_pitch_base = pitch_base + 1  # the label is actually one above 36, since starts with 0, ends at 88
   # c_ticks = [12*i + label_pitch_base % 12 for i in range(num_pitches/12 + 1)] 
@@ -164,7 +167,7 @@ def set_axes_style(ax, total_time, subplots, pitch_lb=None, pitch_ub=None):
   ax.yaxis.set_ticks(y_ticks)
   ax.set_yticklabels([pitch_base+tick for tick in y_ticks])
   if pitch_lb is not None and pitch_ub is not None:
-    ax.set_ylim([pitch_lb - pitch_base, pitch_ub - pitch_base])
+    ax.set_ylim([pitch_lb - pitch_base - 1, pitch_ub - pitch_base + 1])
 
   time_hop = 8
   x_ticks = range(total_time/time_hop + 1)
@@ -234,11 +237,17 @@ def plot_pianoroll_with_colored_voices_with_style(ax, pianoroll, pitch_lb, pitch
 # does not create a figure...to be called by others
 def plot_pianoroll_with_colored_voices(axis, pianoroll, colors=CONTEXT_COLORS, 
                                        imshow=False, plot_boxes=True, empty_boxes=False, 
-                                       ensure_aspect_equal=False):
+                                       ensure_aspect_equal=False, **kwargs):
   T, P, I = pianoroll.shape
+  if 'aspect_equal' in kwargs:
+    aspect_equal = kwargs['aspect_equal']
+    aspect = 'equal' if aspect_equal else 'auto'
+  else:
+    aspect = 'auto'
   if imshow:
-    axis.imshow(pianoroll.sum(axis=2).T, aspect='equal', cmap='Greys',
+    axis.imshow(pianoroll.sum(axis=2).T, aspect=aspect, cmap='Greys',
       origin='lower', interpolation='none')
+  assert (aspect_equal and ensure_aspect_equal) or not ensure_aspect_equal
   if ensure_aspect_equal:
     # Hack to keep the equal aspect ratio.
     axis.imshow(np.zeros_like(pianoroll).sum(axis=2).T, aspect='equal', cmap='Greys',
@@ -255,29 +264,61 @@ def plot_pianoroll_with_colored_voices(axis, pianoroll, colors=CONTEXT_COLORS,
                facecolor=colors[i], edgecolor='none'))
 
 
-def plot_fancy_pianoroll(ax, T, pitch_lb, pitch_ub, roll, proll, prediction, context, step, is_subplot, plot_current_step=True):
+def plot_fancy_pianoroll(ax, T, pitch_lb, pitch_ub, roll, proll, prediction, context, step, is_subplot, plot_current_step=True, plot_blankouts=False):
   # with predictions
 
   # set style of pianoroll lines
   set_pianoroll_style(ax, T, pitch_lb=pitch_lb, pitch_ub=pitch_ub, is_subplot=True)
 
   # plot context
-  plot_pianoroll_with_colored_voices(ax, context)
+  plot_pianoroll_with_colored_voices(ax, context, **kwargs)
   
   # plot blankout
-  #plot_pianoroll_with_colored_voices(ax, blankouts, empty_boxes=True)
+  # plot_pianoroll_with_colored_voices(ax, blankouts, empty_boxes=True, **kwargs)
 
-  # plot prediction
-  plot_pianoroll_with_colored_voices(ax, prediction, imshow=True, plot_boxes=False)
+  ## plot prediction
+  #plot_pianoroll_with_colored_voices(ax, prediction, imshow=True, plot_boxes=False, **kwargs)
 
-  # plot generated
-  plot_pianoroll_with_colored_voices(ax, proll - context, colors=GENERATED_COLORS)
+  ## plot generated
+  #plot_pianoroll_with_colored_voices(ax, proll - context, colors=GENERATED_COLORS, **kwargs)
 
   if plot_current_step:
     # plot current step
-    plot_pianoroll_with_colored_voices(ax, roll - proll, colors=GENERATED_COLORS, empty_boxes=True)
+    plot_pianoroll_with_colored_voices(ax, roll - proll, colors=GENERATED_COLORS, empty_boxes=True, **kwargs)
 
   ax.set_title('Step %d' % (step-2))
+
+
+def plot_inspect_pianoroll(ax, T, pitch_lb, pitch_ub, ground_truth, roll, proll, prediction, context, step, is_subplot, plot_current_step=True, plot_blankouts=False, blankouts=None, **kwargs):
+
+  # set style of pianoroll lines
+  set_pianoroll_style(ax, T, pitch_lb=pitch_lb, pitch_ub=pitch_ub, is_subplot=True)
+
+  # plot context
+  plot_pianoroll_with_colored_voices(ax, context, **kwargs)
+  
+  # plot ground truth
+  plot_pianoroll_with_colored_voices(
+      ax, ground_truth, empty_boxes=True, colors=CONTEXT_COLORS, **kwargs)
+  
+  # plot blankout
+  #if plot_blankouts:
+  #  assert blankouts is not None
+  #  plot_pianoroll_with_colored_voices(ax, blankouts, empty_boxes=True, **kwargs)
+
+  # plot prediction
+  plot_pianoroll_with_colored_voices(ax, prediction, imshow=True, plot_boxes=False, **kwargs)
+
+  ## plot generated
+  plot_pianoroll_with_colored_voices(ax, proll - context, colors=GENERATED_COLORS, **kwargs)
+
+  if plot_current_step:
+    # plot current step
+    #plot_pianoroll_with_colored_voices(ax, roll - proll, colors=GENERATED_COLORS, empty_boxes=True, **kwargs)
+    t, p = step
+    color = GENERATED_COLORS[0]
+    ax.add_patch(Rectangle((t-.5, p-.5), 1, 1,
+                 facecolor=color, edgecolor=color))#, alpha=0.5))
 
 
 def plot_mask(ax, mask, axes_visible=False):

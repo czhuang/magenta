@@ -111,12 +111,14 @@ def random_crop_pianoroll_pad(pianoroll,
   pad_length = crop_len - len(pianoroll)
   if pad_length > 0:
     pianoroll = np.pad(pianoroll, [(0, pad_length)] + [(0, 0)] * (pianoroll.ndim - 1), mode="constant")
-  if start_crop_index is not None:
-    start_time_idx = start_crop_index
   else:
-    start_time_idx = np.random.randint(len(pianoroll) - crop_len + 1)
-  pianoroll = pianoroll[start_time_idx:start_time_idx + crop_len]
-  return pianoroll, length
+    if start_crop_index is not None:
+      start_time_idx = start_crop_index
+    else:
+      start_time_idx = np.random.randint(len(pianoroll) - crop_len + 1)
+    pianoroll = pianoroll[start_time_idx:start_time_idx + crop_len]
+  non_padded_length = length if length < crop_len else crop_len
+  return pianoroll, non_padded_length
 
 
 def make_data_feature_maps(sequences, hparams, encoder, start_crop_index=None):
@@ -139,6 +141,7 @@ def make_data_feature_maps(sequences, hparams, encoder, start_crop_index=None):
   maskout_method = hparams.maskout_method
   input_data = []
   targets = []
+  lengths = []
   seq_count = 0
   for sequence in sequences:
     if encoder is not None:
@@ -148,35 +151,52 @@ def make_data_feature_maps(sequences, hparams, encoder, start_crop_index=None):
       # For images, no encoder, already in pianoroll-like form.
       pianoroll = sequence
     try:
-      cropped_pianoroll = random_crop_pianoroll(
-          pianoroll, hparams.crop_piece_len, start_crop_index,
-          hparams.augment_by_transposing)
+      if hparams.pad:
+        # TODO: Padding function does not support augment_by_transposing yet.
+        cropped_pianoroll, length = random_crop_pianoroll_pad(
+            pianoroll, hparams.crop_piece_len, start_crop_index)
+        #if length != cropped_pianoroll.shape[0]:
+        #  print length, 'padded to', cropped_pianoroll.shape[0]
+      else:  
+        cropped_pianoroll = random_crop_pianoroll(
+            pianoroll, hparams.crop_piece_len, start_crop_index,
+            hparams.augment_by_transposing)
+        length = hparams.crop_piece_len
     except DataProcessingError:
       tf.logging.warning('Piece shorter than requested crop length.')
       continue
     seq_count += 1
    
     # Get mask.
+    T, P, I = cropped_pianoroll.shape
+    unpadded_shape = length, P, I
+    assert np.sum(cropped_pianoroll[length:, :, :]) == 0
     mask = getattr(mask_tools, 'get_%s_mask' % hparams.maskout_method)(
-        cropped_pianoroll.shape, separate_instruments=hparams.separate_instruments,
+        unpadded_shape, separate_instruments=hparams.separate_instruments,
         blankout_ratio=hparams.corrupt_ratio)
-    #  raise ValueError('Mask method not supported.')
-    
+    if not hparams.pad:
+      assert mask.shape[0] == cropped_pianoroll.shape[0]
     if hparams.denoise_mode:
+      # TODO: Denoise not yet supporting padding.
       masked_pianoroll = mask_tools.perturb_and_stack(cropped_pianoroll, mask)
     else:
-      masked_pianoroll = mask_tools.apply_mask_and_stack(cropped_pianoroll, mask)
+      masked_pianoroll = mask_tools.apply_mask_and_stack(
+          cropped_pianoroll, mask, hparams.pad)
+
     input_data.append(masked_pianoroll)
     targets.append(cropped_pianoroll)
+    lengths.append(length)
     assert len(input_data) == seq_count
     assert len(input_data) == len(targets)
+    assert len(input_data) == len(lengths)
 
   input_data = np.asarray(input_data)
   targets = np.asarray(targets)
+  lengths = np.asarray(lengths)
   if not (input_data.ndim == 4 and targets.ndim == 4):
     print input_data.ndim, targets.ndim
     raise DataProcessingError('Input data or target dimensions incorrect.')
-  return input_data, targets
+  return input_data, targets, lengths
 
 
 #def get_pianoroll_from_note_sequence_data(path, type_, len_from_beginning=None):
@@ -218,8 +238,7 @@ DATASET_PARAMS = {
         'pitch_ranges': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 12,
         'batch_size': 12},
     'JSB_Chorales': {
-        'pitch_ranges': [43, 96], 'shortest_duration': 0.5, 'num_instruments': 4,
-        'crop_piece_len': 32},
+        'pitch_ranges': [43, 96], 'shortest_duration': 0.5, 'num_instruments': 4},
     '4part_Bach_chorales': {
         'pitch_ranges': [36, 88], 'shortest_duration': 0.125, 
         'relative_path': 'bach/qbm120/instrs=4_duration=0.125_sep=True'},
@@ -285,7 +304,7 @@ def get_data_and_update_hparams(basepath, hparams, fold,
     separate_instruments = hparams.separate_instruments
     # TODO: Read dataset params from JSON file or the like.
     pitch_range = params['pitch_ranges']
-    if dataset_name == '4part_Bach_chorales':
+    if '4part_Bach_chorales' in dataset_name:
       fpath = os.path.join(basepath, params['relative_path'], '%s.tfrecord' % fold)
       seqs = list(note_sequence_record_iterator(fpath))
     else:
@@ -311,7 +330,8 @@ def get_data_and_update_hparams(basepath, hparams, fold,
         max_pitch=pitch_range[1],
         separate_instruments=separate_instruments,
         num_instruments=hparams.num_instruments,
-        encode_silences=hparams.encode_silences)
+        encode_silences=hparams.encode_silences,
+        quantization_level=hparams.quantization_level)
   else:
     encoder = None
   

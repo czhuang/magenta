@@ -32,7 +32,9 @@ def pdb_post_mortem():
       import pdb; pdb.post_mortem()
 
 
-def retrieve_model(wrapped_model=None, model_name=None, placeholders=None):
+def retrieve_model(wrapped_model=None, model_name=None, placeholders=None, 
+                   hparam_updates=None):
+  # TODO: change function name to reflect the fact that it updates hparams
   """Builds graph, retrieves checkpoint, and returns wrapped model.
 
   This function either takes a basic_autofill_cnn_graph.TFModelWrapper object
@@ -49,6 +51,15 @@ def retrieve_model(wrapped_model=None, model_name=None, placeholders=None):
     hparams = get_checkpoint_hparams(model_name=model_name)
   else:
     hparams = wrapped_model.hparams
+
+  # update hparams
+  if hparam_updates is not None:
+    for key, val in hparam_updates.iteritems():
+      if hasattr(hparams, key):
+        print 'Update hparams %s to be %r' % (key, val)
+        setattr(hparams, key, val)
+      else:
+        assert False, 'hparams does not have this parameters %s' % key
 
   wrapped_model = basic_autofill_cnn_graph.build_graph(
       is_training=False, hparams=hparams, placeholders=placeholders)
@@ -96,8 +107,7 @@ def get_checkpoint_hparams(model_name):
       hparams = yaml.load(p)
     hparams.checkpoint_fpath = os.path.join(
         FLAGS.run_dir, FLAGS.checkpoint_dir,
-        'DeepStraightConvSpecs-%d-%d-best_model.ckpt' % (
-            hparams.num_layers, hparams.num_filters))
+        '%s-best_model.ckpt' % (hparams.conv_arch.name))
     print 'Will load checkpoint from ', hparams.checkpoint_fpath
     return hparams
  

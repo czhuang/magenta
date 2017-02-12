@@ -33,7 +33,7 @@ def apply_mask_and_interleave(pianoroll, mask):
   return pianoroll_and_mask
 
 
-def apply_mask_and_stack(pianoroll, mask):
+def apply_mask_and_stack(pianoroll, mask, pad=False):
   """Stack pianorolls and masks on the last dimension.
 
   Args:
@@ -47,8 +47,16 @@ def apply_mask_and_stack(pianoroll, mask):
   Raises:
     MaskUseError: If the shape of pianoroll and mask do not match.
   """
-  if pianoroll.shape != mask.shape:
+  if pianoroll.shape != mask.shape and not pad:
     raise MaskUseError('Shape mismatch in pianoroll and mask.')
+  if pianoroll.shape[1:] != mask.shape[1:]: 
+    raise MaskUseError('Shape mismatch in pianoroll and mask.')
+
+  T, P, I = pianoroll.shape
+  pad_length = T - mask.shape[0]
+  assert np.sum(pianoroll[(T-pad_length):, :, :]) == 0
+  mask = np.pad(mask, [(0, pad_length)] + [(0, 0)] * (pianoroll.ndim - 1), 
+                mode="constant", constant_values=1)
   masked_pianoroll = pianoroll * (1 - mask)
   return np.concatenate([masked_pianoroll, mask], 2)
 

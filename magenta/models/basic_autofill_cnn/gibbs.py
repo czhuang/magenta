@@ -65,6 +65,8 @@ def sample_bernoulli(p, temperature):
     p = np.exp(logpp)
     p /= p.sum(axis=axis, keepdims=True)
     p = p[:, :, :, :1]
+    print "%.5f < %.5f < %.5f < %.5f < %.5g" % (np.min(p), np.percentile(p, 25), np.percentile(p, 50), np.percentile(p, 75), np.max(p))
+
     sampled = np.random.random(p.shape) < p
   return sampled
 
@@ -181,6 +183,34 @@ class ContiguousMasker(object):
 
   def __repr__(self):
     return "ContiguousMasker()"
+
+
+class RandomSampler(object):
+  def __init__(self, temperature=1, separate_instruments=None):
+    self.temperature = temperature
+    assert separate_instruments is not None
+    self.separate_instruments = separate_instruments
+
+  def __call__(self, wmodel, pianorolls, masks):
+    print 'random sampling...'
+    #FIXME: a hack
+    predictions = np.random.random((pianorolls.shape))
+    if self.separate_instruments:
+      samples = generate_tools.sample_onehot(predictions, axis=2,
+                                             temperature=self.temperature)
+      assert (samples * masks).sum() == masks.max(axis=2).sum()
+    else:
+      predictions = np.random.random((pianorolls.shape))
+      samples = sample_bernoulli(predictions, self.temperature)
+
+    #B, T, P, I = pianorolls.shape
+    #assert samples.sum() == B * T * I
+    pianorolls = np.where(masks, samples, pianorolls)
+    yield pianorolls, masks, predictions
+
+  def __repr__(self):
+    return "IndependentSampler(temperature=%r)" % self.temperature
+
 
 class IndependentSampler(object):
   def __init__(self, temperature=1, separate_instruments=None):
@@ -347,6 +377,7 @@ class Gibbs(object):
             % (self.num_steps, self.masker, self.schedule, self.sampler))
 
 FLAGS = tf.app.flags.FLAGS
+tf.app.flags.DEFINE_integer("gen_batch_size", 100, "num of samples to generate in a batch.")
 tf.app.flags.DEFINE_integer("num_steps", None, "number of gibbs steps to take")
 tf.app.flags.DEFINE_string("generation_type", None, "unconditioned, inpainting")
 tf.app.flags.DEFINE_string("context_source", "originals", "originals to use the validation piece of the dataset on which the model was trained.")
@@ -419,10 +450,12 @@ def main(unused_argv):
                   bernoulli_inpainting=BernoulliInpaintingMasker(FLAGS.context_kind)
     )[FLAGS.masker]
 
-  wmodel = retrieve_model_tools.retrieve_model(model_name=FLAGS.model_name)
+  hparam_updates = {'use_pop_stats': FLAGS.use_pop_stats}
+  wmodel = retrieve_model_tools.retrieve_model(
+      model_name=FLAGS.model_name, hparam_updates=hparam_updates)
 
   hparams = wmodel.hparams
-  B = 100
+  B = FLAGS.gen_batch_size
   T, P, I = hparams.raw_pianoroll_shape
   print B, T, P, I
   hparams.crop_piece_len = FLAGS.piece_length
@@ -512,7 +545,7 @@ def main(unused_argv):
 
   time_taken = (time.time() - start_time) / 60.0 #  In minutes.
   label = "".join(c if c.isalnum() else "_" for c in repr(gibbs))
-  label = "fromscratch_%s_init=%s_%s_%s_%.2fmin" % (FLAGS.model_name, FLAGS.initialization, label, timestamp, time_taken)
+  label = "fromscratch_%s_init=%s_%s_%r_%s_%.2fmin" % (FLAGS.model_name, FLAGS.initialization, label, FLAGS.temperature, timestamp, time_taken)
   path = os.path.join(FLAGS.generation_output_dir, label + ".npz")
   print "Writing to", path  
   np.savez_compressed(path, **intermediates)

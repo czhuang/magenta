@@ -16,7 +16,6 @@ import numpy as np
 import tensorflow as tf
 
 from magenta.models.basic_autofill_cnn import data_tools
-from magenta.models.basic_autofill_cnn import pianorolls_lib
 from magenta.models.basic_autofill_cnn import summary_tools
 from magenta.models.basic_autofill_cnn.basic_autofill_cnn_graph import BasicAutofillCNNGraph
 from magenta.models.basic_autofill_cnn.basic_autofill_cnn_graph import build_placeholders_initializers_graph
@@ -43,8 +42,11 @@ tf.app.flags.DEFINE_bool('log_progress', True,
                          'statistics.')
 
 # Dataset.
-tf.app.flags.DEFINE_string('dataset', '4part_Bach_chorales', '4part_JSB_Chorales,' 
+tf.app.flags.DEFINE_string('dataset', None, '4part_JSB_Chorales,' 
                            ' JSB_Chorales, MuseData, Nottingham, Piano-midi.de')
+tf.app.flags.DEFINE_float('quantization_level', 0.125, 'Quantization duration.'
+                          'For qpm=120, notated quarter note equals 0.5.')
+
 # Later on have a lookup table for different datasets.
 tf.app.flags.DEFINE_integer('num_instruments', 4, 
                         'Maximum number of instruments that appear in this dataset.  Use 0 if not separating instruments and hence does not matter how many there are.')
@@ -52,6 +54,7 @@ tf.app.flags.DEFINE_bool('separate_instruments', True,
                          'Separate instruments into different input feature'
                          'maps or not.')
 tf.app.flags.DEFINE_integer('crop_piece_len', 64, 'The number of time steps included in a crop')
+tf.app.flags.DEFINE_bool('pad', False, 'Pad shorter sequences with zero.')
 tf.app.flags.DEFINE_integer('encode_silences', False, 'Encode silence as the lowest pitch.')
 
 # Model architecture.
@@ -66,6 +69,7 @@ tf.app.flags.DEFINE_integer('num_layers', 64,
 tf.app.flags.DEFINE_integer('num_filters', 128,
                             'The number of filters for each convolutional '
                             'layer.')
+tf.app.flags.DEFINE_integer('start_filter_size', 3, 'The filter size for the first layer of convoluation')
 # TODO(annahuang): Some are meant to be booleans.
 tf.app.flags.DEFINE_integer('use_residual', 1,
                             '1 specifies use residual, while 0 specifies not '
@@ -109,6 +113,10 @@ tf.app.flags.DEFINE_integer('num_epochs', 0,
 tf.app.flags.DEFINE_integer('save_model_secs', 30,
                             'The number of seconds between saving each '
                             'checkpoint.')
+tf.app.flags.DEFINE_integer('eval_freq', 5,
+                            'The number of training iterations before validation.')
+tf.app.flags.DEFINE_bool('use_pop_stats', True,
+                         'Save population statistics for use in evaluation time.')
 
 
 import contextlib
@@ -136,11 +144,12 @@ def run_epoch(supervisor,
               best_validation_loss=None,
               best_model_saver=None):
   """Runs an epoch of training or evaluate the model on given data."""
-  input_data, targets = data_tools.make_data_feature_maps(raw_data, hparams,
-                                                          encoder)
+  input_data, targets, lengths = data_tools.make_data_feature_maps(
+      raw_data, hparams, encoder)
   permutation = np.random.permutation(len(input_data))
   input_data = input_data[permutation]
   targets = targets[permutation]
+  lengths = lengths[permutation]
 
   # TODO(annahuang): Leaves out last incomplete minibatch, needs wrap around.
   batch_size = m.batch_size
@@ -158,28 +167,39 @@ def run_epoch(supervisor,
     end_idx = start_idx + batch_size
     x = input_data[start_idx:end_idx, :, :, :]
     y = targets[start_idx:end_idx, :, :]
+    lens = lengths[start_idx:end_idx]
 
     # Evaluate the graph and run back propagation.
     results = sess.run([m.predictions, m.loss, m.loss_total, m.loss_mask,
-                        m.mask_size, m.mask, m.loss_unmask, m.unmask_size,
+                        m.reduced_mask_size, m.mask, m.loss_unmask, m.reduced_unmask_size,
+                        m.D, m.reduced_D, m._mask_size, m._unreduced_loss,
                         m.learning_rate, m._lossmask,
                         eval_op], {m.input_data: x,
-                                   m.targets: y})
+                                   m.targets: y,
+                                   m.lengths: lens})
 
-    (predictions, loss, loss_total, loss_mask, mask_size, mask, loss_unmask,
-     unmask_size, learning_rate, lossmask, _) = results
+    (predictions, loss, loss_total, loss_mask, reduced_mask_size, mask, 
+     loss_unmask, reduced_unmask_size, 
+     D, reduced_D, mask_size, unreduced_loss,
+     learning_rate, lossmask, _) = results
     #print 'predictions', np.sum(predictions) / np.product(predictions.shape)
-    #print 'mask_sizes', mask_size, unmask_size, '%.4f, %.4f, %.4f' % (loss, loss_total, loss_mask)
+    #print 'D', reduced_D, mask_size
+    #print 'reduced_mask_sizes', reduced_mask_size, reduced_unmask_size
+    #print 'unreduced_loss, loss, total, mask', '%.4f, %.4f, %.4f, %.4f' % (
+    #    np.mean(unreduced_loss), loss, loss_total, loss_mask)
+
+    if reduced_unmask_size < 0:
+      import pdb; pdb.set_trace()
  
     # Aggregate performances.
     losses_total.add(loss_total, 1)
-    # Multiply the mean loss_mask by mask_size for aggregation as the mask size
+    # Multiply the mean loss_mask by reduced_mask_size for aggregation as the mask size
     # could be different for every batch.
-    losses_mask.add(loss_mask * mask_size, mask_size)
-    losses_unmask.add(loss_unmask * unmask_size, unmask_size)
+    losses_mask.add(loss_mask * reduced_mask_size, reduced_mask_size)
+    losses_unmask.add(loss_unmask * reduced_unmask_size, reduced_unmask_size)
 
     if hparams.optimize_mask_only:
-      losses.add(loss * mask_size, mask_size)
+      losses.add(loss * reduced_mask_size, reduced_mask_size)
     else:
       losses.add(loss, 1)
 
@@ -190,11 +210,11 @@ def run_epoch(supervisor,
   run_stats['loss_total_%s' % experiment_type] = losses_total.mean
   run_stats['loss_%s' % experiment_type] = losses.mean
 
-  run_stats['perplexity_mask_%s' % experiment_type] = np.exp(losses_mask.mean)
-  run_stats['perplexity_unmask_%s' % experiment_type] = (
-      np.exp(losses_unmask.mean))
-  run_stats['perplexity_total_%s' % experiment_type] = np.exp(losses_total.mean)
-  run_stats['perplexity_%s' % experiment_type] = np.exp(losses.mean)
+  #run_stats['perplexity_mask_%s' % experiment_type] = np.exp(losses_mask.mean)
+  #run_stats['perplexity_unmask_%s' % experiment_type] = (
+  #    np.exp(losses_unmask.mean))
+  #run_stats['perplexity_total_%s' % experiment_type] = np.exp(losses_total.mean)
+  #run_stats['perplexity_%s' % experiment_type] = np.exp(losses.mean)
   run_stats['learning_rate'] = float(learning_rate)
 
   # Make summaries.
@@ -223,29 +243,23 @@ def run_epoch(supervisor,
     print 'Storing best model so far with loss %.4f at %s.' % (
         best_validation_loss, save_path)
 
-  tf.logging.info('%s, epoch %d: perplexity, loss (mask): %.4f, %.4f, ' %
+  tf.logging.info('%s, epoch %d: loss (mask): %.4f, ' %
                   (experiment_type, epoch_count,
-                   run_stats['perplexity_mask_%s' % experiment_type],
                    run_stats['loss_mask_%s' % experiment_type]))
-  tf.logging.info('perplexity, loss (unmask): %.4f, %.4f, ' %
-                  (run_stats['perplexity_unmask_%s' % experiment_type],
-                   run_stats['loss_unmask_%s' % experiment_type]))
-  tf.logging.info('perplexity, loss (total): %.4f, %.4f, ' %
-                  (run_stats['perplexity_total_%s' % experiment_type],
-                   run_stats['loss_total_%s' % experiment_type]))
+  tf.logging.info('loss (unmask): %.4f, ' %
+                  (run_stats['loss_unmask_%s' % experiment_type]))
+  tf.logging.info('loss (total): %.4f, ' %
+                  (run_stats['loss_total_%s' % experiment_type]))
   tf.logging.info('log lr: %.4f' % np.log2(run_stats['learning_rate']))
   tf.logging.info('time taken: %.4f' % (time.time() - start_time))
 
   # TODO(annahuang): Remove printouts.
-  print '%s, epoch %d: real loss %.4f perplexity, loss (mask): %.4f, %.4f, ' % (
+  print '%s, epoch %d: real loss: %.4f, loss (mask): %.4f, ' % (
       experiment_type, epoch_count, run_stats['loss_%s' % experiment_type],
-      run_stats['perplexity_mask_%s' % experiment_type],
       run_stats['loss_mask_%s' % experiment_type]),
-  print 'perplexity, loss (unmask): %.4f, %.4f, ' % (
-      run_stats['perplexity_unmask_%s' % experiment_type],
+  print 'loss (unmask): %.4f, ' % (
       run_stats['loss_unmask_%s' % experiment_type]),
-  print 'perplexity, loss (total): %.4f, %.4f, ' % (
-      run_stats['perplexity_total_%s' % experiment_type],
+  print 'loss (total): %.4f, ' % (
       run_stats['loss_total_%s' % experiment_type]),
   print 'log lr: %.4f' % np.log2(run_stats['learning_rate']),
   print 'time taken: %.4f' % (time.time() - start_time)
@@ -264,12 +278,15 @@ def main(unused_argv):
   # Load hyperparameter settings, configs, and data.
   hparams = Hyperparameters(
       dataset=FLAGS.dataset,
+      quantization_level=FLAGS.quantization_level,
       num_instruments=FLAGS.num_instruments,
       separate_instruments=FLAGS.separate_instruments,
       crop_piece_len=FLAGS.crop_piece_len,
+      pad=FLAGS.pad,
       model_name=FLAGS.model_name,
       num_layers=FLAGS.num_layers,
       num_filters=FLAGS.num_filters,
+      start_filter_size=FLAGS.start_filter_size,
       encode_silences=FLAGS.encode_silences,
       use_residual=FLAGS.use_residual,
       batch_size=FLAGS.batch_size,
@@ -282,7 +299,9 @@ def main(unused_argv):
       augment_by_halfing_doubling_durations=FLAGS.
       augment_by_halfing_doubling_durations,
       denoise_mode=FLAGS.denoise_mode,
-      corrupt_ratio=FLAGS.corrupt_ratio)
+      corrupt_ratio=FLAGS.corrupt_ratio,
+      eval_freq=FLAGS.eval_freq,
+      use_pop_stats=FLAGS.use_pop_stats)
   
   # Get data.
   # TODO(annahuang): Use queues.
@@ -303,7 +322,7 @@ def main(unused_argv):
     # Builds input and target placeholders, initializer, and training graph.
     graph_objects = build_placeholders_initializers_graph(
         is_training=True, hparams=hparams)
-    input_data, targets, initializer, m = graph_objects
+    input_data, targets, lengths, initializer, m = graph_objects
 
     # Build validation graph, reusing the model parameters from training graph.
     with tf.variable_scope('model', reuse=True, initializer=initializer):
@@ -311,7 +330,8 @@ def main(unused_argv):
           is_training=False,
           hparams=hparams,
           input_data=input_data,
-          targets=targets)
+          targets=targets,
+          lengths=lengths)
 
     # Instantiate a supervisor and use it to start a managed session.
     saver = 0  # Use default saver from supervisor.
@@ -350,9 +370,10 @@ def main(unused_argv):
 
         # Run validation.
         if epoch_count % hparams.eval_freq == 0:
-          new_best_validation_loss = run_epoch(sv, sess, mvalid, valid_data, pianoroll_encoder, hparams,
-                                               no_op, 'valid', epoch_count, best_validation_loss,
-                                               best_model_saver)
+          new_best_validation_loss = run_epoch(
+              sv, sess, mvalid, valid_data, pianoroll_encoder, hparams,
+              no_op, 'valid', epoch_count, best_validation_loss, 
+              best_model_saver)
           if new_best_validation_loss < best_validation_loss:
             best_validation_loss = new_best_validation_loss
             time_since_improvement = 0
@@ -363,7 +384,7 @@ def main(unused_argv):
             if time_since_improvement > FLAGS.patience:
               sess.run(m.decay_op)
               time_since_improvement = 0
-            if true_time_since_improvement > 5 * FLAGS.patience:
+            if true_time_since_improvement > 2 * FLAGS.patience:
               break
         epoch_count += 1
 
