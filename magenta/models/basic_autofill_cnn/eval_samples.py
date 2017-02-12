@@ -148,6 +148,8 @@ fpaths = {
 fpaths = {
     'BinaryMNIST-iGibbs-temp0.5-wo_pop-':'fromscratch_None_init=independent_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_0_5___0.5_20170207163021_5.57min.npz'}
 
+fpaths = {
+    'binarymnist-iGibbs-temp1_random_init': 'fromscratch_None_init=random_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___1.0_20170210222234_5.52min.npz'}
 
 set_names = fpaths.keys()
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

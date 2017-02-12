@@ -119,6 +119,10 @@ fpaths = {'BinaryMNIST-iGibbs-392steps-temp1-wo_pop':'/data/lisatmp4/huangche/si
 fpaths = {
     'BinaryMNIST-iGibbs-temp1_wo_pop-392steps-yao_pmin_0.03':'/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_392__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_03__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___1.0_20170209111940_2.72min.npz'}
 
+fpaths = {
+    'binarymnist-iGibbs-temp1_random_init': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=random_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___1.0_20170210222234_5.52min.npz'}
+
+
 NUM_SAMPLES = 100
 PLOT_FLAT = True
 SEPARATE_INSTRUMENTS = False
