@@ -107,19 +107,31 @@ def split(fpath):
     count += 1
     
   assert count == 382
+  print 'WARNING: These pieces were not included somehow.', pieces_not_included
 
   output_fname = ''.join(fpath.split('-all'))
-  output_fname = output_fname.split('.npz')[0] + '.pickle'
-  with open(output_fname, 'wb') as p:
-    pickle.dump(split_data, p)  
+  np.savez_compressed(output_fname, **split_data)
+  return output_fname
 
+
+def convert_npz_to_pickle(fpath):
+  data = np.load(fpath)
+  r_data = dict()
+  for name, entries in data.iteritems():
+    r_data[name] = entries
+  path, fname = os.path.split(fpath)
+  output_fname = fname.split('.npz')[0] + '.pickle'
+  with open(os.path.join(path, output_fname), 'wb') as p:
+    pickle.dump(r_data, p)  
+  
 
 def run_split():
-  fname = 'bach-16th-all-priorwork-nicolas_style.npz'
-  split(fname)
+  fnames = ['data/bach-16th-all-priorwork-nicolas_style.npz',
+            'data/bach-16th-all-priorwork.npz']
+  for fname in fnames:
+    split_fname = split(fname)
+    convert_npz_to_pickle(split_fname)
 
-  fname = 'bach-16th-all-priorwork.npz'
-  split(fname)
 
 
 if __name__ == '__main__':
