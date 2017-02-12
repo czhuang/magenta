@@ -493,8 +493,8 @@ def run(pianorolls=None, wrapped_model=None, sample_name=''):
     print pianorolls.shape
   print '# of total pieces in evaluation set:', len(pianorolls)
   lengths = [len(roll) for roll in pianorolls]
-  if 'image' not in hparams.dataset:
-    print 'lengths', lengths
+  if 'image' not in hparams.dataset and len(np.unique(lengths)) > 1:
+    print 'lengths', np.sort(lengths)
   print 'max_len', max(lengths)
   
   # Breaking up long pieces (that are outliers in length).

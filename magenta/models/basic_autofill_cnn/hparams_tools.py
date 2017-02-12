@@ -69,7 +69,8 @@ class Hyperparameters(object):
       save_model_secs=30,
       use_pop_stats=False,
       # Prediction threshold.
-      prediction_threshold=0.5)
+      prediction_threshold=0.5,
+      run_id = '')
 
   def __init__(self, *args, **init_hparams):
     """Update the default parameters through string or keyword arguments.
@@ -187,7 +188,7 @@ class Hyperparameters(object):
     # Want to show 'dataset', input_depth', and use_softmax_loss, learning rate, 'batch_size'
     keys_to_filter_out = [
         'num_layers', 'num_filters', 'eval_freq',
-        'output_depth', 'model_name', 'run_id', 'checkpoint_name',
+        'output_depth', 'model_name', 'checkpoint_name',
         'batch_norm_variance_epsilon', 'batch_norm_gamma', 'batch_norm',
         'init_scale', 'prediction_threshold', 'optimize_mask_only', 'conv_arch',
         'augment_by_halfing_doubling_durations', 'augment_by_transposing',
@@ -227,7 +228,6 @@ class Hyperparameters(object):
           start_filter_size=self.start_filter_size)
     except ValueError:
       raise ModelMisspecificationError('Model name %s does not exist.' % self.model_name)
-
 
 
 class ReturnIdentity(object):

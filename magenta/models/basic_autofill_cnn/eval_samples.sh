@@ -19,6 +19,6 @@ bazel build eval_samples
 --crop_piece_len 0 \
 --eval_len 0 \
 --evaluation_batch_size 1000 \
---pad_mode wrap \
+--pad_mode none \
 --use_pop_stats False \
 --eval_test_mode False
