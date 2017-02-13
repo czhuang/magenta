@@ -17,7 +17,7 @@ tf.app.flags.DEFINE_string('kind', None, 'notewise or chordwise loss, or maxgree
 tf.app.flags.DEFINE_integer('num_crops', 5, 'number of random crops to consider')
 tf.app.flags.DEFINE_integer('evaluation_batch_size', 20, 'Batch size for evaluation.')
 # already defined in basic_autofill_cnn_train.py which comes in through retrieve_model_tools (!)
-#tf.app.flags.DEFINE_integer('crop_piece_len', None, 'length of random crops (short pieces are padded in case of chordwise)')
+tf.app.flags.DEFINE_integer('convnet_len', None, 'Length of convnet receptive field at input.')
 tf.app.flags.DEFINE_bool('chronological', False, 'indicates chordwise evaluation should proceed in chronological order')
 tf.app.flags.DEFINE_integer('chronological_margin', 0, 'right-hand margin for chronological evaluation to avoid convnet edge effects')
 # TODO: haven't implemented "pitch" chronological for images.
@@ -70,7 +70,7 @@ def pad_with_wrap(xs, requested_piece_len):
   return np.asarray(ys), lengths
 
 
-def pad_zeros(xs, chronological, requested_piece_len):
+def pad_with_zeros(xs, chronological, requested_piece_len):
   lengths = np.array(list(map(len, xs)), dtype=int)
   padded_xs = []
   lengths = []
@@ -206,10 +206,10 @@ def compute_greedy_notewise_loss(wrapped_model, pianorolls, sign):
   return losses
 
 
-def evaluation_loop(evaluator, pianorolls, num_crops=5, batch_size=None, eval_data=None, eval_fpath=None, chronological=None, crop_piece_len=None, log_eval_progress=None, **kwargs):
+def evaluation_loop(evaluator, pianorolls, num_crops=5, batch_size=None, eval_data=None, eval_fpath=None, chronological=None, convnet_len=None, log_eval_progress=None, **kwargs):
   assert batch_size is not None
   assert chronological is not None
-  assert crop_piece_len is not None
+  assert convnet_len is not None
   assert eval_fpath is not None 
   assert log_eval_progress is not None
 
@@ -284,7 +284,7 @@ def evaluation_loop(evaluator, pianorolls, num_crops=5, batch_size=None, eval_da
   return eval_stats
 
 
-def compute_chordwise_loss(predictor, pianorolls, crop_piece_len, eval_len,
+def compute_chordwise_loss(predictor, pianorolls, convnet_len, eval_len,
                            chronological=False, chronological_margin=0, 
                            pitch_chronological=False,
                            separate_instruments=True, log_eval_progress=False, 
@@ -341,19 +341,19 @@ def compute_chordwise_loss(predictor, pianorolls, crop_piece_len, eval_len,
 
       # FIXME: put more assertions
       if chronological:
-        t0 = t - crop_piece_len + chronological_margin + 1
+        t0 = t - convnet_len + chronological_margin + 1
       else:
-        t0 = t - crop_piece_len / 2.
+        t0 = t - convnet_len / 2.
       # restrict to valid indices
-      t0 = np.round(np.clip(t0, 0, T - crop_piece_len)).astype(np.int32)
-      slice_ = np.arange(B)[:, None], t0[:, None] + np.arange(crop_piece_len)[None, :]
+      t0 = np.round(np.clip(t0, 0, T - convnet_len)).astype(np.int32)
+      slice_ = np.arange(B)[:, None], t0[:, None] + np.arange(convnet_len)[None, :]
       cropped_xs_scratch = xs_scratch[slice_]
       cropped_mask = mask[slice_]
       # ensure resulting crop is the correct size. this can fail if all pieces in the batch are
-      # shorter than crop_piece_len, so allow length of longest piece (= T) as well.
-      #assert cropped_xs_scratch[0].shape[0] in [crop_piece_len, T]
-      # crop_piece_len is how much music the convnet sees at once.
-      assert cropped_xs_scratch[0].shape[0] == crop_piece_len
+      # shorter than convnet_len, so allow length of longest piece (= T) as well.
+      #assert cropped_xs_scratch[0].shape[0] in [convnet_len, T]
+      # convnet_len is how much music the convnet sees at once.
+      assert cropped_xs_scratch[0].shape[0] == convnet_len
       p = predictor(cropped_xs_scratch, cropped_mask)
   
       # update xs_scratch to contain predictions
@@ -400,10 +400,10 @@ def compute_chordwise_loss(predictor, pianorolls, crop_piece_len, eval_len,
         end_of_frame = False
       yield loss, (t, d, end_of_frame), states
     assert np.allclose(mask, 0)
-  return evaluation_loop(varwise_losses, pianorolls, chronological=chronological, crop_piece_len=crop_piece_len, log_eval_progress=log_eval_progress, **kwargs)
+  return evaluation_loop(varwise_losses, pianorolls, chronological=chronological, convnet_len=convnet_len, log_eval_progress=log_eval_progress, **kwargs)
 
 
-def compute_notewise_loss(predictor, pianorolls, crop_piece_len, eval_len,
+def compute_notewise_loss(predictor, pianorolls, convnet_len, eval_len,
                           chronological=False, chronological_margin=0, 
                           separate_instruments=True, imagewise=False, 
                           log_eval_progress=None, pad_mode=None,
@@ -444,12 +444,12 @@ def compute_notewise_loss(predictor, pianorolls, crop_piece_len, eval_len,
       assert np.unique(mask.sum(axis=(1, 2, 3))).size == 1
       yield loss, (t, d, False), None
 
-  return evaluation_loop(varwise_losses, pianorolls, chronological=chronological, crop_piece_len=crop_piece_len, log_eval_progress=log_eval_progress, **kwargs)
+  return evaluation_loop(varwise_losses, pianorolls, chronological=chronological, convnet_len=convnet_len, log_eval_progress=log_eval_progress, **kwargs)
 
 
 def run(pianorolls=None, wrapped_model=None, sample_name=''):
   print FLAGS.model_name, FLAGS.fold, FLAGS.kind, 
-  print FLAGS.num_crops, FLAGS.crop_piece_len, FLAGS.evaluation_batch_size
+  print FLAGS.num_crops, FLAGS.convnet_len, FLAGS.evaluation_batch_size
   print FLAGS.checkpoint_dir
 
   # Check for FLAG conflicts.
@@ -507,19 +507,21 @@ def run(pianorolls=None, wrapped_model=None, sample_name=''):
   print 'unique lengths', np.unique(sorted(pianoroll.shape[0] for pianoroll in pianorolls))
   print 'shape', pianorolls[0].shape
   
+  # Length of piece to evaluate. 
   eval_len = max_len if FLAGS.eval_len == 0 else FLAGS.eval_len
-  if not FLAGS.chronological and eval_len != hparams.crop_piece_len:
-    assert False, 'If not chronological, need to train (%d) and evaluate (%d) on same length for now, otherwise might have multiple cold starts.' % (hparams.crop_piece_len, eval_len)
-
-  # Warn if training and evaluation lengths are different.
-  # TODO: change name for crop_piece_len, its the length for the convnet.
-  crop_piece_len = hparams.crop_piece_len if FLAGS.crop_piece_len == 0 else FLAGS.crop_piece_len
-  print FLAGS.crop_piece_len, hparams.crop_piece_len
-  if crop_piece_len != hparams.crop_piece_len:
-    print 'WARNING: crop_piece_len %r,  hparams.crop_piece_len %r, mismatch' % (crop_piece_len, hparams.crop_piece_len)
-  print 'updated crop_piece_len', crop_piece_len
   
-
+  # Length that convnet can see, if flags is 0 than use what it was trained on.
+  convnet_len = hparams.crop_piece_len if FLAGS.convnet_len == 0 else FLAGS.convnet_len
+  print 'updated convnet_len', convnet_len
+  
+  print FLAGS.convnet_len, hparams.crop_piece_len
+  if convnet_len != hparams.crop_piece_len:
+    print 'WARNING: convnet_len %r,  hparams.crop_piece_len %r, mismatch' % (convnet_len, hparams.crop_piece_len)
+  # Warn if training and evaluation lengths are different.
+  if not FLAGS.chronological and eval_len != convnet_len:
+    assert False, 'Evaluating on a length (%d) that is different than train len (%d).  Might lead to more cold starts than necessary.' % (eval_len, convnet_len)
+ 
+ 
   # Updates eval_batch_size to be the number of pieces available unless FLAGS gives a smaller one.
   eval_batch_size = FLAGS.evaluation_batch_size if B > FLAGS.evaluation_batch_size else B
   if eval_batch_size != hparams.batch_size:
@@ -529,7 +531,7 @@ def run(pianorolls=None, wrapped_model=None, sample_name=''):
   
   if FLAGS.eval_test_mode:
     eval_batch_size = N = 4
-    crop_piece_len = T = 5
+    convnet_len = T = 5
     pianorolls = pianorolls[:N]
     pianorolls = [roll[:T] for roll in pianorolls]
     print 'WARNING: testing so only using %d examples' % (len(pianorolls))
@@ -540,7 +542,7 @@ def run(pianorolls=None, wrapped_model=None, sample_name=''):
   # Get folder for previous runs for this config.
   dir_name = '%s-%s-num_rolls=%r-num_crops=%r-crop_len=%r-eval_len=%r--eval_bs=%r-chrono=%s-margin-%s-pitch_chrono=%s-use_pop_stats=%s-eval_test_mode=%r' % (
       FLAGS.fold, FLAGS.kind, B, FLAGS.num_crops, 
-      crop_piece_len, eval_len, eval_batch_size, 
+      convnet_len, eval_len, eval_batch_size, 
       FLAGS.chronological, FLAGS.chronological_margin, 
       FLAGS.pitch_chronological, hparams.use_pop_stats, FLAGS.eval_test_mode)
   print 'dir_name:', dir_name
@@ -569,7 +571,7 @@ def run(pianorolls=None, wrapped_model=None, sample_name=''):
       return p
 
     mean_loss, sem_loss, N = fn(
-       predictor, pianorolls, crop_piece_len, eval_len, 
+       predictor, pianorolls, convnet_len, eval_len, 
        num_crops=FLAGS.num_crops, 
        eval_data=eval_data,
        separate_instruments=hparams.separate_instruments,
