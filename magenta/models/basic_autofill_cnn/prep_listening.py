@@ -17,6 +17,7 @@ base_path = '/Users/czhuang/@coconet/compare_sampling/collect_npz'
 base_path = '/Users/czhuang/@coconet/new_generation/npzs'
 base_path = '/Users/czhuang/@coconet_samples/sigmoids/'
 base_path = '/data/lisatmp4/huangche/sigmoids'
+base_path = '/data/lisatmp4/huangche/music_generated'
 
 fpaths = {'contiguous': 'fromscratch_balanced_by_scaling_init=independent_Gibbs-num-steps-100--masker-ContiguousMasker----schedule-ConstantSchedule-0-5---sampler-SequentialSampler-temperature-1e-05--_20161112185008_284.97min.npz',
           'independent': 'fromscratch_balanced_by_scaling_init=independent_Gibbs-num-steps-100--masker-BernoulliMasker----schedule-YaoSchedule-pmin-0-1--pmax-0-9--alpha-0-7---sampler-IndependentSampler-temperature-1e-05--_20161112233522_4.73min.npz',
@@ -122,13 +123,44 @@ fpaths = {
 fpaths = {
     'binarymnist-iGibbs-temp1_random_init': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=random_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___1.0_20170210222234_5.52min.npz'}
 
+fpaths = {
+    'nic_16th-iGibbs-temp1-steps128': '/data/lisatmp4/huangche/generated_music/fromscratch_None_init=independent_Gibbs_num_steps_128__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___1.0_20170212152101_4.42min.npz'}
 
-NUM_SAMPLES = 100
-PLOT_FLAT = True
-SEPARATE_INSTRUMENTS = False
+fpaths = {
+    'nic-16th-iGibbs-temp1-step256': '/data/lisatmp4/huangche/generated_music/fromscratch_None_init=independent_Gibbs_num_steps_256__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___1.0_20170212155001_8.72min.npz'}
 
+fpaths = {
+    'nic_16th-NADE-temp1-len=64': '/data/lisatmp4/huangche/generated_music/fromscratch_None_init=sequential_Gibbs_num_steps_0__masker_None__schedule_None__sampler_None__1.0_20170212183421_9.13min.npz'}
+
+fpaths = {
+    'nic_16th-iGibbs-temp-4-steo256': '/data/lisatmp4/huangche/generated_music/fromscratch_None_init=independent_Gibbs_num_steps_256__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_0_0001___0.0001_20170212184437_8.84min.npz'}
+
+fpaths = {
+    'nic_16th-NADE-temp1-len=64': '/data/lisatmp4/huangche/generated_music/fromscratch_None_init=sequential_Gibbs_num_steps_0__masker_None__schedule_None__sampler_None__1.0_20170212190649_9.91min.npz'}
+
+fpaths = {
+    'nic_16h-NADE-temp-4-len=64': '/data/lisatmp4/huangche/generated_music/fromscratch_None_init=sequential_Gibbs_num_steps_0__masker_None__schedule_None__sampler_None__0.0001_20170212192221_9.92min.npz'}
+
+ARE_IMAGES = False
+if ARE_IMAGES:
+  NUM_SAMPLES = 100
+  PLOT_FLAT = True
+  SEPARATE_INSTRUMENTS = False
+else:
+  NUM_SAMPLES = 12 
+  PLOT_FLAT = True
+  SEPARATE_INSTRUMENTS = True
+
+m, n = 4, 3
+if ARE_IMAGES:
+  assert NUM_SAMPLES == 100, 'to plot flat'
+  m, n = 10, 10 
 if PLOT_FLAT and len(fpaths.keys()) != 1:
   assert False, 'must only have one file to plot to flatten subplots'
+coding = {'contiguous':'c', 'independent':'i', 'nade':'n', 'bach':'b',
+          'mnist':'m', 'MNIST':'m', 'nic':'nic'}
+method_sample_indices = defaultdict(list)
+
 
 def is_image(run_name):
   return "image" in run_name or 'mnist' in run_name.lower()
@@ -152,15 +184,7 @@ def get_code(name, coding_dict):
     elif code_key in name and code == 'bach':
       return code + postfix
   assert False, 'Match for %s was not found' % name
-            
 
-coding = {'contiguous':'c', 'independent':'i', 'nade':'n', 'bach':'b',
-          'mnist':'m', 'MNIST':'m'}
-method_sample_indices = defaultdict(list)
-m, n = 4, 3
-if PLOT_FLAT:
-  assert NUM_SAMPLES == 100, 'to plot flat'
-  m, n = 10, 10 
 
 for i,  (method, fpath) in enumerate(fpaths.items()):
   input_fpath = os.path.join(base_path, fpath)
@@ -170,6 +194,7 @@ for i,  (method, fpath) in enumerate(fpaths.items()):
   assert pianoroll_steps.ndim == 5
 
   STEPS_WANTED = [-1] + range(len(pianoroll_steps))
+  STEPS_WANTED = [-1]
   
   # Choose which indices in the batch to inspect. 
   if NUM_SAMPLES == 100:
@@ -200,8 +225,9 @@ for i,  (method, fpath) in enumerate(fpaths.items()):
     
     for count_idx, idx in enumerate(random_indices):
       print method, idx, count_idx
+      # Because pianoroll_to_midi takes i, p, t.
       pianoroll = pianorolls[idx].T
-     
+ 
       code = get_code(method, coding)
       if not is_image(method):
         pp = os.path.join(
@@ -213,7 +239,7 @@ for i,  (method, fpath) in enumerate(fpaths.items()):
       assert pianoroll.max() <= 1
       print 'pianoroll.shape', pianoroll.shape
       if SEPARATE_INSTRUMENTS:
-        assert np.allclose(pianoroll.sum(axis=1), 1)
+        assert step_str != '-1' or np.allclose(pianoroll.sum(axis=1), 1)
       # max across instruments
       pianoroll = pianoroll.max(axis=0)
       if PLOT_FLAT:

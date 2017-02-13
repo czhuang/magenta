@@ -237,11 +237,15 @@ DATASET_PARAMS = {
     'Piano-midi.de': {
         'pitch_ranges': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 12,
         'batch_size': 12},
+
     'JSB_Chorales': {
         'pitch_ranges': [43, 96], 'shortest_duration': 0.5, 'num_instruments': 4},
     '4part_Bach_chorales': {
         'pitch_ranges': [36, 88], 'shortest_duration': 0.125, 
         'relative_path': 'bach/qbm120/instrs=4_duration=0.125_sep=True'},
+    'bach-16th-priorwork-4_voices': {
+        'pitch_ranges': [36, 81], 'shortest_duration': 0.125},
+
     'MNIST': {'crop_piece_len': 28, 'num_pitches': 28},
     'BinaryMNIST': {'crop_piece_len': 28, 'num_pitches': 28, 
                     'path': '/data/lisatmp4/BinaryMNIST'},
@@ -254,6 +258,7 @@ def get_data_as_pianorolls(basepath, hparams, fold):
   seqs, encoder = get_data_and_update_hparams(
       basepath, hparams, fold, update_hparams=False, return_encoder=True)
   if hparams.dataset not in IMAGE_DATASETS:
+    assert encoder.quantization_level == hparams.quantization_level
     return [encoder.encode(seq) for seq in seqs]
   return seqs
 
@@ -289,6 +294,7 @@ def get_bachbot_data(fold, **kwargs):
   with h5py.File(fpath, 'r') as p:
     data = p[fold]
   print data.shape
+
 
 def get_data_and_update_hparams(basepath, hparams, fold, 
                                 update_hparams=True, 

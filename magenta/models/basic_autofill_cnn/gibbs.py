@@ -266,6 +266,7 @@ class SequentialSampler(object):
       if self.separate_instruments:
         samples = generate_tools.sample_onehot(
             predictions, axis=2, temperature=self.temperature)
+        assert np.allclose(samples.max(axis=2), 1)
         # select one variable to sample. sample according to normalized mask;
         # is uniform as all masked out variables have equal positive weight.
         selection = masks.max(axis=2).reshape([B, T * I])
@@ -280,7 +281,8 @@ class SequentialSampler(object):
       previous_masks = masks.copy()
       masks = np.where(selection, 0., masks)
       yield pianorolls, previous_masks, predictions  
-    #assert masks.sum() == 0
+    assert masks.sum() == 0
+    assert np.allclose(pianorolls.max(axis=2), 1)
     #return pianorolls
 
   def __repr__(self):
@@ -454,6 +456,8 @@ def main(unused_argv):
   T, P, I = hparams.raw_pianoroll_shape
   print B, T, P, I
   hparams.crop_piece_len = FLAGS.piece_length
+  T, P, I = hparams.raw_pianoroll_shape
+  print B, T, P, I
   
   intermediates = defaultdict(list)
 
@@ -494,8 +498,12 @@ def main(unused_argv):
   # sample once to populate masked-out portion
   if FLAGS.initialization == 'sequential':
     B, T, P, I = pianorolls.shape
-    log_denominator = int(T * P * FLAGS.log_percent)
-    last_step = T * P
+    if FLAGS.separate_instruments:
+      D = T * I
+    else:
+      D = T * P
+    log_denominator = int(np.ceil(D * FLAGS.log_percent))
+    last_step = D
     print 'log_denominator', log_denominator
   iter_idx = 0
   for pianorolls, masks, predictions in init_sampler(wmodel, pianorolls, masks):

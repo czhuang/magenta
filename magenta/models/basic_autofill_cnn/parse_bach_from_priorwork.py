@@ -179,6 +179,18 @@ def check_pickles():
       print np.unique([len(piece) for piece in pieces])
 
 
+def get_pitch_range():
+  fpath = 'data/bach-16th-priorwork-4_voices.npz'
+  data = np.load(fpath)
+  r_data = dict()
+  for name, entries in data.iteritems():
+    r_data[name] = entries
+  for fn in [np.nanmin, np.nanmax]:
+    aggregates = [fn(piece) for split_name, pieces in r_data.iteritems() 
+                  for piece in pieces]
+    print fn(aggregates)
+
+
 if __name__ == '__main__':
   try:
 #    parse_from_text()
@@ -186,6 +198,7 @@ if __name__ == '__main__':
 #    run_split()
 #    prepare_nicolas_style_pickles()
     check_pickles()
+    get_pitch_range()
   except:
     import pdb; pdb.post_mortem()
 

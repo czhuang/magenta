@@ -245,8 +245,9 @@ class PianorollEncoderDecoder(object):
              return_with_additional_encodings=False):
     """Encode sequence into pianoroll."""
     # list of lists
-    if (isinstance(sequence, list) and 
-        (isinstance(sequence[0], list) or isinstance(sequence[0], tuple))):
+    if isinstance(sequence, np.ndarray) or (
+        isinstance(sequence, list) and (
+            isinstance(sequence[0], list) or isinstance(sequence[0], tuple))):
       return self.encode_list_of_lists(
           sequence, duration_ratio=duration_ratio,
           return_with_additional_encodings=return_with_additional_encodings)
@@ -264,39 +265,66 @@ class PianorollEncoderDecoder(object):
                            duration_ratio=1,
                            return_with_additional_encodings=False):
     #TODO: duration_ratio not yet used.
-    T = len(sequence)
+    assert duration_ratio == 1
+
+    # TODO: rename shortest_duration as it means here the duration_unit.
+    # Hence if quant level is higher than we want to include every so many notes.
+    skip_interval = self.quantization_level / self.shortest_duration
+    assert skip_interval % 1.0 == 0.0
+    skip_interval = int(skip_interval)
+
+    if isinstance(sequence, np.ndarray):
+      assert sequence.shape[-1] == 4
+    assert len(sequence) % skip_interval == 0.
+    T = int(len(sequence) / skip_interval)
     P = self.max_pitch - self.min_pitch + 1
-    if self.encode_silences:
-      P += 1
+    # For silences.
+    P += 1
     if self.separate_instruments:
       roll = np.zeros((T, P, self.num_instruments))
     else:
       roll = np.zeros((T, P, 1))
+    overlap_counts = 0
     for t, chord in enumerate(sequence):
+      # Only takes time steps that are on the quantization grid.
+      if t % skip_interval != 0.0:
+        continue
+      t /= skip_interval
+      assert t % 1. == 0.
       for i in range(self.num_instruments):
-        # FIXME: Need better way of aligning voices.
+        # FIXME: Need better way of aligning voices for time steps that are not full voicing.
+        # FIXME: this only holds for bach pieces with 4voice encoding.
+        assert len(chord) == self.num_instruments
         if i < len(chord):
           pitch = chord[i]
-          if pitch > self.max_pitch or pitch < self.min_pitch:
-            raise PitchOutOfEncodeRangeError(
-                '%s is out of specified range [%s, %s].' % (
-                    pitch, self.min_pitch, self.max_pitch))
-          p = pitch - self.min_pitch
+          if not np.isnan(pitch):
+            if pitch > self.max_pitch or pitch < self.min_pitch:
+              raise PitchOutOfEncodeRangeError(
+                  '%r is out of specified range [%r, %r].' % (
+                      pitch, self.min_pitch, self.max_pitch))
+            p = pitch - self.min_pitch
+          else:
+            # Then it's a silence
+            p = P - 1
         else:
           # Then it's a silence
           p = P - 1
-        
+    
+        assert p % 1. == 0.
+        p = int(p)
+ 
         if self.separate_instruments:
           roll[t, p, i] = 1
         else:
-          roll[t, p, 0] = 1
-    if self.encode_silences:
-      num_notes = np.sum(len(chord) for chord in sequence)
-    else:
-      num_notes = len(sequence) * self.num_instruments
-    if num_notes != np.sum(roll):
-      print 'WARNING: There are some siliences. (%d != %d), %d silences.' % (num_notes, np.sum(roll), num_notes-np.sum(roll))
-    if self.encode_silences and not return_with_additional_encodings:
+          if roll[t, p, 0] == 1:
+            overlap_counts += 1
+          else:
+            roll[t, p, 0] = 1
+    num_notes = np.sum(len(chord) for chord in sequence)
+    if num_notes != (np.sum(roll) + overlap_counts) * skip_interval:
+      assert False, 'There are %d overlaps, but still (%d != %d).' % (
+          overlap_counts, num_notes, np.sum(roll) + overlap_counts)
+    if not return_with_additional_encodings:
       return roll[:, :-1, :]
     else:
       return roll      
