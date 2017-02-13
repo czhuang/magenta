@@ -133,12 +133,24 @@ def run_split():
     convert_npz_to_pickle(split_fname)
 
 
+def get_pitch_range():
+  fpath = 'data/bach-16th-priorwork-4_voices.npz'
+  data = np.load(fpath)
+  r_data = dict()
+  for name, entries in data.iteritems():
+    r_data[name] = entries
+  for fn in [np.nanmin, np.nanmax]:
+    aggregates = [fn(piece) for split_name, pieces in r_data.iteritems() 
+                  for piece in pieces]
+    print fn(aggregates)
+
 
 if __name__ == '__main__':
   try:
 #    parse_from_text()
 #    format_as_nicolas()
-    run_split()
+#    run_split()
+    get_pitch_range()
   except:
     import pdb; pdb.post_mortem()
 

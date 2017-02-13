@@ -16,7 +16,8 @@ def pianoroll_to_midi(x):
   import pretty_midi
   midi_data = pretty_midi.PrettyMIDI()
   programs = [74, 72, 69, 71]
-  programs = [1]
+  # For sigmoid generation, all voices are on the piano.
+  #programs = [1]  
   pitch_offset = 36
   bpm = 120.
   duration = bpm / 60 / 16.
