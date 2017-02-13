@@ -67,21 +67,28 @@ def parse_from_text():
   print 'Writing to ', fname
 
 
-def format_as_nicolas():
-  fname = 'bach-16th-all-priorwork.npz'
+def format_as_nicolas(skip_interval, tag):
+  fname = 'data/bach-16th-all-priorwork.npz'
   pieces = np.load(fname)
   r_pieces = dict()
   for name, piece in pieces.iteritems():
     r_piece = []
     print '# of steps', len(piece)
-    for step in piece:
+    for t, step in enumerate(piece):
+      if t % skip_interval != 0:
+        continue
       r_step = [part for part in step if step is not np.nan]
       r_piece.append(tuple(r_step))
     r_pieces[name] = r_piece
   print '# of pieces', len(r_pieces)
   print [len(piece) for piece in r_pieces.values()]
-  fname = 'bach-16th-all-priorwork-nicolas_style.npz'
-  np.savez_compressed(fname, **r_pieces)
+  #fname = 'bach-16th-all-priorwork-nicolas_style.npz'
+  #np.savez_compressed(fname, **r_pieces)
+
+  fname = 'JSB_Chorales_%s_Nicolas_style.pickle' % tag
+  with open(fname, 'wb') as p:
+    pickle.dump(r_pieces, p)  
+  return fname
 
 
 def in_which_split(split_dict, num):
@@ -91,10 +98,11 @@ def in_which_split(split_dict, num):
   return None
 
 
-def split(fpath):
+def split(fpath, pieces=None, save_as_pickle=False):
+  if pieces is not None:
+    pieces = np.load(fpath)
   split_dict = parse_split()
   split_data = defaultdict(list)
-  pieces = np.load(fpath)
   count = 0
   pieces_not_included = []
   for name, piece in pieces.iteritems():
@@ -108,9 +116,15 @@ def split(fpath):
     
   assert count == 382
   print 'WARNING: These pieces were not included somehow.', pieces_not_included
-
-  output_fname = ''.join(fpath.split('-all'))
-  np.savez_compressed(output_fname, **split_data)
+  if '-all' in fpath:
+    output_fname = ''.join(fpath.split('-all'))
+  else:
+    output_fname = fpath.split('.pickle')[0] + '_with_splits.pickle'
+  if not save_as_pickle:
+    np.savez_compressed(output_fname, **split_data)
+  else:
+    with open(output_fname, 'wb') as p:
+      pickle.dump(split_data, p)
   return output_fname
 
 
@@ -133,12 +147,45 @@ def run_split():
     convert_npz_to_pickle(split_fname)
 
 
+def prepare_nicolas_style_pickles():
+  fname_16th = format_as_nicolas(skip_interval=1, tag='16th')
+  fname_8th = format_as_nicolas(skip_interval=2, tag='8th')
+
+  fnames = [fname_16th, fname_8th]
+  lengths = []
+  for fname in fnames:
+    with open(fname, 'rb') as p:
+      seqs = pickle.load(p)
+    split(fname, seqs, save_as_pickle=True)
+    lens = [len(seq) for name, seq in seqs.iteritems()]
+    lengths.append(lens)
+  assert np.allclose(np.array(lengths[0]), np.array(lengths[1])*2)
+
+
+def check_pickles():
+  fnames = ['JSB_Chorales_16th_Nicolas_style_with_splits.pickle',
+            'JSB_Chorales_8th_Nicolas_style_with_splits.pickle',
+            'JSB Chorales.pickle']
+  for fname in fnames:
+    print fname
+    with open(fname, 'rb') as p:
+      data = pickle.load(p)
+    for set_, pieces in data.iteritems():
+      print set_, len(pieces)
+    for set_, pieces in data.iteritems():
+      assert isinstance(pieces, list)
+      assert isinstance(pieces[0], list)
+      assert isinstance(pieces[0][0], tuple)      
+      print np.unique([len(piece) for piece in pieces])
+
 
 if __name__ == '__main__':
   try:
 #    parse_from_text()
 #    format_as_nicolas()
-    run_split()
+#    run_split()
+#    prepare_nicolas_style_pickles()
+    check_pickles()
   except:
     import pdb; pdb.post_mortem()
 
