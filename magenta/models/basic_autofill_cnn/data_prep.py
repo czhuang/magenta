@@ -20,43 +20,33 @@ def prep_omniglot():
   test_targets = data['testtarget']
 
   num_classes = train_targets.shape[0]
+  valid_prop = 10.
 
-  n = train.shape[-1]
-  train_n = n / 3. * 2
-  assert train_n % 1. == 0
-  train_subsamples = np.zeros((784, train_n))
-  valid_subsamples = np.zeros((784, n - train_n))
-  train_subtargets = np.zeros((50, train_n))
-  valid_subtargets = np.zeros((50, n - train_n))
-  train_count = 0 
-  valid_count = 0
+  train_subsamples = []
+  valid_subsamples = []
   # Want to make sure balanced among classes.
   for class_idx in range(num_classes):
     inclusion = train_targets[class_idx]>0.5
     inclass_samples = train[:, inclusion]
-    inclass_targets = train_targets[:, inclusion]
     n_class = inclass_samples.shape[1]
-    n_valid = n_class / 3. 
-    assert n_valid % 1. == 0
+    n_valid = int(np.ceil(n_class / 10.))
     n_train = n_class - n_valid
     random_inds = np.random.permutation(n_class)
-    train_subsamples[:, train_count:train_count+n_train] = (
-        inclass_samples[:, random_inds[:n_train]])
-    train_subtargets[:, train_count:train_count+n_train] = (
-        inclass_targets[:, random_inds[:n_train]])
     
-    valid_subsamples[:, valid_count:valid_count+n_valid] = (
-        inclass_samples[:, n_train:])
-    valid_subtargets[:, valid_count:valid_count+n_valid] = (
-        inclass_targets[:, n_train:])
-    train_count += n_train
-    valid_count += n_valid
-  assert train_count == train_subsamples.shape[-1]
-  assert valid_count == valid_subsamples.shape[-1]
+    train_subsamples.append(
+        inclass_samples[:, random_inds[:n_train]])
+    
+    valid_subsamples.append(
+        inclass_samples[:, random_inds[n_train:]])
+  
+  train_subsamples = np.concatenate(train_subsamples, axis=-1)
+  valid_subsamples = np.concatenate(valid_subsamples, axis=-1)
+  assert train_subsamples.shape[-1] + valid_subsamples.shape[-1] == train.shape[-1]
 
   split_data = dict()
   split_data['train'] = train_subsamples.T.reshape((-1, 28, 28))
   split_data['test'] = test.T.reshape((-1, 28, 28))
+
   valid = valid_subsamples.T.reshape((-1, 28, 28))
   split_data['valid'] = np.random.random(valid.shape) < valid
   fname = 'omniglot-only_valid_binarized.npz'
@@ -87,7 +77,7 @@ if __name__ == '__main__':
   #  prep_omniglot()
   #except:
   #  import pdb; pdb.post_mortem()
-  #prep_omniglot()   
+  prep_omniglot()   
   check_omniglot()   
 
 
