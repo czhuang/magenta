@@ -144,12 +144,19 @@ def run_epoch(supervisor,
               best_validation_loss=None,
               best_model_saver=None):
   """Runs an epoch of training or evaluate the model on given data."""
+  if experiment_type == "valid":
+    # switch to fixed random number sequence for validation
+    prev_rng_state = np.random.get_state()
+    np.random.seed(123)
   input_data, targets, lengths = data_tools.make_data_feature_maps(
       raw_data, hparams, encoder)
   permutation = np.random.permutation(len(input_data))
   input_data = input_data[permutation]
   targets = targets[permutation]
   lengths = lengths[permutation]
+  if experiment_type == "valid":
+    # restore main random stream
+    np.random.set_state(prev_rng_state)
 
   # TODO(annahuang): Leaves out last incomplete minibatch, needs wrap around.
   batch_size = m.batch_size
