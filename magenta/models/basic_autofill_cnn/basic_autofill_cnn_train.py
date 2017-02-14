@@ -313,6 +313,8 @@ def run_epoch(supervisor,
 
 def main(unused_argv):
   """Builds the graph and then runs training and validation."""
+  print 'TensorFlow version:', tf.__version__
+
   if FLAGS.input_dir is None:
     tf.logging.fatal('No input directory was provided.')
 

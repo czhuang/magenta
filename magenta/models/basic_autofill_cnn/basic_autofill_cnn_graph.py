@@ -85,13 +85,13 @@ class BasicAutofillCNNGraph(object):
     output = self._input_data
     if hparams.mask_indicates_context:
       def flip_mask(input):
-        stuff, mask = tf.split(3, 2, output)
-        return tf.concat(3, [stuff, 1 - mask])
+        stuff, mask = tf.split(output, 2, axis=3)
+        return tf.concat([stuff, 1 - mask], axis=3)
       output = flip_mask(output)
 
     # For denoising case, don't use masks in model
     if hparams.denoise_mode:
-      output = tf.split(3, 2, output)[0]
+      output = tf.split(output, 2, axis=3)[0]
       input_shape = tf.shape(output)
 
     self.popstats_by_batchstat = OrderedDict()
@@ -172,11 +172,11 @@ class BasicAutofillCNNGraph(object):
                 initializer=tf.constant_initializer(0.0))
             layer.popmean = tf.get_variable(
                 "popmean", shape=[1, 1, 1, num_target_filters], trainable=False,
-                collections=[tf.GraphKeys.MODEL_VARIABLES, tf.GraphKeys.VARIABLES],
+                collections=[tf.GraphKeys.MODEL_VARIABLES, tf.GraphKeys.GLOBAL_VARIABLES],
                 initializer=tf.constant_initializer(0.0))
             layer.popvariance = tf.get_variable(
                 "popvariance", shape=[1, 1, 1, num_target_filters], trainable=False,
-                collections=[tf.GraphKeys.MODEL_VARIABLES, tf.GraphKeys.VARIABLES],
+                collections=[tf.GraphKeys.MODEL_VARIABLES, tf.GraphKeys.GLOBAL_VARIABLES],
                 initializer=tf.constant_initializer(1.0))
             layer.batchmean, layer.batchvariance = tf.nn.moments(conv, [0, 1, 2], keep_dims=True)
             decay = 0.01
@@ -245,7 +245,7 @@ class BasicAutofillCNNGraph(object):
 
     # Adjust loss to not include padding part.
     shape = tf.shape(self._targets)
-    mask = tf.split(3, 2, self._input_data)[1]
+    mask = tf.split(self._input_data, 2, axis=3)[1]
     non_pad_indicators = tf.to_float(tf.range(shape[1])[None, :, None, None]) < (
         self.lengths[:, None, None, None])
     non_pad_indicators = tf.to_float(non_pad_indicators)
@@ -278,7 +278,7 @@ class BasicAutofillCNNGraph(object):
     self._loss_total = tf.reduce_sum(self._unreduced_loss) / reduced_D
 
     # Compute loss for masked portion.
-    self._mask = tf.split(3, 2, self._input_data)[1]
+    self._mask = tf.split(self._input_data, 2, axis=3)[1]
     self._reduced_mask_size = tf.reduce_sum(self._mask_size[:, :, 0, :])
     self._loss_mask = tf.reduce_sum(self._mask * self._unreduced_loss) / (
         self._reduced_mask_size)
@@ -298,7 +298,7 @@ class BasicAutofillCNNGraph(object):
       self._loss = self._loss_total
 
     if "chronological" in hparams.maskout_method or "fixed_order" in hparams.maskout_method:
-      _, mask = tf.split(3, 2, self._input_data)
+      _, mask = tf.split(self._input_data, 2, axis=3)
       flat_prediction_index = tf.to_int32(tf.reduce_sum(1 - mask[:, :, 0, :],
                                                         reduction_indices=(1, 2)))
 
