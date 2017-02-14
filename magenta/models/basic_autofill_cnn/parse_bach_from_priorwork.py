@@ -77,7 +77,10 @@ def format_as_nicolas(skip_interval, tag):
     for t, step in enumerate(piece):
       if t % skip_interval != 0:
         continue
-      r_step = [part for part in step if step is not np.nan]
+      r_step = []
+      for part in step:
+        if not np.isnan(part):
+          r_step.append(part)
       r_piece.append(tuple(r_step))
     r_pieces[name] = r_piece
   print '# of pieces', len(r_pieces)
@@ -162,21 +165,55 @@ def prepare_nicolas_style_pickles():
   assert np.allclose(np.array(lengths[0]), np.array(lengths[1])*2)
 
 
+def get_shorthand(fname):
+  if '16' in fname:
+    return '16'
+  if '8' in fname:
+    return '8'
+  return '4'
+
+
 def check_pickles():
-  fnames = ['JSB_Chorales_16th_Nicolas_style_with_splits.pickle',
-            'JSB_Chorales_8th_Nicolas_style_with_splits.pickle',
+  #fnames = ['JSB_Chorales_16th_Nicolas_style_with_splits.pickle',
+  #          'JSB_Chorales_8th_Nicolas_style_with_splits.pickle',
+  #          'JSB Chorales.pickle']
+  fnames = ['JSB_Chorales_16th_Nicolas_style_with_splits_fixed.pickle',
+            'JSB_Chorales_8th_Nicolas_style_with_splits_fixed.pickle',
             'JSB Chorales.pickle']
+  piece_lens = dict()
   for fname in fnames:
     print fname
     with open(fname, 'rb') as p:
       data = pickle.load(p)
     for set_, pieces in data.iteritems():
       print set_, len(pieces)
+    chord_lens = set()
     for set_, pieces in data.iteritems():
       assert isinstance(pieces, list)
       assert isinstance(pieces[0], list)
       assert isinstance(pieces[0][0], tuple)      
-      print np.unique([len(piece) for piece in pieces])
+      for i, piece in enumerate(pieces):
+        for j, chord in enumerate(piece):
+          chord_lens.add(len(chord))
+          if len(chord) != 4:
+            print chord
+          for note in chord:
+            assert not np.isnan(note), '%r' % note
+      lens = np.unique([len(piece) for piece in pieces])
+      print 'piece_lens', lens
+      idx_name = set_+get_shorthand(fname)
+      print idx_name
+      piece_lens[idx_name] = lens
+    print 'chord_lens', chord_lens
+  print piece_lens.keys()
+  for set_ in data.keys():
+    print set_
+    print piece_lens[set_+'16']
+    print piece_lens[set_+'8']
+    print piece_lens[set_+'4']
+   
+    assert np.allclose(piece_lens[set_+'16'], piece_lens[set_+'8']*2)
+    assert np.allclose(piece_lens[set_+'8'], piece_lens[set_+'4']*2)
 
 
 def get_pitch_range():
@@ -192,14 +229,14 @@ def get_pitch_range():
 
 
 if __name__ == '__main__':
-  try:
+#  try:
 #    parse_from_text()
 #    format_as_nicolas()
 #    run_split()
+#    get_pitch_range()
 #    prepare_nicolas_style_pickles()
-    check_pickles()
-    get_pitch_range()
-  except:
-    import pdb; pdb.post_mortem()
-
+#    check_pickles()
+#  except:
+#    import pdb; pdb.post_mortem()
+  check_pickles()
 
