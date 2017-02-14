@@ -392,7 +392,7 @@ def main(unused_argv):
             if time_since_improvement > FLAGS.patience:
               sess.run(m.decay_op)
               time_since_improvement = 0
-            if true_time_since_improvement > 2 * FLAGS.patience:
+            if true_time_since_improvement > 5 * FLAGS.patience:
               break
         epoch_count += 1
 
