@@ -1,6 +1,7 @@
 """Defines the graph for a convolutional net designed for music autofill."""
 import tensorflow as tf, numpy as np
 from tensorflow.python.framework.function import Defun
+from collections import OrderedDict
 
 
 class ConvLayerParams(object):
@@ -93,6 +94,8 @@ class BasicAutofillCNNGraph(object):
       output = tf.split(3, 2, output)[0]
       input_shape = tf.shape(output)
 
+    self.popstats_by_batchstat = OrderedDict()
+
     self._hiddens = []
 
     output_for_residual = None
@@ -175,9 +178,10 @@ class BasicAutofillCNNGraph(object):
                 "popvariance", shape=[1, 1, 1, num_target_filters], trainable=False,
                 collections=[tf.GraphKeys.MODEL_VARIABLES, tf.GraphKeys.VARIABLES],
                 initializer=tf.constant_initializer(1.0))
+            layer.batchmean, layer.batchvariance = tf.nn.moments(conv, [0, 1, 2], keep_dims=True)
             decay = 0.01
             if self.is_training:
-              mean, variance = tf.nn.moments(conv, [0, 1, 2], keep_dims=True)
+              mean, variance = layer.batchmean, layer.batchvariance
               updates = [layer.popmean.assign_sub(decay * (layer.popmean - mean)),
                          layer.popvariance.assign_sub(decay * (layer.popvariance - variance))]
               # make update happen when mean/variance are used
@@ -187,7 +191,10 @@ class BasicAutofillCNNGraph(object):
               if hparams.use_pop_stats:
                 mean, variance = layer.popmean, layer.popvariance
               else:
-                mean, variance = tf.nn.moments(conv, [0, 1, 2], keep_dims=True)
+                mean, variance = layer.batchmean, layer.batchvariance
+
+            self.popstats_by_batchstat[layer.batchmean] = layer.popmean
+            self.popstats_by_batchstat[layer.batchvariance] = layer.popvariance
 
             output = tf.nn.batch_normalization(
                 conv, mean, variance, layer.betas, layer.gammas,
