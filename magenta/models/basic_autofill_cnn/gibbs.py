@@ -282,8 +282,8 @@ class SequentialSampler(object):
       masks = np.where(selection, 0., masks)
       yield pianorolls, previous_masks, predictions  
     assert masks.sum() == 0
-    assert np.allclose(pianorolls.max(axis=2), 1)
-    #return pianorolls
+    if self.separate_instruments:
+      assert np.allclose(pianorolls.max(axis=2), 1)
 
   def __repr__(self):
     return "SequentialSampler(temperature=%r)" % self.temperature

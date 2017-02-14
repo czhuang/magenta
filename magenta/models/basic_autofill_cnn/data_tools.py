@@ -249,9 +249,12 @@ DATASET_PARAMS = {
     'MNIST': {'crop_piece_len': 28, 'num_pitches': 28},
     'BinaryMNIST': {'crop_piece_len': 28, 'num_pitches': 28, 
                     'path': '/data/lisatmp4/BinaryMNIST'},
+
+    'OMNIGLOT': {'crop_piece_len': 28, 'num_pitches': 28,
+                 'path': '/data/lisatmp4/huangche/data/omniglot-only_valid_binarized.npz'}
 }
 
-IMAGE_DATASETS = ['MNIST', 'BinaryMNIST']
+IMAGE_DATASETS = ['MNIST', 'BinaryMNIST', 'OMNIGLOT']
 
 
 def get_data_as_pianorolls(basepath, hparams, fold):
@@ -282,6 +285,10 @@ def get_image_data(dataset_name, fold, params):
     data = np.array([[int(i) for i in line.split()] for line in lines])    
     data = np.reshape(data, (-1, 28, 28, 1))
     print 'BinaryMNIST', data.shape
+    return data
+  elif dataset_name == 'OMNIGLOT':
+    data = np.load(params['path'])[fold]
+    data = np.reshape(data, (-1, 28, 28, 1))
     return data
   else:
     assert False, 'Dataset %s not yet supported.' % dataset_name

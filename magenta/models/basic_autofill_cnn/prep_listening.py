@@ -16,8 +16,6 @@ COLORMAP = "bone"
 base_path = '/Users/czhuang/@coconet/compare_sampling/collect_npz'
 base_path = '/Users/czhuang/@coconet/new_generation/npzs'
 base_path = '/Users/czhuang/@coconet_samples/sigmoids/'
-base_path = '/data/lisatmp4/huangche/sigmoids'
-base_path = '/data/lisatmp4/huangche/music_generated'
 
 fpaths = {'contiguous': 'fromscratch_balanced_by_scaling_init=independent_Gibbs-num-steps-100--masker-ContiguousMasker----schedule-ConstantSchedule-0-5---sampler-SequentialSampler-temperature-1e-05--_20161112185008_284.97min.npz',
           'independent': 'fromscratch_balanced_by_scaling_init=independent_Gibbs-num-steps-100--masker-BernoulliMasker----schedule-YaoSchedule-pmin-0-1--pmax-0-9--alpha-0-7---sampler-IndependentSampler-temperature-1e-05--_20161112233522_4.73min.npz',
@@ -141,12 +139,21 @@ fpaths = {
 fpaths = {
     'nic_16h-NADE-temp-4-len=64': '/data/lisatmp4/huangche/generated_music/fromscratch_None_init=sequential_Gibbs_num_steps_0__masker_None__schedule_None__sampler_None__0.0001_20170212192221_9.92min.npz'}
 
-ARE_IMAGES = False
+fpaths = {
+    'omni-NADE-temp1-trained14h': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=sequential_Gibbs_num_steps_0__masker_None__schedule_None__sampler_None__1.0_20170213175503_5.60min.npz'}
+
+fpaths = {
+     'omni-iGibbs-temp1-trained14h': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_392__masker_BernoulliMasker____schedule_YaoSchedule_pmin_1_0__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___1.0_20170213175815_4.92min.npz'}
+
+
+ARE_IMAGES = True
 if ARE_IMAGES:
+  base_path = '/data/lisatmp4/huangche/sigmoids'
   NUM_SAMPLES = 100
   PLOT_FLAT = True
   SEPARATE_INSTRUMENTS = False
 else:
+  base_path = '/data/lisatmp4/huangche/music_generated'
   NUM_SAMPLES = 12 
   PLOT_FLAT = True
   SEPARATE_INSTRUMENTS = True
@@ -158,12 +165,13 @@ if ARE_IMAGES:
 if PLOT_FLAT and len(fpaths.keys()) != 1:
   assert False, 'must only have one file to plot to flatten subplots'
 coding = {'contiguous':'c', 'independent':'i', 'nade':'n', 'bach':'b',
-          'mnist':'m', 'MNIST':'m', 'nic':'nic'}
+          'mnist':'m', 'MNIST':'m', 'nic':'nic', 'omni':'omni'}
 method_sample_indices = defaultdict(list)
 
 
 def is_image(run_name):
-  return "image" in run_name or 'mnist' in run_name.lower()
+  return "image" in run_name or (
+      'mnist' in run_name.lower() or 'omni' in run_name.lower())
 
 # check correct fnames.
 #for method, fpath in fpaths.items():
@@ -200,7 +208,7 @@ for i,  (method, fpath) in enumerate(fpaths.items()):
   if NUM_SAMPLES == 100:
     random_indices = np.arange(NUM_SAMPLES)
   else:
-    random_indices = np.random.randint(100, size=NUM_SAMPLES)
+    random_indices = np.random.choice(100, size=NUM_SAMPLES)
   method_sample_indices[method] = random_indices
   
   #if method == 'nade':
