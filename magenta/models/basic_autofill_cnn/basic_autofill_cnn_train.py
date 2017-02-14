@@ -131,6 +131,43 @@ def pdb_post_mortem():
       traceback.print_exception(exc_type, exc_value, exc_traceback)
       import pdb; pdb.post_mortem()
 
+def estimate_popstats(sv, sess, m, raw_data, encoder, hparams):
+  tfbatchstats, tfpopstats = list(zip(*m.popstats_by_batchstat.items()))
+
+  nepochs = 3
+  totalnpbatchstats = None
+  totalweight = 0
+  for _ in range(nepochs):
+    input_data, targets, lengths = data_tools.make_data_feature_maps(
+        raw_data, hparams, encoder)
+    permutation = np.random.permutation(len(input_data))
+    input_data = input_data[permutation]
+    targets = targets[permutation]
+    lengths = lengths[permutation]
+    batch_size = m.batch_size
+    num_batches = input_data.shape[0] // m.batch_size
+    for step in range(num_batches):
+      start_idx = step * batch_size
+      end_idx = start_idx + batch_size
+      x = input_data[start_idx:end_idx, :, :, :]
+      y = targets[start_idx:end_idx, :, :]
+      lens = lengths[start_idx:end_idx]
+  
+      npbatchstats = sess.run(tfbatchstats,
+                              {m.input_data: x,
+                               m.targets: y,
+                               m.lengths: lens})
+      totalnpbatchstats = ([total + update for total, update in zip(totalnpbatchstats, npbatchstats)]
+                           if totalnpbatchstats is not None else npbatchstats)
+      totalweight += 1
+
+  nppopstats = [total / totalweight for total in totalnpbatchstats]
+  errors = []
+  for tfpopstat, nppopstat in zip(tfpopstats, nppopstats):
+    moving_average = tfpopstat.eval()
+    errors.append(np.sum((moving_average - nppopstat) ** 2))
+    tfpopstat.load(nppopstat)
+  print "popstat errors: %s" % " ".join(map(str, errors))
 
 def run_epoch(supervisor,
               sess,
@@ -378,6 +415,8 @@ def main(unused_argv):
 
         # Run validation.
         if epoch_count % hparams.eval_freq == 0:
+          estimate_popstats(sv, sess, m, train_data, pianoroll_encoder, hparams)
+
           new_best_validation_loss = run_epoch(
               sv, sess, mvalid, valid_data, pianoroll_encoder, hparams,
               no_op, 'valid', epoch_count, best_validation_loss, 
