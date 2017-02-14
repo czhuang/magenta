@@ -9,9 +9,42 @@ from scipy.io import loadmat
 import pylab as plt
 
 
-def prep_omniglot():
+def load_omniglot():
   fpath = '/Users/czhuang/packages/iwae/datasets/OMNIGLOT/chardata.mat'
   data = loadmat(fpath)
+  return data
+
+
+def decipher_omniglot_targetchar():
+  # Each of these groups are 5 instances (characters?) for each alphebet?
+  data = load_omniglot()
+  train = data['data']
+  targetchar = data['targetchar']
+  for i in np.unique(targetchar):
+    boolinds = targetchar==i
+    boolinds = np.reshape(boolinds, (-1))
+    samples = train[:, boolinds].T
+    print i, samples.shape
+    samples = np.reshape(samples, (-1, 28, 28))
+    plot_subsample(samples, 'train_targetchar_group_%d' % i)
+    
+
+def decipher_omniglot_target():
+  # Each group is an alphebet group?
+  data = load_omniglot()
+  train = data['data']
+  target = data['target']
+  for i in range(target.shape[0]):
+    # targets are one-hot vectors.
+    inclusion = target[i]>0.5
+    samples = train[:, inclusion].T
+    samples = np.reshape(samples, (-1, 28, 28))
+    plot_subsample(samples, 'train_target_group_%d' % i)
+
+
+def prep_omniglot(sample=False):
+  # FIXME: still might have the problem of wanting to separate who wrote what?
+  data = load_omniglot()
   # # of pixels by examples
   train = data['data']
   test = data['testdata']
@@ -43,33 +76,53 @@ def prep_omniglot():
   valid_subsamples = np.concatenate(valid_subsamples, axis=-1)
   assert train_subsamples.shape[-1] + valid_subsamples.shape[-1] == train.shape[-1]
 
-  split_data = dict()
-  split_data['train'] = train_subsamples.T.reshape((-1, 28, 28))
-  split_data['test'] = test.T.reshape((-1, 28, 28))
+  split = dict()
+  split['train'] = train_subsamples.T.reshape((-1, 28, 28))
+  split['valid'] = valid_subsamples.T.reshape((-1, 28, 28))
+  split['test'] = test.T.reshape((-1, 28, 28))
 
-  valid = valid_subsamples.T.reshape((-1, 28, 28))
-  split_data['valid'] = np.random.random(valid.shape) < valid
-  fname = 'omniglot-only_valid_binarized.npz'
-  np.savez_compressed(fname, **split_data)
+  if sample:
+    # Sample binarization.  
+    split['train'] = np.random.random(split['train'].shape) < split['train']
+    split['valid'] = np.random.random(split['valid'].shape) < split['valid']
+    split['test'] = np.random.random(split['test'].shape) < split['test'] 
+    fname = 'omniglot-all_sampled_binarization.npz'
+  else:
+    # Threshold binarization.
+    split['train'] = split['train'] > 0.5
+    split['valid'] = split['valid'] > 0.5
+    split['test'] = split['test'] > 0.5
+    fname = 'omniglot-all_threshold_binarized.npz'
+
+  np.savez_compressed(fname, **split)
+  return fname
 
 
-def check_omniglot():
-  fname = 'omniglot-only_valid_binarized.npz'
+def plot_subsample(xs, tag_fname):
+  fig, axes = plt.subplots(10,10)
+  axes = np.ravel(axes)
+  print '# of examples', len(xs)
+  rand_inds = np.random.choice(len(xs), size=100)
+  for i, ax in enumerate(axes):
+    ax.imshow(xs[rand_inds[i]], cmap='gray', 
+              interpolation='none')
+  plt.savefig('check_%s.png' % tag_fname)
+  
+
+def check_omniglot(fname):
   data = np.load(fname)
   for set_ in ['train', 'valid', 'test']:
     print set_, data[set_].shape
 
+  fname_tag = fname.split('.npz')[0]
+
   for set_ in ['train', 'valid', 'test']:
     num_uniques = len(np.unique(data[set_]))
     print set_, num_uniques
-    if num_uniques < 5:
-      print np.unique(data[set_])
-      fig, axes = plt.subplots(4,4)
-      axes = np.ravel(axes)
-      for i, ax in enumerate(axes):
-        ax.imshow(data[set_][i], cmap='gray', 
-                  interpolation='none')
-      plt.savefig('check_%s.png' % (set_))
+    #if num_uniques < 5:
+    #  print np.unique(data[set_])
+    xs = data[set_]
+    plot_subsample(xs, '%s-%s' % (fname_tag, set_))
 
 
 if __name__ == '__main__':
@@ -77,9 +130,9 @@ if __name__ == '__main__':
   #  prep_omniglot()
   #except:
   #  import pdb; pdb.post_mortem()
-  prep_omniglot()   
-  check_omniglot()   
-
-
+  fname = prep_omniglot(sample=True)   
+  check_omniglot(fname)   
+  #decipher_omniglot()
+  #decipher_omniglot_target()
 
 
