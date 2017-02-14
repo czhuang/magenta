@@ -132,6 +132,7 @@ def pdb_post_mortem():
       import pdb; pdb.post_mortem()
 
 def estimate_popstats(sv, sess, m, raw_data, encoder, hparams):
+  print 'Estimating population statistics...'
   tfbatchstats, tfpopstats = list(zip(*m.popstats_by_batchstat.items()))
 
   nepochs = 3
@@ -167,7 +168,9 @@ def estimate_popstats(sv, sess, m, raw_data, encoder, hparams):
     moving_average = tfpopstat.eval()
     errors.append(np.sum((moving_average - nppopstat) ** 2))
     tfpopstat.load(nppopstat)
-  print "popstat errors: %s" % " ".join(map(str, errors))
+  #print "popstat errors: %s" % " ".join(map(str, errors))
+  print "average of mean of popstat errors: %s" % str(np.mean(errors[::2]))
+  print "average of variance of popstat errors: %s" % str(np.mean(errors[1::2]))
 
 def run_epoch(supervisor,
               sess,
