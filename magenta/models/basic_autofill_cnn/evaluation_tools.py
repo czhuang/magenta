@@ -31,6 +31,29 @@ tf.app.flags.DEFINE_bool('eval_test_mode', False, 'If in test mode for evaluatio
 class InfiniteLoss(Exception):
   pass
 
+# adapts batch size in response to ResourceExhaustedErrors
+class RobustPredictor(object):
+  def __init__(self, predictor):
+    self.predictor = predictor
+    self.Bmax = np.inf
+    self.factor = 1.5
+
+  def __call__(self, pianoroll, mask):
+    if len(pianoroll) > self.Bmax:
+      return self.bisect(pianoroll, mask)
+    try:
+      return self.predictor(pianoroll, mask)
+    except tf.errors.ResourceExhaustedError:
+      self.Bmax = int(len(pianoroll) / self.factor)
+      print "ResourceExhaustedError on batch of %s, lowering max batch size to %s" % (len(pianoroll), self.Bmax)
+      return self.bisect(pianoroll, mask)
+
+  def bisect(self, pianoroll, mask):
+    i = int(len(pianoroll) / self.factor)
+    return np.concatenate([self(pianoroll[:i], mask[:i]),
+                           self(pianoroll[i:], mask[i:])],
+                          axis=0)
+
 def sem(xs):
   return np.std(xs) / np.sqrt(np.asarray(xs).size)
 
@@ -288,14 +311,18 @@ def evaluation_loop(evaluator, pianorolls, num_crops=5, batch_size=None, eval_da
 
 
 def compute_chordwise_loss_batch(predictor, pianorolls, separate_instruments=True, log_eval_progress=False, **kwargs):
-  def evaluator(xs, t_sofar):
+  predictor = RobustPredictor(predictor)
+
+  def evaluator(pianorolls, t_sofar):
     states = defaultdict(list)
 
-    for x in xs:
-      T, P, I = x.shape
+    for pianoroll in pianorolls:
+      T, P, I = pianoroll.shape
       assert separate_instruments or I == 1
       D = I if separate_instruments else P
       B = T
+
+      xs = np.tile(pianoroll[None], [B, 1, 1, 1])
   
       ts, ds = chordwise_ordering(1, T, D)
       assert ts.shape[1] == 1 and ds.shape[1] == 1
@@ -316,38 +343,37 @@ def compute_chordwise_loss_batch(predictor, pianorolls, separate_instruments=Tru
       mask = np.array(mask)
   
       if log_eval_progress:
-        states['xs'].append(x[None]) 
+        states['xs'].append(xs)
 
-      x_scratch = x.copy()
+      xs_scratch = xs.copy()
   
       # we can't parallelize within the frame, as we need the predictions of some of the other
       # instruments. Hence we outer loop over the instruments and parallelize across frames.
       for d_idx in range(D):
         # call out to the model to get predictions for the first instrument at each time step
-        # TODO: np.ones thing here just does explicit broadcasting/tiling, clarify
-        p = predictor(x_scratch[None] * np.ones(mask.shape[:1])[:, None, None, None], mask)
+        p = predictor(xs_scratch, mask)
   
         # write in predictions and update mask
         t, d = ts[d_idx::D], ds[d_idx::D]
         if separate_instruments:
-          x_scratch[t, :, d] = np.eye(P)[np.argmax(p[np.arange(B), t, :, d], axis=1)]
+          xs_scratch[np.arange(B), t, :, d] = np.eye(P)[np.argmax(p[np.arange(B), t, :, d], axis=1)]
           mask[np.arange(B), t, :, d] = 0
         else:
-          x_scratch[t, d, :] = p[np.arange(B), t, d, :] > 0.5
+          xs_scratch[np.arange(B), t, d, :] = p[np.arange(B), t, d, :] > 0.5
           mask[np.arange(B), t, d, :] = 0
         # every example in the batch sees one frame more than the previous
         assert np.allclose((1 - mask).sum(axis=(1, 2, 3)),
-                           [(k * D + 1) * P for k in range(mask.shape[0])])
+                           [(k * D + d_idx + 1) * P for k in range(mask.shape[0])])
   
         # in both cases, loss is a vector over batch examples
         if separate_instruments:
           # batched loss at time/instrument pair, summed over pitches
-          loss = -np.where(x[None, t, :, d],
+          loss = -np.where(xs[np.arange(B), t, :, d],
                            np.log(p[np.arange(B), t, :, d]),
                            0).sum(axis=1)
         else:
           # batched loss at time/pitch pair, single instrument
-          loss = -np.where(x[None, t, d, 0], 
+          loss = -np.where(xs[np.arange(B), t, d, 0], 
                            np.log(p[np.arange(B), t, d, 0]), 
                            np.log(1 - p[np.arange(B), t, d, 0]))
     
@@ -360,7 +386,7 @@ def compute_chordwise_loss_batch(predictor, pianorolls, separate_instruments=Tru
           states["step"].append((t, d)) 
           states["loss"].append(loss) 
           states["predictions"].append(p)
-          states["xs_scratch"].append(x_scratch[None].copy())
+          states["xs_scratch"].append(xs_scratch.copy())
           states["mask"].append(mask.copy())
 
         yield loss, (t, d, None), states
