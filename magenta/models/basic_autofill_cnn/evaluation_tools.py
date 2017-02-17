@@ -288,6 +288,86 @@ def evaluation_loop(evaluator, pianorolls, num_crops=5, batch_size=None, eval_da
   return eval_stats
 
 
+def compute_chordwise_loss_batch(predictor, pianorolls, separate_instruments=True):
+  def evaluator(xs, t_sofar):
+    states = defaultdict(list)
+
+    for x in xs:
+      T, P, I = x.shape
+      assert separate_instruments or I == 1
+      D = I if separate_instruments else P
+      B = T * D
+  
+      ts, ds = chordwise_ordering(1, T, D)
+      ts, ds = ts[:t_sofar * D], ds[:t_sofar * D]
+  
+      # set up sequence of masks to predict the first (according to ordering) instrument for each frame
+      mask = []
+      mask_scratch = np.ones([T, P, I], dtype=np.float32)
+      for j, (t, d) in enumerate(zip(ts, ds)):
+        if j % D != 0:
+          continue
+    
+        assert t.size == 1
+        assert d.size == 1
+        t, d = int(t), int(d)
+  
+        mask.append(mask_scratch.copy())
+        # for predicting the next (according to ordering) frame, unmask the entire current frame
+        mask_scratch[t, :, :] = 0
+      del mask_scratch
+      mask = np.array(mask)
+  
+      if log_eval_progress:
+        states['xs'].append(x[None]) 
+
+      x_scratch = x.copy()
+  
+      # we can't parallelize within the frame, as we need the predictions of some of the other
+      # instruments. Hence we outer loop over the instruments and parallelize across frames.
+      for d_idx in range(D):
+        # call out to the model to get predictions for the first instrument at each time step
+        # TODO: np.ones thing here just does explicit broadcasting/tiling, clarify
+        p = predictor(x_scratch[None] * np.ones(mask.shape[:1])[:, None, None, None], mask)
+  
+        # write in predictions and update mask
+        t, d = ts[d_idx::D], ds[d_idx::D]
+        if separate_instruments:
+          x_scratch[None, t, :, d] = np.eye(P)[np.argmax(p[np.arange(B), t, :, d], axis=1)]
+          mask[np.arange(B), t, :, d] = 0
+        else:
+          x_scratch[None, t, d, :] = p[np.arange(B), t, d, :] > 0.5
+          mask[np.arange(B), t, d, :] = 0
+        assert np.unique(mask.sum(axis=(1, 2, 3))).size == 1
+  
+        # in both cases, loss is a vector over batch examples
+        if separate_instruments:
+          # batched loss at time/instrument pair, summed over pitches
+          loss = -np.where(x[None, t, :, d],
+                           np.log(p[np.arange(B), t, :, d]),
+                           0).sum(axis=1)
+        else:
+          # batched loss at time/pitch pair, single instrument
+          loss = -np.where(x[None, t, d, 0], 
+                           np.log(p[np.arange(B), t, d, 0]), 
+                           np.log(1 - p[np.arange(B), t, d, 0]))
+    
+        # at the end we take the mean of the losses. multiply by D because we want to sum over the D
+        # axis (instruments or pitches), not average.
+        loss *= D
+
+        # Log states.
+        if log_eval_progress:
+          states["step"].append((t, d)) 
+          states["loss"].append(loss) 
+          states["predictions"].append(p)
+          states["xs_scratch"].append(x_scratch[None].copy())
+          states["mask"].append(mask.copy())
+
+        yield loss, (t, d, None), states
+      assert np.allclose(mask[-1], 0)
+  return evaluation_loop(evaluator, pianorolls, **kwargs)
+
 def compute_chordwise_loss(predictor, pianorolls, convnet_len, eval_len,
                            chronological=False, chronological_margin=0, 
                            pitch_chronological=False,
