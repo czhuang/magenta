@@ -210,10 +210,9 @@ def compute_greedy_notewise_loss(wrapped_model, pianorolls, sign):
   return losses
 
 
-def evaluation_loop(evaluator, pianorolls, num_crops=5, batch_size=None, eval_data=None, eval_fpath=None, chronological=None, convnet_len=None, log_eval_progress=None, **kwargs):
+def evaluation_loop(evaluator, pianorolls, num_crops=5, batch_size=None, eval_data=None, eval_fpath=None, chronological=None, log_eval_progress=None, **kwargs):
   assert batch_size is not None
   assert chronological is not None
-  assert convnet_len is not None
   assert eval_fpath is not None 
   assert log_eval_progress is not None
 
@@ -288,7 +287,7 @@ def evaluation_loop(evaluator, pianorolls, num_crops=5, batch_size=None, eval_da
   return eval_stats
 
 
-def compute_chordwise_loss_batch(predictor, pianorolls, separate_instruments=True):
+def compute_chordwise_loss_batch(predictor, pianorolls, separate_instruments=True, log_eval_progress=False, **kwargs):
   def evaluator(xs, t_sofar):
     states = defaultdict(list)
 
@@ -296,10 +295,12 @@ def compute_chordwise_loss_batch(predictor, pianorolls, separate_instruments=Tru
       T, P, I = x.shape
       assert separate_instruments or I == 1
       D = I if separate_instruments else P
-      B = T * D
+      B = T
   
       ts, ds = chordwise_ordering(1, T, D)
-      ts, ds = ts[:t_sofar * D], ds[:t_sofar * D]
+      assert ts.shape[1] == 1 and ds.shape[1] == 1
+      ts, ds = ts[:, 0], ds[:, 0]
+      ts, ds = ts[t_sofar * D:], ds[t_sofar * D:]
   
       # set up sequence of masks to predict the first (according to ordering) instrument for each frame
       mask = []
@@ -308,10 +309,6 @@ def compute_chordwise_loss_batch(predictor, pianorolls, separate_instruments=Tru
         if j % D != 0:
           continue
     
-        assert t.size == 1
-        assert d.size == 1
-        t, d = int(t), int(d)
-  
         mask.append(mask_scratch.copy())
         # for predicting the next (according to ordering) frame, unmask the entire current frame
         mask_scratch[t, :, :] = 0
@@ -333,12 +330,14 @@ def compute_chordwise_loss_batch(predictor, pianorolls, separate_instruments=Tru
         # write in predictions and update mask
         t, d = ts[d_idx::D], ds[d_idx::D]
         if separate_instruments:
-          x_scratch[None, t, :, d] = np.eye(P)[np.argmax(p[np.arange(B), t, :, d], axis=1)]
+          x_scratch[t, :, d] = np.eye(P)[np.argmax(p[np.arange(B), t, :, d], axis=1)]
           mask[np.arange(B), t, :, d] = 0
         else:
-          x_scratch[None, t, d, :] = p[np.arange(B), t, d, :] > 0.5
+          x_scratch[t, d, :] = p[np.arange(B), t, d, :] > 0.5
           mask[np.arange(B), t, d, :] = 0
-        assert np.unique(mask.sum(axis=(1, 2, 3))).size == 1
+        # every example in the batch sees one frame more than the previous
+        assert np.allclose((1 - mask).sum(axis=(1, 2, 3)),
+                           [(k * D + 1) * P for k in range(mask.shape[0])])
   
         # in both cases, loss is a vector over batch examples
         if separate_instruments:
@@ -366,7 +365,7 @@ def compute_chordwise_loss_batch(predictor, pianorolls, separate_instruments=Tru
 
         yield loss, (t, d, None), states
       assert np.allclose(mask[-1], 0)
-  return evaluation_loop(evaluator, pianorolls, **kwargs)
+  return evaluation_loop(evaluator, pianorolls, log_eval_progress=log_eval_progress, **kwargs)
 
 def compute_chordwise_loss(predictor, pianorolls, convnet_len, eval_len,
                            chronological=False, chronological_margin=0, 
@@ -547,6 +546,7 @@ def run(pianorolls=None, wrapped_model=None, sample_name=''):
 
   fn = dict(notewise=compute_notewise_loss,
             chordwise=compute_chordwise_loss,
+            chordwise_batch=compute_chordwise_loss_batch,
             imagewise=ft.partial(compute_notewise_loss, imagewise=True),
             mingreedy_notewise=compute_mingreedy_notewise_loss,
             maxgreedy_notewise=compute_maxgreedy_notewise_loss)[FLAGS.kind]
@@ -658,16 +658,17 @@ def run(pianorolls=None, wrapped_model=None, sample_name=''):
       return p
 
     mean_loss, sem_loss, N = fn(
-       predictor, pianorolls, convnet_len, eval_len, 
-       num_crops=FLAGS.num_crops, 
-       eval_data=eval_data,
-       separate_instruments=hparams.separate_instruments,
-       batch_size=eval_batch_size, eval_fpath=eval_fpath,
-       chronological=FLAGS.chronological, 
-       chronological_margin=FLAGS.chronological_margin,
-       pitch_chronological=FLAGS.pitch_chronological,
-       log_eval_progress=FLAGS.log_eval_progress,
-       pad_mode=FLAGS.pad_mode)
+        predictor, pianorolls,
+        convnet_len=convnet_len, eval_len=eval_len, 
+        num_crops=FLAGS.num_crops, 
+        eval_data=eval_data,
+        separate_instruments=hparams.separate_instruments,
+        batch_size=eval_batch_size, eval_fpath=eval_fpath,
+        chronological=FLAGS.chronological, 
+        chronological_margin=FLAGS.chronological_margin,
+        pitch_chronological=FLAGS.pitch_chronological,
+        log_eval_progress=FLAGS.log_eval_progress,
+        pad_mode=FLAGS.pad_mode)
   except InfiniteLoss:
     print "infinite loss"
     return np.inf, np.inf, np.inf, wrapped_model, eval_path
