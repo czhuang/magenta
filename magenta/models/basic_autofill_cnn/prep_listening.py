@@ -145,6 +145,13 @@ fpaths = {
 fpaths = {
      'omni-iGibbs-temp1-trained14h': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_392__masker_BernoulliMasker____schedule_YaoSchedule_pmin_1_0__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___1.0_20170213175815_4.92min.npz'}
 
+fpaths = {
+    'omni-NADE-temp1-trainedBinary9h': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=sequential_Gibbs_num_steps_0__masker_None__schedule_None__sampler_None__1.0_20170214122021_4.20min.npz'}
+
+fpaths = {
+    'omni-iGibbs-temp1-trainedBinary9h': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___1.0_20170214124030_6.09min.npz'}
+
+
 
 ARE_IMAGES = True
 if ARE_IMAGES:
@@ -202,7 +209,7 @@ for i,  (method, fpath) in enumerate(fpaths.items()):
   assert pianoroll_steps.ndim == 5
 
   STEPS_WANTED = [-1] + range(len(pianoroll_steps))
-  STEPS_WANTED = [-1]
+  STEPS_WANTED = [-1] + range(1, len(pianoroll_steps), 3)
   
   # Choose which indices in the batch to inspect. 
   if NUM_SAMPLES == 100:

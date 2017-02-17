@@ -34,7 +34,6 @@ bazel build basic_autofill_cnn_train
 --save_model_secs 30 \
 --use_pop_stats True \
 --pad False \
---run_id test 
 
 bazel build evaluation_tools
 
@@ -50,5 +49,5 @@ bazel build evaluation_tools
 --num_crops 1 \
 --evaluation_batch_size 1000 \
 --pad_mode none \
---use_pop_stats False \
+--use_pop_stats True \
 --eval_test_mode False
