@@ -392,7 +392,7 @@ def main(unused_argv):
     # Save hparam configs.
     logdir = os.path.join(FLAGS.run_dir, hparams.log_subdir_str)
     if not os.path.exists(logdir):
-      os.mkdir(logdir)
+      os.makedirs(logdir)
     config_fpath = os.path.join(logdir, 'config')
     print 'Writing to', config_fpath
     with open(config_fpath, 'w') as p:
