@@ -39,14 +39,14 @@ bazel build basic_autofill_cnn_train
 bazel build evaluation_tools
 
 ../../../bazel-bin/magenta/models/basic_autofill_cnn/evaluation_tools \
---checkpoint_dir ~/tf_logs_sigmoids/DeepStraightConvSpecs-64-128-start_fs=3_len=64,dataset=bach-16th-priorwork-4_voices,sil=False,lr=0.0625,pad=True,patience=5,quant=0.125,rescale=True,run_id=,sep=True,pop=False,res=1,soft=True,corrupt=0.9,mm=balanced_by_scaling/ \
+--checkpoint_dir ~/tf_logs_sigmoids/DeepStraightConvSpecs-64-128-start_fs=3_len=64,dataset=bach-16th-priorwork-4_voices,sil=False,lr=0.0625,pad=True,patience=10,quant=0.125,rescale=True,run_id=,sep=True,pop=True,res=1,soft=True,corrupt=0.9,mm=balanced_by_scaling/ \
 --kind chordwise \
 --fold valid \
 --chronological True \
 --chronological_margin 0 \
 --pitch_chronological False \
 --num_crops 1 \
---crop_piece_len 0 \
+--convnet_len 0 \
 --eval_len 0 \
 --evaluation_batch_size 100 \
 --pad_mode wrap \
