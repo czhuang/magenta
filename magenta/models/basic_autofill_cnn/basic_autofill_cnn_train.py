@@ -163,14 +163,26 @@ def estimate_popstats(sv, sess, m, raw_data, encoder, hparams):
       totalweight += 1
 
   nppopstats = [total / totalweight for total in totalnpbatchstats]
-  errors = []
-  for tfpopstat, nppopstat in zip(tfpopstats, nppopstats):
+
+  # keep an eye on them stats
+  mean_errors = []
+  stdev_errors = []
+  for j, (tfpopstat, nppopstat) in enumerate(zip(tfpopstats, nppopstats)):
     moving_average = tfpopstat.eval()
-    errors.append(np.sum((moving_average - nppopstat) ** 2))
+    if j % 2 == 0:
+      mean_errors.append(abs(moving_average - nppopstat))
+    else:
+      stdev_errors.append(abs(np.sqrt(moving_average) - np.sqrt(nppopstat)))
+  def flatmean(xs):
+    return np.mean(np.concatenate([x.flatten() for x in xs]))
+  print ("average of pop mean/stdev errors: %g %g"
+         % (flatmean(mean_errors), flatmean(stdev_errors)))
+  print ("average of batch mean/stdev: %g %g"
+         % (flatmean(nppopstats[0::2]),
+            flatmean([np.sqrt(ugh) for ugh in nppopstats[1::2]])))
+
+  for j, (tfpopstat, nppopstat) in enumerate(zip(tfpopstats, nppopstats)):
     tfpopstat.load(nppopstat)
-  #print "popstat errors: %s" % " ".join(map(str, errors))
-  print "average of mean of popstat errors: %s" % str(np.mean(errors[::2]))
-  print "average of variance of popstat errors: %s" % str(np.mean(errors[1::2]))
 
 def run_epoch(supervisor,
               sess,
