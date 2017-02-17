@@ -39,6 +39,8 @@ def store(losses, position, path):
   np.savez_compressed(path, losses=losses, current_position=position)
 
 def report(losses, final=False, tag=''):
+  #loss_mean = np.mean(losses)
+  losses = np.concatenate(losses, axis=0)
   loss_mean = np.mean(losses)
   loss_sem = sem(losses)
   print "%.5f < %.5f < %.5f < %.5f < %.5g" % (np.min(losses), np.percentile(losses, 25), np.percentile(losses, 50), np.percentile(losses, 75), np.max(losses))
@@ -47,7 +49,9 @@ def report(losses, final=False, tag=''):
  
  
 def batches(xs, k):
-  assert len(xs) % k == 0
+  #assert len(xs) % k == 0
+  if len(xs) % k != 0:
+    print 'WARNING: # of data points (%d) is not divisible by %d' % (len(xs), k)
   for a in range(0, len(xs), k):
     yield xs[a:a+k]
 
@@ -527,7 +531,6 @@ def run(pianorolls=None, wrapped_model=None, sample_name=''):
   if eval_batch_size != hparams.batch_size:
     print 'Using batch size %r for evaluation instead of %r' % (
         eval_batch_size, hparams.batch_size)
-  print 'eval_batch_size', eval_batch_size
   
   if FLAGS.eval_test_mode:
     eval_batch_size = N = 4
@@ -538,6 +541,10 @@ def run(pianorolls=None, wrapped_model=None, sample_name=''):
     lengths = [len(roll) for roll in pianorolls]
     eval_len = max(lengths)
     assert eval_len == T
+    # Try out non-divisible batch size.
+    eval_batch_size = 3
+
+  print 'resetting eval_batch_size', eval_batch_size
 
   # Get folder for previous runs for this config.
   dir_name = '%s-%s-num_rolls=%r-num_crops=%r-crop_len=%r-eval_len=%r--eval_bs=%r-chrono=%s-margin-%s-pitch_chrono=%s-use_pop_stats=%s-eval_test_mode=%r' % (
