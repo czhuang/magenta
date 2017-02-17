@@ -150,6 +150,9 @@ def make_data_feature_maps(sequences, hparams, encoder, start_crop_index=None):
     else:
       # For images, no encoder, already in pianoroll-like form.
       pianoroll = sequence
+      if hparams.dataset == 'OMNIGLOT':
+        #print 'binarizing images', pianoroll.shape
+        pianoroll = np.random.random(pianoroll.shape) < pianoroll
     try:
       if hparams.pad:
         # TODO: Padding function does not support augment_by_transposing yet.
@@ -251,7 +254,7 @@ DATASET_PARAMS = {
                     'path': '/data/lisatmp4/BinaryMNIST'},
 
     'OMNIGLOT': {'crop_piece_len': 28, 'num_pitches': 28,
-                 'path': '/data/lisatmp4/huangche/data/omniglot-all_sampled_binarization.npz'}
+                 'path': '/data/lisatmp4/huangche/data/omniglot-all_real.npz'}
 }
 
 IMAGE_DATASETS = ['MNIST', 'BinaryMNIST', 'OMNIGLOT']
@@ -263,6 +266,17 @@ def get_data_as_pianorolls(basepath, hparams, fold):
   if hparams.dataset not in IMAGE_DATASETS:
     assert encoder.quantization_level == hparams.quantization_level
     return [encoder.encode(seq) for seq in seqs]
+
+  if hparams.dataset == 'OMNIGLOT':
+    prev_rng_state = np.random.get_state()
+    np.random.seed(123)
+    
+    seqs = np.asarray(seqs)
+    print 'binarizing images', seqs.shape
+    seqs = np.random.random(seqs.shape) < seqs
+
+    # restore main random stream
+    np.random.set_state(prev_rng_state)
   return seqs
 
 
