@@ -251,7 +251,7 @@ DATASET_PARAMS = {
                     'path': '/data/lisatmp4/BinaryMNIST'},
 
     'OMNIGLOT': {'crop_piece_len': 28, 'num_pitches': 28,
-                 'path': '/data/lisatmp4/huangche/data/omniglot-only_valid_binarized.npz'}
+                 'path': '/data/lisatmp4/huangche/data/omniglot-all_sampled_binarization.npz'}
 }
 
 IMAGE_DATASETS = ['MNIST', 'BinaryMNIST', 'OMNIGLOT']
