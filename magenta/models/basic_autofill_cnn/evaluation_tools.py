@@ -1,5 +1,5 @@
 """Evaluations for comparing against prior work."""
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 import os, sys, traceback
 import time
 import numpy as np
@@ -26,7 +26,7 @@ tf.app.flags.DEFINE_bool('log_eval_progress', False, 'Store the intermediate int
 tf.app.flags.DEFINE_string('pad_mode', None, 'Mode for padding shorter sequences. Options are "none", "zeros" or "wrap".')
 tf.app.flags.DEFINE_integer('eval_len', None, '(Crop) length of piece to evaluate.  0 means evaluate on whole piece.')
 tf.app.flags.DEFINE_bool('eval_test_mode', False, 'If in test mode for evaluation.')
-
+tf.app.flags.DEFINE_bool('load_previous_results', True, 'Load evaluation results if they exist.')
 
 class InfiniteLoss(Exception):
   pass
@@ -54,21 +54,25 @@ class RobustPredictor(object):
                            self(pianoroll[i:], mask[i:])],
                           axis=0)
 
-def sem(xs):
-  return np.std(xs) / np.sqrt(np.asarray(xs).size)
+def sem(xs, adjust_ratio):
+  #return np.std(xs) / np.sqrt(np.asarray(xs).size)
+  n = np.asarray(xs).size / adjust_ratio
+  return np.std(xs) / np.sqrt(n), n
 
 def store(losses, position, path):
   print 'Storing losses to', path
   np.savez_compressed(path, losses=losses, current_position=position)
 
-def report(losses, final=False, tag=''):
+def report(losses, adjust_ratio=None, final=False, tag=''):
+  assert adjust_ratio is not None and isinstance(adjust_ratio, int)
   #loss_mean = np.mean(losses)
   losses = np.concatenate(losses, axis=0)
   loss_mean = np.mean(losses)
-  loss_sem = sem(losses)
+  loss_sem, adjusted_N = sem(losses, adjust_ratio)
+  
   print "%.5f < %.5f < %.5f < %.5f < %.5g" % (np.min(losses), np.percentile(losses, 25), np.percentile(losses, 50), np.percentile(losses, 75), np.max(losses))
-  print "\n\t\t\t\t\t\t\t\t\t\t\t\t%s%.5f+-%.5f \n" % (tag+" FINAL " if final else "", loss_mean, loss_sem)
-  return loss_mean, loss_sem, np.asarray(losses).size
+  print "\n\t\t\t\t\t\t\t\t\t\t\t\t%s%.5f+-%.5f (adjusted_N=%d) \n" % (tag+" FINAL " if final else "", loss_mean, loss_sem, adjusted_N)
+  return loss_mean, loss_sem, adjusted_N
  
  
 def batches(xs, k):
@@ -76,7 +80,7 @@ def batches(xs, k):
   if len(xs) % k != 0:
     print 'WARNING: # of data points (%d) is not divisible by %d' % (len(xs), k)
   for a in range(0, len(xs), k):
-    yield xs[a:a+k]
+    yield xs[a:a+k], tuple(range(a, a+k))
 
 
 def pad(xs, chronological, requested_piece_len, pad_mode):
@@ -247,20 +251,36 @@ def evaluation_loop(evaluator, pianorolls, num_crops=5, batch_size=None, eval_da
     crop_sofar, batch_sofar, t_sofar = 0, 0, 0
   print 'position from last time', crop_sofar, batch_sofar, t_sofar
 
-  intermediates = defaultdict(list)
+  # Adjust N for Standard error of mean.
+  if FLAGS.kind == 'imagewise':
+    if FLAGS.eval_test_mode:
+      adjust_ratio = 28*5
+    else:
+      adjust_ratio = 28*28
+  elif FLAGS.kind == 'chordwise':
+    adjust_ratio = pianorolls[0].shape[-1]
+  elif FLAGS.kind == 'notewise':
+    adjust_ratio = 1
 
+
+  intermediates = defaultdict(list)
+  frame_losses = []
+
+  # Assumes that mini-batches always stay the same.
+  batch_losses = defaultdict(list)
   for ci in range(num_crops)[crop_sofar:]:
     print 'crop idx', ci
-    frame_losses = []
-    for bi, xs in list(enumerate(batches(pianorolls, batch_size)))[batch_sofar:]:
+    bi = batch_sofar
+    for xs, xs_inds in list(batches(pianorolls, batch_size))[batch_sofar:]:
       print 'batch idx, started at this batch', bi, batch_sofar
       start_time = time.time()
       frame_loss = []
       for i, (loss, inds, states) in enumerate(evaluator(xs, t_sofar)):
         if np.isinf(loss).any():
           # report losses before inf just for information
-          report(loss)
+          report(loss, adjust_ratio)
           raise InfiniteLoss()
+        batch_losses[xs_inds].append(loss)
         losses.append(loss)
         frame_loss.append(loss)
         ts, ds, end_of_frame = inds
@@ -277,9 +297,9 @@ def evaluation_loop(evaluator, pianorolls, num_crops=5, batch_size=None, eval_da
         if end_of_frame:
           print 'time per frame: %.2f' % (time.time() - start_time)
           print 'Frame loss:'
-          frame_mean, frame_sem, n = report(frame_loss)
+          frame_mean, frame_sem, n = report(frame_loss, adjust_ratio)
           print 'Total loss:'
-          report(losses)
+          report(losses, adjust_ratio)
           
           frame_losses.append([t_print, frame_mean, frame_sem])
           frame_loss = []
@@ -290,24 +310,64 @@ def evaluation_loop(evaluator, pianorolls, num_crops=5, batch_size=None, eval_da
         if states is not None:
           for key, vals in states.iteritems():
             intermediates[key].extend(vals)         
-      report(losses)
+      report(losses, adjust_ratio)
       store(losses=losses, position=[ci, bi+1, 0], path=eval_fpath)
     # After running possbily less # of batches b/c continuing from last logged point, reset to 0.
     batch_sofar = 0
 
   # Report how loss progresses over timestep
   print 'chronological', chronological
-  for t, mean, sem in frame_losses:
-    print '%d: %.5f+-%.5f' % (t, mean, sem)
+  for t, mean, sem_ in frame_losses:
+    print '%d: %.5f+-%.5f' % (t, mean, sem_)
 
-  eval_stats = report(losses, final=True, tag=eval_fpath)
+  eval_stats = report(losses, adjust_ratio, final=True, tag=eval_fpath)
+
+  # Report LL of each datapoint, num_crops
+  xs_lls = []
+  for batch_inds, losses in batch_losses.iteritems():
+    # rows are pixels and multiple orderings, columns are examples
+    # so need to transpose
+    xs_losses = np.asarray(losses).T
+    shape = xs_losses.shape
+    print 'xs_losses', xs_losses.shape
+    assert shape[-1] % num_crops == 0.
+    if FLAGS.eval_test_mode:
+      assert shape[-1] % 5*28 == 0.
+      assert shape[-1] % 5*28 * num_crops == 0.
+    else:
+      assert shape[-1] % 28*28 == 0.
+      assert shape[-1] % 28*28* num_crops == 0.
+    xs_ll = np.mean(xs_losses, axis=1) 
+    # sem returns SEM and adjusted_N
+    xs_sems_Ns = [sem(xs_loss, adjust_ratio) for xs_loss in xs_losses]
+    xs_sems = [entry[0] for entry in xs_sems_Ns]  
+    
+    # Could have an incomplete batch.
+    #assert len(batch_inds) == len(xs_ll)
+    assert len(xs_sems) == len(xs_ll)
+    for ii, ll in enumerate(xs_ll):
+      xs_lls.append([batch_inds[ii], ll, xs_sems[ii]])
+
+  # Rank examples by LL.
+  ranked_xs_lls = sorted(xs_lls, key=lambda x: x[1])
+  ranked_xs = [pianorolls[ranked_info[0]] for ranked_info in ranked_xs_lls]
+  assert len(ranked_xs) == len(pianorolls)
+
+  # Store ranking and LL. 
+  eval_path, fname = os.path.split(eval_fpath)
+  run_id = fname.split('.')[0]
+  
+  fpath = os.path.join(eval_path, run_id + '-ranking_LL' + ".npz")
+  print "Writing to", fpath  
+  np.savez_compressed(fpath, ranked_lls=ranked_xs_lls, ranked_xs=ranked_xs)
 
   # Store intermediates
-  fpath = os.path.join(os.path.dirname(eval_fpath), 'intermediates' + ".npz")
+  fpath = os.path.join(os.path.dirname(eval_fpath), run_id + '-intermediates' + ".npz")
   print "Writing to", fpath  
   np.savez_compressed(fpath, **intermediates)
 
-  return eval_stats
+  mean_loss, sem_loss, N = eval_stats
+  return mean_loss, sem_loss, N, ranked_xs_lls
 
 
 def compute_chordwise_loss_batch(predictor, pianorolls, separate_instruments=True, log_eval_progress=False, **kwargs):
@@ -642,6 +702,9 @@ def run(pianorolls=None, wrapped_model=None, sample_name=''):
     eval_batch_size = N = 4
     convnet_len = T = 5
     pianorolls = pianorolls[:N]
+    #if FLAGS.kind == 'imagewise':
+    #  pianorolls = [roll[:T, :T] for roll in pianorolls]
+    #else:
     pianorolls = [roll[:T] for roll in pianorolls]
     print 'WARNING: testing so only using %d examples' % (len(pianorolls))
     lengths = [len(roll) for roll in pianorolls]
@@ -666,7 +729,7 @@ def run(pianorolls=None, wrapped_model=None, sample_name=''):
   print eval_fpath
   if not os.path.exists(eval_path):
     os.mkdir(eval_path)
-  if os.path.exists(eval_fpath):
+  if FLAGS.load_previous_results and os.path.exists(eval_fpath):
     print '\nLoading previous log \n'
     print eval_fpath
     eval_data = np.load(eval_fpath)
@@ -683,7 +746,7 @@ def run(pianorolls=None, wrapped_model=None, sample_name=''):
       p = sess.run(model.predictions, feed_dict={model.input_data: input_data})
       return p
 
-    mean_loss, sem_loss, N = fn(
+    mean_loss, sem_loss, N, ranked_lls = fn(
         predictor, pianorolls,
         convnet_len=convnet_len, eval_len=eval_len, 
         num_crops=FLAGS.num_crops, 
@@ -699,7 +762,7 @@ def run(pianorolls=None, wrapped_model=None, sample_name=''):
     print "infinite loss"
     return np.inf, np.inf, np.inf, wrapped_model, eval_path
   print "%s done" % hparams.model_name
-  return mean_loss, sem_loss, N, wrapped_model, eval_path
+  return mean_loss, sem_loss, N, ranked_lls, wrapped_model, eval_path
 
 def main(argv):
   try:
@@ -708,7 +771,8 @@ def main(argv):
     exc_type, exc_value, exc_traceback = sys.exc_info()
     if not isinstance(exc_value, KeyboardInterrupt):
       traceback.print_exception(exc_type, exc_value, exc_traceback)
-      import pdb; pdb.post_mortem()
+  import pdb; pdb.post_mortem()
+
 
 
 if __name__ == '__main__':
