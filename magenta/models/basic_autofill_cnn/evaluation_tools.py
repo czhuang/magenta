@@ -312,6 +312,8 @@ def evaluation_loop(evaluator, pianorolls, num_crops=5, batch_size=None, eval_da
             intermediates[key].extend(vals)         
       report(losses, adjust_ratio)
       store(losses=losses, position=[ci, bi+1, 0], path=eval_fpath)
+      # Update batch index.
+      bi += 1
     # After running possbily less # of batches b/c continuing from last logged point, reset to 0.
     batch_sofar = 0
 
