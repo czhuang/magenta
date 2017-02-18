@@ -391,7 +391,7 @@ def evaluation_loop(evaluator, pianorolls, num_crops=5, batch_size=None, eval_da
   return mean_loss, sem_loss, N, ranked_xs_lls
 
 
-def compute_chordwise_loss_batch(predictor, pianorolls, separate_instruments=True, log_eval_progress=False, **kwargs):
+def compute_chordwise_loss_batch(predictor, pianorolls, separate_instruments=True, log_eval_progress=False, chronological=False, **kwargs):
   predictor = RobustPredictor(predictor)
 
   def evaluator(pianorolls, t_sofar):
@@ -405,7 +405,7 @@ def compute_chordwise_loss_batch(predictor, pianorolls, separate_instruments=Tru
 
       xs = np.tile(pianoroll[None], [B, 1, 1, 1])
   
-      ts, ds = chordwise_ordering(1, T, D)
+      ts, ds = chordwise_ordering(1, T, D, chronological=chronological)
       assert ts.shape[1] == 1 and ds.shape[1] == 1
       ts, ds = ts[:, 0], ds[:, 0]
       ts, ds = ts[t_sofar * D:], ds[t_sofar * D:]
