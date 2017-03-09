@@ -27,6 +27,7 @@ tf.app.flags.DEFINE_string('pad_mode', None, 'Mode for padding shorter sequences
 tf.app.flags.DEFINE_integer('eval_len', None, '(Crop) length of piece to evaluate.  0 means evaluate on whole piece.')
 tf.app.flags.DEFINE_bool('eval_test_mode', False, 'If in test mode for evaluation.')
 tf.app.flags.DEFINE_bool('load_previous_results', True, 'Load evaluation results if they exist.')
+tf.app.flags.DEFINE_bool('subsample_mode', 'False', 'Sample a subset of 100 for given dataset.')
 
 class InfiniteLoss(Exception):
   pass
@@ -54,21 +55,45 @@ class RobustPredictor(object):
                            self(pianoroll[i:], mask[i:])],
                           axis=0)
 
-def sem(xs, adjust_ratio):
-  #return np.std(xs) / np.sqrt(np.asarray(xs).size)
-  n = np.asarray(xs).size / adjust_ratio
-  return np.std(xs) / np.sqrt(n), n
+def sem(xs, *args, **kwargs):
+  if FLAGS.kind == 'imagewise':
+    if FLAGS.eval_test_mode:
+      unit_sz = 28*5
+    else:
+      unit_sz = 28*28
+  elif FLAGS.kind == 'chordwise':
+    unit_sz = pianorolls[0].shape[-1]
+  elif FLAGS.kind == 'notewise':
+    unit_sz = 1
+  #print 'losses shape', xs.shape
+  # num_units refers to num of images, or num of frames for music.
+  if xs.ndim == 1:
+    xs = xs[:, None]
+  num_point_evals, num_units = xs.shape
+  num_orders = num_point_evals / unit_sz
+  unit_losses = np.zeros((num_orders, num_units))
+  for i in range(num_orders):
+    unit_losses_by_pixels = xs[i*unit_sz:(i+1)*unit_sz]
+    unit_losses[i, :] = np.mean(unit_losses_by_pixels, axis=0)
+
+  n = unit_losses.size
+  computed_sem = np.std(unit_losses)/ np.sqrt(n)
+  return computed_sem, n
+
+def sem_raw(xs):
+  return np.std(xs)/np.sqrt(xs.size), xs.size
+
 
 def store(losses, position, path):
   print 'Storing losses to', path
+  losses = np.concatenate(losses, axis=1)
   np.savez_compressed(path, losses=losses, current_position=position)
 
-def report(losses, adjust_ratio=None, final=False, tag=''):
-  assert adjust_ratio is not None and isinstance(adjust_ratio, int)
-  #loss_mean = np.mean(losses)
-  losses = np.concatenate(losses, axis=0)
+
+def report(losses, final=False, tag=''):
+  losses = np.concatenate(losses, axis=1)
   loss_mean = np.mean(losses)
-  loss_sem, adjusted_N = sem(losses, adjust_ratio)
+  loss_sem, adjusted_N = sem(losses)
   
   print "%.5f < %.5f < %.5f < %.5f < %.5g" % (np.min(losses), np.percentile(losses, 25), np.percentile(losses, 50), np.percentile(losses, 75), np.max(losses))
   print "\n\t\t\t\t\t\t\t\t\t\t\t\t%s%.5f+-%.5f (adjusted_N=%d) \n" % (tag+" FINAL " if final else "", loss_mean, loss_sem, adjusted_N)
@@ -251,38 +276,30 @@ def evaluation_loop(evaluator, pianorolls, num_crops=5, batch_size=None, eval_da
     crop_sofar, batch_sofar, t_sofar = 0, 0, 0
   print 'position from last time', crop_sofar, batch_sofar, t_sofar
 
-  # Adjust N for Standard error of mean.
-  if FLAGS.kind == 'imagewise':
-    if FLAGS.eval_test_mode:
-      adjust_ratio = 28*5
-    else:
-      adjust_ratio = 28*28
-  elif FLAGS.kind == 'chordwise':
-    adjust_ratio = pianorolls[0].shape[-1]
-  elif FLAGS.kind == 'notewise':
-    adjust_ratio = 1
-
-
   intermediates = defaultdict(list)
   frame_losses = []
 
-  # Assumes that mini-batches always stay the same.
-  batch_losses = defaultdict(list)
+  # Assumes that mini-batches always stay in the same order.
+  indexed_batch_losses = defaultdict(list)
   for ci in range(num_crops)[crop_sofar:]:
     print 'crop idx', ci
     bi = batch_sofar
     for xs, xs_inds in list(batches(pianorolls, batch_size))[batch_sofar:]:
       print 'batch idx, started at this batch', bi, batch_sofar
       start_time = time.time()
+      batch_losses = []
       frame_loss = []
+      # Looping through each pixel for images.
       for i, (loss, inds, states) in enumerate(evaluator(xs, t_sofar)):
         if np.isinf(loss).any():
           # report losses before inf just for information
-          report(loss, adjust_ratio)
+          report(loss)
           raise InfiniteLoss()
-        batch_losses[xs_inds].append(loss)
-        losses.append(loss)
+        # Accumulating losses at different granularities.
         frame_loss.append(loss)
+        indexed_batch_losses[xs_inds].append(loss)
+        batch_losses.append(loss)
+
         ts, ds, end_of_frame = inds
         t_print = ts[0] if len(np.unique(ts)) == 1 else -1
         d_print = ds[0] if len(np.unique(ds)) == 1 else -1
@@ -297,9 +314,9 @@ def evaluation_loop(evaluator, pianorolls, num_crops=5, batch_size=None, eval_da
         if end_of_frame:
           print 'time per frame: %.2f' % (time.time() - start_time)
           print 'Frame loss:'
-          frame_mean, frame_sem, n = report(frame_loss, adjust_ratio)
+          frame_mean, frame_sem, n = report(frame_loss)
           print 'Total loss:'
-          report(losses, adjust_ratio)
+          report(losses)
           
           frame_losses.append([t_print, frame_mean, frame_sem])
           frame_loss = []
@@ -310,7 +327,8 @@ def evaluation_loop(evaluator, pianorolls, num_crops=5, batch_size=None, eval_da
         if states is not None:
           for key, vals in states.iteritems():
             intermediates[key].extend(vals)         
-      report(losses, adjust_ratio)
+      losses.append(np.asarray(batch_losses))
+      report(losses)
       store(losses=losses, position=[ci, bi+1, 0], path=eval_fpath)
       # Update batch index.
       bi += 1
@@ -322,26 +340,26 @@ def evaluation_loop(evaluator, pianorolls, num_crops=5, batch_size=None, eval_da
   for t, mean, sem_ in frame_losses:
     print '%d: %.5f+-%.5f' % (t, mean, sem_)
 
-  eval_stats = report(losses, adjust_ratio, final=True, tag=eval_fpath)
+  eval_stats = report(losses, final=True, tag=eval_fpath)
 
   # Report LL of each datapoint, num_crops
   xs_lls = []
-  for batch_inds, losses in batch_losses.iteritems():
+  for batch_inds, xs_losses in indexed_batch_losses.iteritems():
     # rows are pixels and multiple orderings, columns are examples
-    # so need to transpose
-    xs_losses = np.asarray(losses).T
+    xs_losses = np.asarray(xs_losses)
     shape = xs_losses.shape
     print 'xs_losses', xs_losses.shape
-    assert shape[-1] % num_crops == 0.
+    assert shape[0] % num_crops == 0.
     if FLAGS.eval_test_mode:
-      assert shape[-1] % 5*28 == 0.
-      assert shape[-1] % 5*28 * num_crops == 0.
+      assert shape[0] % 5*28 == 0.
+      assert shape[0] % 5*28 * num_crops == 0.
     else:
-      assert shape[-1] % 28*28 == 0.
-      assert shape[-1] % 28*28* num_crops == 0.
-    xs_ll = np.mean(xs_losses, axis=1) 
+      assert shape[0] % 28*28 == 0.
+      assert shape[0] % 28*28* num_crops == 0.
+    xs_ll = np.mean(xs_losses, axis=0) 
     # sem returns SEM and adjusted_N
-    xs_sems_Ns = [sem(xs_loss, adjust_ratio) for xs_loss in xs_losses]
+    # lo
+    xs_sems_Ns = [sem(xs_losses[:, i]) for i in range(xs_losses.shape[1])]
     xs_sems = [entry[0] for entry in xs_sems_Ns]  
     
     # Could have an incomplete batch.
@@ -700,6 +718,24 @@ def run(pianorolls=None, wrapped_model=None, sample_name=''):
     print 'Using batch size %r for evaluation instead of %r' % (
         eval_batch_size, hparams.batch_size)
   
+
+  # Get folder for previous runs for this config.
+  dir_name = '%s-%s-num_rolls=%r-num_crops=%r-crop_len=%r-eval_len=%r--eval_bs=%r-chrono=%s-margin-%s-pitch_chrono=%s-use_pop_stats=%s-eval_test_mode=%r-subsample_mode=%r' % (
+      FLAGS.fold, FLAGS.kind, B, FLAGS.num_crops, 
+      convnet_len, eval_len, eval_batch_size, 
+      FLAGS.chronological, FLAGS.chronological_margin, 
+      FLAGS.pitch_chronological, hparams.use_pop_stats, FLAGS.eval_test_mode, FLAGS.subsample_mode)
+  print 'dir_name:', dir_name
+    
+  if FLAGS.subsample_mode:
+    eval_batch_size = N = 100
+    include_inds = np.random.choice(len(pianorolls), size=100)
+    pianorolls = [pianorolls[ind] for ind in include_inds]
+
+    print 'MESSAGE: subsample mode'
+    lengths = [len(roll) for roll in pianorolls]
+    eval_len = max(lengths)
+
   if FLAGS.eval_test_mode:
     eval_batch_size = N = 4
     convnet_len = T = 5
@@ -773,7 +809,7 @@ def main(argv):
     exc_type, exc_value, exc_traceback = sys.exc_info()
     if not isinstance(exc_value, KeyboardInterrupt):
       traceback.print_exception(exc_type, exc_value, exc_traceback)
-  import pdb; pdb.post_mortem()
+    import pdb; pdb.post_mortem()
 
 
 
