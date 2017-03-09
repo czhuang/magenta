@@ -203,33 +203,50 @@ def rolls_to_midi(pianorolls, code, step_str):
     
 
 def plot_rolls(pianorolls, ranked_lls=None, m=10, n=10, 
-               are_images=True, output_fpath=None, method=None):
+               are_images=True, output_fpath=None, method=None,
+               original=False):
     fig, axes = plt.subplots(m, n)
     if PLOT_FLAT:
       axes = np.ravel(axes)
     print 'axes.shape', axes.shape
 
-    num_subplots = m * n   
+    num_subplots = m * n if len(pianorolls) >= m * n else len(pianorolls) 
+    assert num_subplots != 0
+
     for count_idx in range(num_subplots):
     #for count_idx, lls_info in enumerate(ranked_lls[:num_subplots]):
       if ranked_lls is not None:
-        rank_idx, mean, sem, adjusted_N = ranked_lls[count_idx]
-        print rank_idx, '%.2f+-%.2f (adjusted_N=%d)' % (
+        rank_info = ranked_lls[count_idx]
+        if len(ranked_lls[count_idx]) == 3:
+          rank_idx, mean, sem = rank_info
+        else:
+          rank_idx, mean, sem, adjusted_N = rank_info
+          print rank_idx, '%.2f+-%.2f (adjusted_N=%d)' % (
             mean, sem, adjusted_N)
       # In the ranked case, the pianorolls are already ranked.
       pianoroll = pianorolls[count_idx]
 
       assert 0 <= pianoroll.min()
       assert pianoroll.max() <= 1
-      print 'pianoroll.shape', pianoroll.shape
+      #print 'pianoroll.shape', pianoroll.shape
 
       if SEPARATE_INSTRUMENTS:
         assert step_str != '-1' or np.allclose(pianoroll.sum(axis=1), 1)
+      
       if are_images:
         pianoroll = np.reshape(pianoroll, (-1, 28))
+        aspect = "equal"
+        if 'omni' in method.lower():
+          print 'THIS is an OMNIGLOT character'
+          pianoroll = np.rot90(pianoroll)
+          #pianoroll = pianoroll.T
+          pass
+        else:
+          pianoroll = np.rot90(pianoroll.T)
       else:
         # max across instruments, t, p, i
         pianoroll = pianoroll.max(axis=2)
+        aspect = "auto"
 
       if PLOT_FLAT:
         ax = axes[count_idx]
@@ -238,12 +255,6 @@ def plot_rolls(pianorolls, ranked_lls=None, m=10, n=10,
         ax = axes[count_idx, i]
 
       origin = "lower"
-      if not is_image(method):
-        aspect = "auto"
-      else:
-        aspect = "equal"
-        pianoroll = np.rot90(pianoroll.T)
-
       ax.imshow(pianoroll, cmap=COLORMAP, interpolation="none", 
                 vmin=0, vmax=1, aspect=aspect, origin=origin)
       ax.set_axis_off()
