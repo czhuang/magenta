@@ -39,13 +39,13 @@ base_path = '/data/lisatmp4/huangche/data'
 datasets = ['MuseData', 'Nottingham', 'Piano-midi.de', 'JSB Chorales']
 
 
-def test_pianorolls_lib():
-  data, encoder = data_tools.get_data(base_path, 'Piano-midi.de', 'train', separate_instruments=False)
-  rolls = [encoder.encode(seq) for seq in data]
-  note_densities = []
-  for roll in rolls:
-    note
-    print roll.shape, np.sum(roll), np.sum(roll) / roll.shape[0]
+#def test_pianorolls_lib():
+#  data, encoder = data_tools.get_data(base_path, 'Piano-midi.de', 'train', separate_instruments=False)
+#  rolls = [encoder.encode(seq) for seq in data]
+#  note_densities = []
+#  for roll in rolls:
+#    note
+#    print roll.shape, np.sum(roll), np.sum(roll) / roll.shape[0]
     
                
 folds = ['train', 'valid', 'test']
@@ -462,6 +462,16 @@ def check_tessitura_ordering_hist():
 # print voices.keys()
 
 
+def check_dataset():
+  from magenta.models.basic_autofill_cnn import hparams_tools
+  hparams = hparams_tools.Hyperparameters(
+      dataset='bach-16th-priorwork-4_voices',
+      quantization_level=0.125)
+  base_path = '/data/lisatmp4/huangche/data/'
+  pianorolls = data_tools.get_data_as_pianorolls(base_path, hparams, 'test')
+  print len(pianorolls)
+
+
 def main(unused_argv):
   #get_duration_hist()
   #check_num_of_pieces_in_tfrecord()
@@ -476,7 +486,8 @@ def main(unused_argv):
 #  test_get_piece_tensor()
 #  read_midi()
 #  read_datasets()
-  test_pianorolls_lib()
+#  test_pianorolls_lib()
+  check_dataset()
 
 
 if __name__ == '__main__':
