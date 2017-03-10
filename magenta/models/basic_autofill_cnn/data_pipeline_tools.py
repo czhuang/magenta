@@ -7,8 +7,6 @@ from collections import defaultdict
 
 import os
 
- 
-
 import tensorflow as tf
 
 from  magenta.pipelines import dag_pipeline
@@ -19,7 +17,8 @@ from magenta.models.basic_autofill_cnn.create_dataset import FilterByShortestDur
 from  magenta.protobuf import music_pb2
 from  magenta.lib.note_sequence_io import NoteSequenceRecordWriter
 from  magenta.lib.note_sequence_io import note_sequence_record_iterator
-from magenta.models.basic_autofill_cnn import config_tools
+from magenta.models.basic_autofill_cnn.data_tools import get_data_as_pianorolls
+
 
 
 def filter_by_num_of_voices(input_, output_fpath, num_instruments_requested,
@@ -171,6 +170,16 @@ def get_note_sequence_reader(fpath):
  yield music_pb2.NoteSequence.FromString(serialized_sequence)
 
 
+def check_dataset():
+  from magenta.models.basic_autofill_cnn import hparams_tools
+  hparams = hparams_tools.Hyperparameters(
+      dataset='bach-16th-priorwork-4_voices',
+      quantization_level=0.125)
+  base_path = '/data/lisatmp4/huangche/data/'
+  pianorolls = get_data_as_pianorolls(base_path, hparams, 'test')
+  print len(pianorolls)
+
+
 def main(argv):
   #make_bach_chorales_with_4_voices_dataset()
   #filter_pieces_with_16th_notes_within_4_voice_dataset()
@@ -188,7 +197,8 @@ def main(argv):
   #make_bach_chorales_with_4_voices_dataset()
   #check_num_voices_encoded_by_part()
 
-  get_small_4_voice_dataset()
+  #get_small_4_voice_dataset()
+
 
 if __name__ == '__main__':
   tf.app.run()
