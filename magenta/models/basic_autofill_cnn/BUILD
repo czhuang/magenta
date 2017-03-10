@@ -1,9 +1,17 @@
 py_binary(
+    name = "prep_listening",
+    srcs = ["prep_listening.py"],
+    deps = [
+    ],
+)
+
+py_binary(
     name = "eval_samples",
     srcs = ["eval_samples.py"],
     deps = [
 	":evaluation_tools",
         ":retrieve_model_tools",
+        ":prep_listening",
     ],
 )
 

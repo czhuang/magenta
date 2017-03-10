@@ -1,10 +1,12 @@
 import os
+import sys
 from datetime import datetime
 
 import numpy as np
 import tensorflow as tf
 from magenta.models.basic_autofill_cnn import evaluation_tools
 from magenta.models.basic_autofill_cnn import retrieve_model_tools 
+from magenta.models.basic_autofill_cnn.prep_listening import plot_rolls 
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('generation_output_dir', None, 'Path to generated samples and also base fpath for outputting eval stats.')
@@ -12,8 +14,17 @@ tf.app.flags.DEFINE_bool('quick_eval', False, 'Only evaluate a subset of samples
 tf.app.flags.DEFINE_bool('eval_intermed', False, 'Evaluate intermediate steps.')
 
 
-if FLAGS.quick_eval:
-  subsample_size = 4 
+import contextlib
+@contextlib.contextmanager
+def pdb_post_mortem():
+  try:
+    yield
+  except:
+    exc_type, exc_value, exc_traceback = sys.exc_info()
+    if not isinstance(exc_value, (KeyboardInterrupt, SystemExit)):
+      import traceback
+      traceback.print_exception(exc_type, exc_value, exc_traceback)
+      import pdb; pdb.post_mortem()
 
 
 def get_current_time_as_str():
@@ -143,101 +154,44 @@ fpaths = {
     'BinaryMNIST-iGibbs-temp1_wo_pop': 'fromscratch_None_init=independent_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___1.0_20170207141152_10.44min.npz'}
 
 fpaths = {
-    'BinaryMNIST-iGibbs-temp1_wo_pop-392_steps-yao_pmin_0.03': 'fromscratch_None_init=independent_Gibbs_num_steps_392__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_03__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___1.0_20170209111940_2.72min.npz'}
+    'BinaryMNIST-nade-temp1_wo_pop': 'fromscratch_None_init=sequential_Gibbs_num_steps_0__masker_None__schedule_None__sampler_None__1.0_20170207141152_10.61min.npz'}
 
+#
+#    'BinaryMNIST-iGibbs-temp1_wo_pop-392_steps-yao_pmin_0.03': 'fromscratch_None_init=independent_Gibbs_num_steps_392__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_03__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___1.0_20170209111940_2.72min.npz'}
+
+#fpaths = {
+#    'BinaryMNIST-iGibbs-temp0.5-wo_pop-':'fromscratch_None_init=independent_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_0_5___0.5_20170207163021_5.57min.npz'}
+
+#fpaths = {
+#    'binarymnist-iGibbs-temp1_random_init': 'fromscratch_None_init=random_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___1.0_20170210222234_5.52min.npz'}
+
+
+#fpaths = {
+#    'omni-NADE-temp1-trainedBinary9h': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=sequential_Gibbs_num_steps_0__masker_None__schedule_None__sampler_None__1.0_20170214122021_4.20min.npz',
+#    'omni-iGibbs-temp1-trainedBinary9h': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___1.0_20170214124030_6.09min.npz'}
+
+
+# Aggregating both BinaryMNIST and OMNIGLOT samples.
 fpaths = {
-    'BinaryMNIST-iGibbs-temp0.5-wo_pop-':'fromscratch_None_init=independent_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_0_5___0.5_20170207163021_5.57min.npz'}
-
-fpaths = {
-    'binarymnist-iGibbs-temp1_random_init': 'fromscratch_None_init=random_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___1.0_20170210222234_5.52min.npz'}
-
+    'BinaryMNIST-iGibbs-temp1_wo_pop': 'fromscratch_None_init=independent_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___1.0_20170207141152_10.44min.npz',
+    'BinaryMNIST-nade-temp1_wo_pop': 'fromscratch_None_init=sequential_Gibbs_num_steps_0__masker_None__schedule_None__sampler_None__1.0_20170207141152_10.61min.npz'}
 
 fpaths = {
     'omni-NADE-temp1-trainedBinary9h': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=sequential_Gibbs_num_steps_0__masker_None__schedule_None__sampler_None__1.0_20170214122021_4.20min.npz',
     'omni-iGibbs-temp1-trainedBinary9h': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___1.0_20170214124030_6.09min.npz'}
 
+fpaths = {
+  'BinaryMNIST-nade': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=sequential_Gibbs_num_steps_0__masker_None__schedule_None__sampler_None__1.0_20170219162622_6.09min.npz',
+  'BinaryMNIST-iGibbs': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_03__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___1.0_20170219161928_6.11min.npz'}
 
-set_names = fpaths.keys()
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+fpaths = {
+  'BinaryOMNIGLOT-nade': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=sequential_Gibbs_num_steps_0__masker_None__schedule_None__sampler_None__1.0_20170219164036_4.20min.npz',
+  'BinaryOMNIGLOT-iGibbs': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___1.0_20170219163423_4.21min.npz'}
 
-for name, path in fpaths.items():
-  fpaths[name] = os.path.join(basepath, path)
 
-pianorolls_set = dict()
-T = None
-for name in set_names:
-  print name, fpaths[name]
-  pianorolls_steps = np.load(fpaths[name])['pianorolls']
-  print 'shape', pianorolls_steps.shape
-  pianorolls_by_iter = dict()
-  S = len(pianorolls_steps)
-  if FLAGS.eval_intermed:
-    if FLAGS.eval_test_mode:
-      eval_iters = [int(S/2), -1]
-    else:
-      #eval_iters = range(S)
-      eval_iters = range(1, S, 3)
 
-    print '\n# of eval iterations: %d\n' % len(eval_iters)
-  else:
-    eval_iters = [-1]
-  for eval_iter in eval_iters:
-    print 'before eval_iter indexing', pianorolls_steps.shape 
-    pianorolls = pianorolls_steps[eval_iter]
-    print 'after eval_iter indexing', pianorolls.shape 
-    if 'inpainting' in name:
-      assert pianorolls.shape[0] == 3 or pianorolls.shape[0] == 103 or pianorolls.shape[0] == 13 or pianorolls.shape[0] == 33
-    else:
-      pass # since might test diff # of steps.
-      # assert pianorolls.shape[0] == 101
-    if T is None:
-      T = pianorolls.shape[1]
-    elif T is not None and T != pianorolls.shape[1]:
-      assert False, 'Pianorolls for different sample methods are of different shapes.'
-    if 'inpainting' in name:
-      assert pianorolls.shape == (70, 32, 53, 4)
-    else:
-      print pianorolls.ndim, pianorolls.shape
-      assert pianorolls.ndim == 4
-      #assert pianorolls.shape == (100, 32, 53, 4)
-    if FLAGS.quick_eval:
-      inds = np.random.choice(np.arange(pianorolls.shape[0]), size=subsample_size, replace=False)
-      pianorolls = pianorolls[inds, :, :, :]
-    pianorolls_by_iter[eval_iter] = pianorolls
-  pianorolls_set[name] = pianorolls_by_iter
 
-#lls_by_method = dict()
-lls_stats_by_method = dict()
-wrapped_model = None
-for name, pianorolls_by_iterations in pianorolls_set.items():
-  print name
-  lls_by_iter = dict()
-  lls_stats_by_iter = dict()  
-  for eval_iter, pianorolls in pianorolls_by_iterations.items():
-    print 'eval_iter', eval_iter
-    sample_name = '%s-iter=%d' % (name, eval_iter) 
-    mean_loss, sem_loss, N, wrapped_model, eval_fpath = (
-        evaluation_tools.run(pianorolls, wrapped_model, 
-                             sample_name=sample_name))
-    
-    #lls_by_iter[eval_iter] = losses
-    lls_stats_by_iter[eval_iter] = (mean_loss, sem_loss, N)
-  #lls_by_method[name] = lls_by_iter
-  lls_stats_by_method[name] = lls_stats_by_iter
-
-#loss_fpath = get_fpath_wrapper('losses', 'npz', timestamp)
-#flatten the nested dict to store in npz
-#lls_by_method_flatten = {'%s_%d'%(method_name, eval_iter):lls for method_name, lls_by_iters in lls_by_method.items() for eval_iter, lls in lls_by_iters.items()}
-#np.savez_compressed(loss_fpath, **lls_by_method_flatten)
-#if TEST_MODE:
-#  #np.savez_compressed(loss_fpath, seventyFive=lls['75'], fifty=lls['50'])
-#  np.savez_compressed(loss_fpath, independent=lls['independent'])
-#else:
-#  #np.savez_compressed(loss_fpath, sequential=lls['sequential'], fifty=lls['50'], 
-#  #                  seventyFive=lls['75'], nintyNine=lls['99'], nade=lls['nade'])  
-#  np.savez_compressed(loss_fpath, independent=lls['independent'])
-  
-def write_results(set_names, lls_stats_by_iter):
+def write_results(set_names, lls_stats_by_method, timestamp, eval_fpath):
   lines = ''
   print 'set_names', set_names
   print lls_stats_by_method.keys()
@@ -245,7 +199,7 @@ def write_results(set_names, lls_stats_by_iter):
     lls_stats_by_iter = lls_stats_by_method[name]
     lines += '\n, %s,' % (name)
     for eval_iter, lls_stats in lls_stats_by_iter.items():
-      mean, sem, N = lls_stats
+      mean, sem, N, ranked_lls = lls_stats
       try:
         lines += '\n\t\t%d: %.5f (%.5f, N=%d) [%.5f, %.5f], ' % (eval_iter, mean, sem, N, mean-sem, mean+sem)
       except TypeError:
@@ -259,22 +213,108 @@ def write_results(set_names, lls_stats_by_iter):
   with open(loss_stat_fpath, 'w') as p:
     p.writelines(lines)
 
-# write out a txt file
-write_results(set_names, lls_stats_by_iter)
+ 
+def main(unused_argv):
+  if FLAGS.quick_eval:
+    subsample_size = 4 
 
-# write out stats as a pickle so easier to make plot
-import cPickle as pickle
-stats_fpath = get_fpath_wrapper('stats', 'pkl', timestamp, eval_fpath)
-print 'Writing to', stats_fpath
-with open(stats_fpath, 'wb') as p:
-  pickle.dump(lls_stats_by_method, p)
+  set_names = fpaths.keys()
+  timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+  
+  for name, path in fpaths.items():
+    fpaths[name] = os.path.join(basepath, path)
+  
+  pianorolls_set = dict()
+  T = None
+  for name in set_names:
+    print name, fpaths[name]
+    pianorolls_steps = np.load(fpaths[name])['pianorolls']
+    print 'shape', pianorolls_steps.shape
+    pianorolls_by_iter = dict()
+    S = len(pianorolls_steps)
+    if FLAGS.eval_intermed:
+      if FLAGS.eval_test_mode:
+        eval_iters = [int(S/2), -1]
+      else:
+        #eval_iters = range(S)
+        eval_iters = range(1, S, 3)
+  
+      print '\n# of eval iterations: %d\n' % len(eval_iters)
+    else:
+      eval_iters = [-1]
+    for eval_iter in eval_iters:
+      print 'before eval_iter indexing', pianorolls_steps.shape 
+      pianorolls = pianorolls_steps[eval_iter]
+      print 'after eval_iter indexing', pianorolls.shape 
+      if 'inpainting' in name:
+        assert pianorolls.shape[0] == 3 or pianorolls.shape[0] == 103 or (
+            pianorolls.shape[0] == 13 or pianorolls.shape[0] == 33)
+      else:
+        pass # since might test diff # of steps.
+        # assert pianorolls.shape[0] == 101
+      if T is None:
+        T = pianorolls.shape[1]
+      elif T is not None and T != pianorolls.shape[1]:
+        assert False, 'Pianorolls for different sample methods are of different shapes.'
+      if 'inpainting' in name:
+        assert pianorolls.shape == (70, 32, 53, 4)
+      else:
+        print pianorolls.ndim, pianorolls.shape
+        assert pianorolls.ndim == 4
+        #assert pianorolls.shape == (100, 32, 53, 4)
+      if FLAGS.quick_eval:
+        inds = np.random.choice(np.arange(pianorolls.shape[0]), size=subsample_size, replace=False)
+        pianorolls = pianorolls[inds, :, :, :]
+      pianorolls_by_iter[eval_iter] = pianorolls
+    pianorolls_set[name] = pianorolls_by_iter
+  
+  
+  #lls_by_method = dict()
+  lls_stats_by_method = dict()
+  wrapped_model = None
+  for name, pianorolls_by_iterations in pianorolls_set.items():
+    print name
+    lls_by_iter = dict()
+    lls_stats_by_iter = dict()  
+    for eval_iter, pianorolls in pianorolls_by_iterations.items():
+      print 'eval_iter', eval_iter
+      sample_name = '%s-iter=%d' % (name, eval_iter) 
+      mean_loss, sem_loss, N, ranked_lls, wrapped_model, eval_fpath = (
+          evaluation_tools.run(pianorolls, wrapped_model, 
+                               sample_name=sample_name))
+      
+      #lls_by_iter[eval_iter] = losses
+      lls_stats_by_iter[eval_iter] = (mean_loss, sem_loss, N, ranked_lls)
+  
+      output_fpath = get_fpath_wrapper(
+        sample_name, 'png', timestamp, path=eval_fpath)
+      #plot_rolls(pianorolls, ranked_lls, output_fpath=output_fpath,
+      #           method=sample_name)
+  
+    #lls_by_method[name] = lls_by_iter
+    lls_stats_by_method[name] = lls_stats_by_iter
+  
+  # write out a txt file
+  write_results(set_names, lls_stats_by_method, timestamp, eval_fpath)
+  
+  # write out stats as a pickle so easier to make plot
+  import cPickle as pickle
+  stats_fpath = get_fpath_wrapper('stats', 'pkl', timestamp, eval_fpath)
+  print 'Writing to', stats_fpath
+  with open(stats_fpath, 'wb') as p:
+    pickle.dump(lls_stats_by_method, p)
+  
+  print 'Reading from', stats_fpath
+  # try reading it back in
+  with open(stats_fpath, 'rb') as p:
+    lls_stats_by_method = pickle.load(p)
+  
+  print 'after loading from pickle'
+  # write out a txt file
+  write_results(set_names, lls_stats_by_method, timestamp, eval_fpath)
 
-print 'Reading from', stats_fpath
-# try reading it back in
-with open(stats_fpath, 'rb') as p:
-  lls_stats_by_method = pickle.load(p)
 
-print 'after loading from pickle'
-# write out a txt file
-write_results(set_names, lls_stats_by_iter)
-
+if __name__ == '__main__':
+  with pdb_post_mortem():
+    tf.app.run()
+  

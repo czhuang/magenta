@@ -151,6 +151,8 @@ fpaths = {
 fpaths = {
     'omni-iGibbs-temp1-trainedBinary9h': '/data/lisatmp4/huangche/sigmoids/fromscratch_None_init=independent_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___1.0_20170214124030_6.09min.npz'}
 
+fpaths = {
+    'BinaryMNIST-iGibbs-temp1_wo_pop': 'fromscratch_None_init=independent_Gibbs_num_steps_784__masker_BernoulliMasker____schedule_YaoSchedule_pmin_0_1__pmax_0_9__alpha_0_7___sampler_IndependentSampler_temperature_1_0___1.0_20170207141152_10.44min.npz'}
 
 
 ARE_IMAGES = True
@@ -171,23 +173,14 @@ if ARE_IMAGES:
   m, n = 10, 10 
 if PLOT_FLAT and len(fpaths.keys()) != 1:
   assert False, 'must only have one file to plot to flatten subplots'
-coding = {'contiguous':'c', 'independent':'i', 'nade':'n', 'bach':'b',
+
+CODING = {'contiguous':'c', 'independent':'i', 'nade':'n', 'bach':'b',
           'mnist':'m', 'MNIST':'m', 'nic':'nic', 'omni':'omni'}
-method_sample_indices = defaultdict(list)
 
 
 def is_image(run_name):
   return "image" in run_name or (
       'mnist' in run_name.lower() or 'omni' in run_name.lower())
-
-# check correct fnames.
-#for method, fpath in fpaths.items():
-#  assert method.lower() in fpath.lower()
-
-# TODO: Should use the datatime from fpaths and append the key to make it more readable.
-keys_str = '_'.join(fpaths.keys())
-output_path = os.path.join(base_path, '%s-%s' % (keys_str, datetime.now().strftime('%Y%m%d_%H%M%S')))
-os.makedirs(output_path)
 
 
 def get_code(name, coding_dict):
@@ -201,98 +194,143 @@ def get_code(name, coding_dict):
   assert False, 'Match for %s was not found' % name
 
 
-for i,  (method, fpath) in enumerate(fpaths.items()):
-  input_fpath = os.path.join(base_path, fpath)
-  print 'Loading', input_fpath
-  pianoroll_steps = np.load(input_fpath)['pianorolls']
-  print pianoroll_steps.shape
-  assert pianoroll_steps.ndim == 5
+def rolls_to_midi(pianorolls, code, step_str):
+  for i, pianoroll in enumerate(pianorolls):
+    pp = os.path.join(
+        output_path, "%s_%d_step_%s.midi" % (code, i, step_str))
+    print 'Writing to', pp
+    pianoroll_to_midi(pianoroll.T).write(pp)
+    
 
-  STEPS_WANTED = [-1] + range(len(pianoroll_steps))
-  STEPS_WANTED = [-1] + range(1, len(pianoroll_steps), 3)
-  
-  # Choose which indices in the batch to inspect. 
-  if NUM_SAMPLES == 100:
-    random_indices = np.arange(NUM_SAMPLES)
-  else:
-    random_indices = np.random.choice(100, size=NUM_SAMPLES)
-  method_sample_indices[method] = random_indices
-  
-  #if method == 'nade':
-  #  assert pianorolls.shape[0] == 1
-  #  step_idx = 0
-  #else:
-  #  assert pianorolls.shape[0] == 101
-  #  step_idx = 100
-  #pianorolls = pianorolls[step_idx]
-  for step in STEPS_WANTED:
-    pianorolls = pianoroll_steps[step]
-    print 'shape', pianorolls.shape
-    #assert pianorolls.shape == (100, 32, 53, 4)
+def plot_rolls(pianorolls, ranked_lls=None, m=10, n=10, 
+               are_images=True, output_fpath=None, method=None,
+               original=False):
     fig, axes = plt.subplots(m, n)
     if PLOT_FLAT:
       axes = np.ravel(axes)
     print 'axes.shape', axes.shape
-    if len(str(step)) == 1:
-      step_str = '0%d' % step
-    else:
-      step_str = '%d' % step
-    
-    for count_idx, idx in enumerate(random_indices):
-      print method, idx, count_idx
-      # Because pianoroll_to_midi takes i, p, t.
-      pianoroll = pianorolls[idx].T
- 
-      code = get_code(method, coding)
-      if not is_image(method):
-        pp = os.path.join(
-            output_path, "%s_%d_step_%s.midi" % (code, count_idx, step_str))
-        print pp
-        pianoroll_to_midi(pianoroll).write(pp)
+
+    num_subplots = m * n if len(pianorolls) >= m * n else len(pianorolls) 
+    assert num_subplots != 0
+
+    for count_idx in range(num_subplots):
+    #for count_idx, lls_info in enumerate(ranked_lls[:num_subplots]):
+      if ranked_lls is not None:
+        rank_info = ranked_lls[count_idx]
+        if len(ranked_lls[count_idx]) == 3:
+          rank_idx, mean, sem = rank_info
+        else:
+          rank_idx, mean, sem, adjusted_N = rank_info
+          print rank_idx, '%.2f+-%.2f (adjusted_N=%d)' % (
+            mean, sem, adjusted_N)
+      # In the ranked case, the pianorolls are already ranked.
+      pianoroll = pianorolls[count_idx]
 
       assert 0 <= pianoroll.min()
       assert pianoroll.max() <= 1
-      print 'pianoroll.shape', pianoroll.shape
+      #print 'pianoroll.shape', pianoroll.shape
+
       if SEPARATE_INSTRUMENTS:
         assert step_str != '-1' or np.allclose(pianoroll.sum(axis=1), 1)
-      # max across instruments
-      pianoroll = pianoroll.max(axis=0)
+      
+      if are_images:
+        pianoroll = np.reshape(pianoroll, (-1, 28))
+        aspect = "equal"
+        if 'omni' in method.lower():
+          print 'THIS is an OMNIGLOT character'
+          pianoroll = np.rot90(pianoroll)
+          #pianoroll = pianoroll.T
+          pass
+        else:
+          pianoroll = np.rot90(pianoroll.T)
+      else:
+        # max across instruments, t, p, i
+        pianoroll = pianoroll.max(axis=2)
+        aspect = "auto"
+
       if PLOT_FLAT:
         ax = axes[count_idx]
       else:
+        # TODO: second dimension not yet handled.
         ax = axes[count_idx, i]
+
       origin = "lower"
-      if not is_image(method):
-        aspect = "auto"
-        #origin = "lower"
-      else:
-        aspect = "equal"
-        #origin = "higher"
-        #pianoroll = np.fliplr(pianoroll.T)
-        pianoroll = np.rot90(pianoroll)
-      ax.imshow(pianoroll, cmap=COLORMAP, interpolation="none", vmin=0, vmax=1, 
-                aspect=aspect, origin=origin)
+      ax.imshow(pianoroll, cmap=COLORMAP, interpolation="none", 
+                vmin=0, vmax=1, aspect=aspect, origin=origin)
       ax.set_axis_off()
-      #ax.set_title('%s' % method)
+      if ranked_lls is not None:
+        ax.set_title('%.1f+-%.1f' % (mean, sem),
+                     fontdict={'fontsize': 'xx-small'})
+
     #fig.suptitle("%s %i" % (method, count_idx))
     fig.suptitle("Samples from %s" % (method))
     fig.set_size_inches(800 / fig.dpi, 600 / fig.dpi)
     #plt.tight_layout()
-    plt.subplots_adjust(hspace=.01, wspace=.01)
+    #TODO: May want this latter for tighter layout.
+    #plt.subplots_adjust(hspace=.01, wspace=.01)
 #plt.show()
-    plot_fpath = os.path.join(output_path, "plots-step_%s.png" % step_str)
-    print 'Writing to', plot_fpath
-    plt.savefig(plot_fpath, bbox_inches="tight")
+    print '\nWriting to', output_fpath
+    print
+    plt.savefig(output_fpath, bbox_inches="tight")
     plt.close(fig)
 
-pickle_fpath = os.path.join(output_path, 'chosen_sample_indices.pkl')
-print 'Writing to', pickle_fpath
-with open(pickle_fpath, 'wb') as p:
-  pickle.dump(method_sample_indices, p)
 
-text_fpath = os.path.join(output_path, 'chosen_sample_indices.txt')
-print 'Writing to', text_fpath
-with open(text_fpath, 'w') as p:
-  p.write(str(method_sample_indices))
+def run():
+  # TODO: Should use the datatime from fpaths and append the key to make it more readable.
+  keys_str = '_'.join(fpaths.keys())
+  output_path = os.path.join(base_path, '%s-%s' % (
+      keys_str, datetime.now().strftime('%Y%m%d_%H%M%S')))
+  os.makedirs(output_path)
 
-print 'Done'
+  method_sample_indices = defaultdict(list)
+  for i,  (method, fpath) in enumerate(fpaths.items()):
+    input_fpath = os.path.join(base_path, fpath)
+    print 'Loading', input_fpath
+    pianoroll_steps = np.load(input_fpath)['pianorolls']
+    print pianoroll_steps.shape
+    assert pianoroll_steps.ndim == 5
+  
+    STEPS_WANTED = [-1] + range(len(pianoroll_steps))
+    STEPS_WANTED = [-1] + range(1, len(pianoroll_steps), 3)
+    
+    # Choose which indices in the batch to inspect. 
+    if NUM_SAMPLES == 100:
+      random_indices = np.arange(NUM_SAMPLES)
+    else:
+      random_indices = np.random.choice(100, size=NUM_SAMPLES)
+    method_sample_indices[method] = random_indices
+   
+    are_images = is_image(method)
+ 
+    for step in STEPS_WANTED:
+      step_str = '0%d' % step if len(str(step)) == 1 else '%d' % step
+
+      pianorolls = pianoroll_steps[step]
+      print 'shape', pianorolls.shape
+      #assert pianorolls.shape == (100, 32, 53, 4)
+
+      plot_fpath = os.path.join(
+          output_path, "plots-step_%s.png" % step_str)
+      plotted_rolls = plot_rolls(
+          pianorolls, ranked_lls=None, m=10, n=10, are_images=are_images,
+          output_fpath=plot_fpath, method=method)
+  
+  
+      if not are_images:
+        code = get_code(method, CODING)
+        rolls_to_midi(plotted_rolls, code, step_str)
+
+  pickle_fpath = os.path.join(output_path, 'chosen_sample_indices.pkl')
+  print 'Writing to', pickle_fpath
+  with open(pickle_fpath, 'wb') as p:
+    pickle.dump(method_sample_indices, p)
+  
+  text_fpath = os.path.join(output_path, 'chosen_sample_indices.txt')
+  print 'Writing to', text_fpath
+  with open(text_fpath, 'w') as p:
+    p.write(str(method_sample_indices))
+
+
+if __name__ == '__main__':
+  run()
+  print 'Done'
