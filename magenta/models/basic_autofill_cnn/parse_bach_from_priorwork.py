@@ -216,6 +216,26 @@ def check_pickles():
     assert np.allclose(piece_lens[set_+'8'], piece_lens[set_+'4']*2)
 
 
+def check_num_pieces_in_pickles():
+  # For all different quantizations, for nicolas_style
+  # test 77
+  # train 229
+  # valid 76
+  fnames = ['JSB_Chorales_16th_Nicolas_style_with_splits_fixed.pickle',
+            'JSB_Chorales_8th_Nicolas_style_with_splits_fixed.pickle',
+            'JSB Chorales.pickle']
+  fnames = [os.path.join('data', 'JSB_Chorales_original_from_nicolas.pickle')]
+
+  piece_lens = dict()
+  for fname in fnames:
+    print fname
+    with open(fname, 'rb') as p:
+      data = pickle.load(p)
+      print fname
+      for set_, pieces in data.iteritems():
+        print set_, len(pieces)
+
+
 def get_pitch_range():
   fpath = 'data/bach-16th-priorwork-4_voices.npz'
   data = np.load(fpath)
@@ -238,5 +258,5 @@ if __name__ == '__main__':
 #    check_pickles()
 #  except:
 #    import pdb; pdb.post_mortem()
-  check_pickles()
-
+  #check_pickles()
+  check_num_pieces_in_pickles()
