@@ -144,7 +144,8 @@ def breakup_long_pieces(xs):
   num_pieces = len(xs)
   lens = [len(x) for x in xs]
   max_len = max(lens)
-  if max_len < 200:
+  # chordwise_batch doesn't do padding, so no need to break up long pieces
+  if max_len < 200 or FLAGS.kind == "chordwise_batch":
     return xs, max_len
 
   sorted_lens = np.sort(lens)
