@@ -52,6 +52,8 @@ def plot_pianorolls(path, all_full=True):
       m, n = 10, 10
     elif batch_size == 70:
       m, n = 9, 9
+    elif batch_size == 30:
+      m, n = 5, 6
     else:
       assert False
   
