@@ -44,11 +44,12 @@ def main(unused_argv):
   masks = np.ones(shape, dtype=np.float32)
   pianorolls = strategy(wmodel, pianorolls, masks)
 
-  time_taken = (time.time() - start_time) / 60.0 #  In minutes.
-  label = "sample_%s_%s_%s_T%g_%.2fmin" % (timestamp, FLAGS.strategy, FLAGS.model_name, FLAGS.temperature, time_taken)
-  path = os.path.join(FLAGS.generation_output_dir, label + ".pkl")
+  time_taken = (time.time() - start_time) / 60.0
+  label = "sample_%s_%s_%s_T%g_%.2fmin" % (timestamp, FLAGS.strategy, wmodel.hparams.model_name, FLAGS.temperature, time_taken)
+  path = os.path.join(FLAGS.generation_output_dir, label + ".pkl.gz")
   print "Writing to", path
-  pkl.dump(BB.current_scope, open(path, "wb"), protocol=pkl.HIGHEST_PROTOCOL)
+  with gzip.open(path, "wb") as gzfile:
+    pkl.dump(BB.current_scope, gzfile, protocol=pkl.HIGHEST_PROTOCOL)
 
 
 # decorator for timing and BB.log structuring
@@ -65,7 +66,7 @@ def instrument(label):
 ##################
 ### Strategies ###
 ##################
-# Commonly used compositions of samplers, user-selectable through FLAGS
+# Commonly used compositions of samplers, user-selectable through FLAGS.strategy
 
 def voicewise_rewriting(wmodel, pianorolls, masks):
   init_sampler = BachSampler(wmodel, temperature=FLAGS.temperature)
