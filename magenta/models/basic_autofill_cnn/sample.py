@@ -1,4 +1,4 @@
-import os, sys, time, contextlib, cPickle as pkl
+import os, sys, time, contextlib, cPickle as pkl, gzip
 from collections import defaultdict
 from datetime import datetime
 import numpy as np, tensorflow as tf
