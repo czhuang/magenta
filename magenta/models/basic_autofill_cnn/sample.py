@@ -474,12 +474,12 @@ class Bamboo(object):
   def log(self, **kwargs):
     # append or overwrite such that we retain the values i for which `i % self.subsample_factor ==
     # 0` and the last value logged.
-    if not self.current_scope:
-      self.current_scope.append(kwargs)
-    elif self.log_counts[id(self.current_scope)] % self.subsample_factor == 1:
-      self.current_scope.append(kwargs)
+    i = self.log_counts[id(self.current_scope)]
+    item = (i, kwargs)
+    if i % self.subsample_factor == 1 or not self.current_scope:
+      self.current_scope.append(item)
     else:
-      self.current_scope[-1] = kwargs
+      self.current_scope[-1] = item
     self.log_counts[id(self.current_scope)] += 1
 
 BB = Bamboo()
