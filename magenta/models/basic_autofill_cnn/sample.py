@@ -1,9 +1,8 @@
 import os, sys, time, contextlib, cPickle as pkl, gzip
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 from datetime import datetime
 import numpy as np, tensorflow as tf
-from magenta.models.basic_autofill_cnn import mask_tools, retrieve_model_tools, data_tools
-import util
+from magenta.models.basic_autofill_cnn import mask_tools, retrieve_model_tools, data_tools, util
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_integer("gen_batch_size", 100, "num of samples to generate in a batch.")
@@ -57,7 +56,7 @@ def instrument(label):
   def decorator(fn):
     def wrapped_fn(*args, **kwargs):
       with util.timing(label):
-        with BB.scope():
+        with BB.scope(label):
           return fn(*args, **kwargs)
     return wrapped_fn
   return decorator
@@ -451,35 +450,37 @@ def numbers_of_masked_variables(masks):
 ### Globals to keep complexity in check ###
 ###########################################
 
+Scope = namedtuple("Scope", "label items")
+
 # Unobtrusive structured logging of intermediate values
 class Bamboo(object):
   def __init__(self, subsample_factor=10):
-    self.intermediates = []
-    self.trail = [self.intermediates]
+    self.root = Scope(label="root", items=[])
+    self.stack = [self.root]
     self.log_counts = defaultdict(lambda: 0)
     self.subsample_factor = subsample_factor
 
   @contextlib.contextmanager
-  def scope(self):
-    new_scope = []
-    self.current_scope.append(new_scope)
-    self.trail.append(new_scope)
+  def scope(self, label):
+    new_scope = Scope(label=label, items=[])
+    self.current_scope.items.append(new_scope)
+    self.stack.append(new_scope)
     yield
-    self.trail.pop()
+    self.stack.pop()
 
   @property
   def current_scope(self):
-    return self.trail[-1]
+    return self.stack[-1]
 
   def log(self, **kwargs):
     # append or overwrite such that we retain the values i for which `i % self.subsample_factor ==
     # 0` and the last value logged.
     i = self.log_counts[id(self.current_scope)]
     item = (i, kwargs)
-    if i % self.subsample_factor == 1 or not self.current_scope:
-      self.current_scope.append(item)
+    if i % self.subsample_factor == 1 or not self.current_scope.items:
+      self.current_scope.items.append(item)
     else:
-      self.current_scope[-1] = item
+      self.current_scope.items[-1] = item
     self.log_counts[id(self.current_scope)] += 1
 
 BB = Bamboo()
