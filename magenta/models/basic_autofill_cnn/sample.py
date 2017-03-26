@@ -35,7 +35,7 @@ def main(unused_argv):
   start_time = time.time()
   pianorolls = np.zeros(shape, dtype=np.float32)
   masks = np.ones(shape, dtype=np.float32)
-  pianorolls = strategy(wmodel, pianorolls, masks)
+  pianorolls = strategy(pianorolls, masks)
   time_taken = (time.time() - start_time) / 60.0
 
   label = "sample_%s_%s_%s_T%g_%.2fmin" % (timestamp, FLAGS.strategy, wmodel.hparams.model_name, FLAGS.temperature, time_taken)
