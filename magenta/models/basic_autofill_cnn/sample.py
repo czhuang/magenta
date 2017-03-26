@@ -136,8 +136,8 @@ class OrderlessStrategy(BaseStrategy):
     pianorolls = sampler(pianorolls, masks)
     return pianorolls
 
-class GibbsStrategy(BaseStrategy):
-  key = "gibbs"
+class IgibbsStrategy(BaseStrategy):
+  key = "igibbs"
 
   @instrument(key + "_strategy")
   def __call__(self, pianorolls, masks):
@@ -145,6 +145,19 @@ class GibbsStrategy(BaseStrategy):
     sampler = GibbsSampler(num_steps=num_steps,
                            masker=BernoulliMasker(),
                            sampler=IndependentSampler(self.wmodel, temperature=FLAGS.temperature),
+                           schedule=YaoSchedule(pmin=0.1, pmax=0.9, alpha=0.7))
+    pianorolls = sampler(pianorolls, masks)
+    return pianorolls
+
+class AgibbsStrategy(BaseStrategy):
+  key = "agibbs"
+
+  @instrument(key + "_strategy")
+  def __call__(self, pianorolls, masks):
+    num_steps = np.max(numbers_of_masked_variables(masks))
+    sampler = GibbsSampler(num_steps=num_steps,
+                           masker=BernoulliMasker(),
+                           sampler=AncestralSampler(self.wmodel, temperature=FLAGS.temperature),
                            schedule=YaoSchedule(pmin=0.1, pmax=0.9, alpha=0.7))
     pianorolls = sampler(pianorolls, masks)
     return pianorolls
