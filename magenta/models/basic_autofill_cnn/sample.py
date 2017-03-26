@@ -29,22 +29,15 @@ def main(unused_argv):
   print B, T, P, I
   shape = [B, T, P, I]
 
-  start_time = time.time()
-
-  strategies = dict(voicewise_rewriting=voicewise_rewriting,
-                    harmonization=harmonization,
-                    transition=transition,
-                    chronological=chronological,
-                    orderless=orderless,
-                    gibbs=gibbs)
-  strategy = strategies[FLAGS.strategy]
-
+  strategy = BaseStrategy.make(FLAGS.strategy, wmodel)
   Globals.bamboo = Bamboo()
+
+  start_time = time.time()
   pianorolls = np.zeros(shape, dtype=np.float32)
   masks = np.ones(shape, dtype=np.float32)
   pianorolls = strategy(wmodel, pianorolls, masks)
-
   time_taken = (time.time() - start_time) / 60.0
+
   label = "sample_%s_%s_%s_T%g_%.2fmin" % (timestamp, FLAGS.strategy, wmodel.hparams.model_name, FLAGS.temperature, time_taken)
   path = os.path.join(FLAGS.generation_output_dir, label + ".pkl.gz")
   print "Writing to", path
@@ -68,71 +61,93 @@ def instrument(label, subsample_factor=None):
 ##################
 # Commonly used compositions of samplers, user-selectable through FLAGS.strategy
 
-@instrument("voicewise_rewriting_strategy")
-def voicewise_rewriting(wmodel, pianorolls, masks):
-  init_sampler = BachSampler(wmodel, temperature=FLAGS.temperature)
-  pianorolls = init_sampler(pianorolls, masks)
+class BaseStrategy(util.Factory):
+  def __init__(self, wmodel):
+    self.wmodel = wmodel
 
-  sampler = GibbsSampler(masker=BernoulliMasker(),
-                         sampler=IndependentSampler(wmodel, temperature=FLAGS.temperature),
-                         schedule=YaoSchedule(pmin=0.1, pmax=0.9, alpha=0.7))
-  for i in range(pianorolls.shape[-1]):
-    masks = InstrumentMasker(instrument=i)(masks.shape)
-    pianorolls = sampler(pianorolls, masks)
-  return pianorolls
+class RevoiceStrategy(BaseStrategy):
+  key = "revoice"
 
-@instrument("harmonization_strategy")
-def harmonization(wmodel, pianorolls, masks):
-  init_sampler = BachSampler(wmodel, temperature=FLAGS.temperature)
-  pianorolls = init_sampler(pianorolls, masks)
+  @instrument(key + "_strategy")
+  def __call__(self, pianorolls, masks):
+    init_sampler = BachSampler(self.wmodel, temperature=FLAGS.temperature)
+    pianorolls = init_sampler(pianorolls, masks)
 
-  masks = HarmonizationMasker()(masks.shape)
-  num_steps = np.max(numbers_of_masked_variables(masks))
-  gibbs = GibbsSampler(num_steps=num_steps,
-                       masker=BernoulliMasker(),
-                       sampler=IndependentSampler(wmodel, temperature=FLAGS.temperature),
-                       schedule=YaoSchedule(pmin=0.1, pmax=0.9, alpha=0.7))
-  pianorolls = gibbs(pianorolls, masks)
+    sampler = GibbsSampler(masker=BernoulliMasker(),
+                           sampler=IndependentSampler(self.wmodel, temperature=FLAGS.temperature),
+                           schedule=YaoSchedule(pmin=0.1, pmax=0.9, alpha=0.7))
+    for i in range(pianorolls.shape[-1]):
+      masks = InstrumentMasker(instrument=i)(masks.shape)
+      pianorolls = sampler(pianorolls, masks)
+    return pianorolls
 
-  return pianorolls
+class HarmonizationStrategy(BaseStrategy):
+  key = "harmonization"
 
-@instrument("transition_strategy")
-def transition(wmodel, pianorolls, masks):
-  init_sampler = BachSampler(wmodel, temperature=FLAGS.temperature)
-  pianorolls = init_sampler(pianorolls, masks)
+  @instrument(key + "_strategy")
+  def __call__(self, pianorolls, masks):
+    init_sampler = BachSampler(self.wmodel, temperature=FLAGS.temperature)
+    pianorolls = init_sampler(pianorolls, masks)
 
-  masks = TransitionMasker()(masks.shape)
-  num_steps = np.max(numbers_of_masked_variables(masks))
-  gibbs = GibbsSampler(num_steps=num_steps,
-                       masker=BernoulliMasker(),
-                       sampler=IndependentSampler(wmodel, temperature=FLAGS.temperature),
-                       schedule=YaoSchedule(pmin=0.1, pmax=0.9, alpha=0.7))
-  pianorolls = gibbs(pianorolls, masks)
-  return pianorolls
-
-@instrument("chronological_strategy")
-def chronological(wmodel, pianorolls, masks):
-  sampler = AncestralSampler(wmodel, temperature=FLAGS.temperature,
-                             selector=ChronologicalSelector())
-  pianorolls = sampler(pianorolls, masks)
-  return pianorolls
-
-@instrument("orderless_strategy")
-def orderless(wmodel, pianorolls, masks):
-  sampler = AncestralSampler(wmodel, temperature=FLAGS.temperature,
-                             selector=OrderlessSelector())
-  pianorolls = sampler(pianorolls, masks)
-  return pianorolls
-
-@instrument("gibbs_strategy")
-def gibbs(wmodel, pianorolls, masks):
-  num_steps = np.max(numbers_of_masked_variables(masks))
-  sampler = GibbsSampler(num_steps=num_steps,
+    masks = HarmonizationMasker()(masks.shape)
+    num_steps = np.max(numbers_of_masked_variables(masks))
+    gibbs = GibbsSampler(num_steps=num_steps,
                          masker=BernoulliMasker(),
-                         sampler=IndependentSampler(wmodel, temperature=FLAGS.temperature),
+                         sampler=IndependentSampler(self.wmodel, temperature=FLAGS.temperature),
                          schedule=YaoSchedule(pmin=0.1, pmax=0.9, alpha=0.7))
-  pianorolls = sampler(pianorolls, masks)
-  return pianorolls
+    pianorolls = gibbs(pianorolls, masks)
+
+    return pianorolls
+
+class TransitionStrategy(BaseStrategy):
+  key = "transition"
+
+  @instrument(key + "_strategy")
+  def __class__(self, pianorolls, masks):
+    init_sampler = BachSampler(self.wmodel, temperature=FLAGS.temperature)
+    pianorolls = init_sampler(pianorolls, masks)
+
+    masks = TransitionMasker()(masks.shape)
+    num_steps = np.max(numbers_of_masked_variables(masks))
+    gibbs = GibbsSampler(num_steps=num_steps,
+                         masker=BernoulliMasker(),
+                         sampler=IndependentSampler(self.wmodel, temperature=FLAGS.temperature),
+                         schedule=YaoSchedule(pmin=0.1, pmax=0.9, alpha=0.7))
+    pianorolls = gibbs(pianorolls, masks)
+    return pianorolls
+
+class ChronologicalStrategy(BaseStrategy):
+  key = "chronological"
+
+  @instrument(key + "_strategy")
+  def __call__(self, pianorolls, masks):
+    sampler = AncestralSampler(self.wmodel, temperature=FLAGS.temperature,
+                               selector=ChronologicalSelector())
+    pianorolls = sampler(pianorolls, masks)
+    return pianorolls
+
+class OrderlessStrategy(BaseStrategy):
+  key = "orderless"
+
+  @instrument(key + "_strategy")
+  def __call__(self, pianorolls, masks):
+    sampler = AncestralSampler(self.model, temperature=FLAGS.temperature,
+                               selector=OrderlessSelector())
+    pianorolls = sampler(pianorolls, masks)
+    return pianorolls
+
+class GibbsStrategy(BaseStrategy):
+  key = "gibbs"
+
+  @instrument(key + "_strategy")
+  def __call__(self, pianorolls, masks):
+    num_steps = np.max(numbers_of_masked_variables(masks))
+    sampler = GibbsSampler(num_steps=num_steps,
+                           masker=BernoulliMasker(),
+                           sampler=IndependentSampler(self.wmodel, temperature=FLAGS.temperature),
+                           schedule=YaoSchedule(pmin=0.1, pmax=0.9, alpha=0.7))
+    pianorolls = sampler(pianorolls, masks)
+    return pianorolls
 
 ################
 ### Samplers ###
