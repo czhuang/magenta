@@ -30,7 +30,7 @@ def main(unused_argv):
   shape = [B, T, P, I]
 
   strategy = BaseStrategy.make(FLAGS.strategy, wmodel)
-  Globals.bamboo = Bamboo()
+  Globals.bamboo = util.Bamboo()
 
   start_time = time.time()
   pianorolls = np.zeros(shape, dtype=np.float32)
@@ -475,41 +475,6 @@ def numbers_of_masked_variables(masks):
 ###########################################
 ### Globals to keep complexity in check ###
 ###########################################
-
-Scope = namedtuple("Scope", "label items subsample_factor")
-
-# Unobtrusive structured logging of intermediate values
-class Bamboo(object):
-  def __init__(self):
-    self.root = Scope(label="root", items=[], subsample_factor=1)
-    self.stack = [self.root]
-    self.log_counts = defaultdict(lambda: 0)
-
-  @contextlib.contextmanager
-  def scope(self, label, subsample_factor=None):
-    subsample_factor = 1 is subsample_factor is None else subsample_factor
-    new_scope = Scope(label=label, items=[], subsample_factor=subsample_factor)
-    self._log(new_scope)
-    self.stack.append(new_scope)
-    yield
-    self.stack.pop()
-
-  @property
-  def current_scope(self):
-    return self.stack[-1]
-
-  def log(self, **kwargs):
-    self._log(kwargs)
-
-  def _log(self, x):
-    # append or overwrite such that we retain every `subsample_factor`th value and the last value
-    i = self.log_counts[id(self.current_scope)]
-    item = (i, x)
-    if i % self.current_scope.subsample_factor == 1 or not self.current_scope.items:
-      self.current_scope.items.append(item)
-    else:
-      self.current_scope.items[-1] = item
-    self.log_counts[id(self.current_scope)] += 1
 
 class Thing(object):
   pass
