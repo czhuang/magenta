@@ -1,5 +1,5 @@
 import os, sys, time, contextlib, cPickle as pkl, gzip
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 from datetime import datetime
 import numpy as np, tensorflow as tf
 from magenta.models.basic_autofill_cnn import mask_tools, retrieve_model_tools, data_tools, util

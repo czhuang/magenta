@@ -104,36 +104,34 @@ def timing(label):
 
 
 # unobtrusive structured logging of arbitrary values
-Scope = namedtuple("Scope", "label items subsample_factor")
-
 class Bamboo(object):
   def __init__(self):
     self.root = Scope(label="root", items=[], subsample_factor=1)
     self.stack = [self.root]
-    self.log_counts = defaultdict(lambda: 0)
 
   @contextlib.contextmanager
   def scope(self, label, subsample_factor=None):
-    subsample_factor = 1 is subsample_factor is None else subsample_factor
-    new_scope = Scope(label=label, items=[], subsample_factor=subsample_factor)
-    self._log(new_scope)
+    new_scope = Scope(label, subsample_factor=subsample_factor)
+    self.stack[-1].log(new_scope)
     self.stack.append(new_scope)
     yield
     self.stack.pop()
 
-  @property
-  def current_scope(self):
-    return self.stack[-1]
-
   def log(self, **kwargs):
-    self._log(kwargs)
+    self.stack[-1].log(kwargs)
 
-  def _log(self, x):
-    # append or overwrite such that we retain every `subsample_factor`th value and the last value
-    i = self.log_counts[id(self.current_scope)]
-    item = (i, x)
-    if i % self.current_scope.subsample_factor == 1 or not self.current_scope.items:
-      self.current_scope.items.append(item)
-    else:
-      self.current_scope.items[-1] = item
-    self.log_counts[id(self.current_scope)] += 1
+  class Scope(object):
+    def __init__(self, label, subsample_factor=None):
+      self.label = label
+      self.subsample_factor = 1 if subsample_factor is None else subsample_factor
+      self.items = []
+      self.i = 0
+
+    def log(self, x):
+      # append or overwrite such that we retain every `subsample_factor`th value and the last value
+      item = (self.i, x)
+      if self.i % self.subsample_factor == 1 or not self.items:
+        self.items.append(item)
+      else:
+        self.items[-1] = item
+      self.i += 1
