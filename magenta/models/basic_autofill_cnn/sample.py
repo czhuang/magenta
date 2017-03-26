@@ -39,6 +39,7 @@ def main(unused_argv):
                     gibbs=gibbs)
   strategy = strategies[FLAGS.strategy]
 
+  Globals.bamboo = Bamboo()
   pianorolls = np.zeros(shape, dtype=np.float32)
   masks = np.ones(shape, dtype=np.float32)
   pianorolls = strategy(wmodel, pianorolls, masks)
@@ -48,15 +49,15 @@ def main(unused_argv):
   path = os.path.join(FLAGS.generation_output_dir, label + ".pkl.gz")
   print "Writing to", path
   with gzip.open(path, "wb") as gzfile:
-    pkl.dump(BB.root, gzfile, protocol=pkl.HIGHEST_PROTOCOL)
+    pkl.dump(Globals.bamboo.root, gzfile, protocol=pkl.HIGHEST_PROTOCOL)
 
 
-# decorator for timing and BB.log structuring
+# decorator for timing and Globals.bamboo.log structuring
 def instrument(label, subsample_factor=None):
   def decorator(fn):
     def wrapped_fn(*args, **kwargs):
       with util.timing(label):
-        with BB.scope(label, subsample_factor=subsample_factor):
+        with Globals.bamboo.scope(label, subsample_factor=subsample_factor):
           return fn(*args, **kwargs)
     return wrapped_fn
   return decorator
@@ -67,6 +68,7 @@ def instrument(label, subsample_factor=None):
 ##################
 # Commonly used compositions of samplers, user-selectable through FLAGS.strategy
 
+@instrument("voicewise_rewriting_strategy")
 def voicewise_rewriting(wmodel, pianorolls, masks):
   init_sampler = BachSampler(wmodel, temperature=FLAGS.temperature)
   pianorolls = init_sampler(pianorolls, masks)
@@ -79,6 +81,7 @@ def voicewise_rewriting(wmodel, pianorolls, masks):
     pianorolls = sampler(pianorolls, masks)
   return pianorolls
 
+@instrument("harmonization_strategy")
 def harmonization(wmodel, pianorolls, masks):
   init_sampler = BachSampler(wmodel, temperature=FLAGS.temperature)
   pianorolls = init_sampler(pianorolls, masks)
@@ -93,6 +96,7 @@ def harmonization(wmodel, pianorolls, masks):
 
   return pianorolls
 
+@instrument("transition_strategy")
 def transition(wmodel, pianorolls, masks):
   init_sampler = BachSampler(wmodel, temperature=FLAGS.temperature)
   pianorolls = init_sampler(pianorolls, masks)
@@ -106,18 +110,21 @@ def transition(wmodel, pianorolls, masks):
   pianorolls = gibbs(pianorolls, masks)
   return pianorolls
 
+@instrument("chronological_strategy")
 def chronological(wmodel, pianorolls, masks):
   sampler = AncestralSampler(wmodel, temperature=FLAGS.temperature,
                              selector=ChronologicalSelector())
   pianorolls = sampler(pianorolls, masks)
   return pianorolls
 
+@instrument("orderless_strategy")
 def orderless(wmodel, pianorolls, masks):
   sampler = AncestralSampler(wmodel, temperature=FLAGS.temperature,
                              selector=OrderlessSelector())
   pianorolls = sampler(pianorolls, masks)
   return pianorolls
 
+@instrument("gibbs_strategy")
 def gibbs(wmodel, pianorolls, masks):
   num_steps = np.max(numbers_of_masked_variables(masks))
   sampler = GibbsSampler(num_steps=num_steps,
@@ -159,7 +166,7 @@ class BachSampler(BaseSampler):
     bach_pianorolls = data_tools.get_data_as_pianorolls(FLAGS.input_dir, self.wmodel.hparams, 'valid')
     shape = pianorolls.shape
     pianorolls = np.array([pianoroll[:shape[1]] for pianoroll in bach_pianorolls])[:shape[0]]
-    BB.log(pianorolls=pianorolls, masks=masks, predictions=pianorolls)
+    Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=pianorolls)
     return pianorolls
 
 class ZeroSampler(BaseSampler):
@@ -168,7 +175,7 @@ class ZeroSampler(BaseSampler):
   @instrument(key)
   def __call__(self, pianorolls, masks):
     pianorolls = 0 * pianorolls
-    BB.log(pianorolls=pianorolls, masks=masks, predictions=pianorolls)
+    Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=pianorolls)
     return pianorolls
 
 class UniformRandomSampler(BaseSampler):
@@ -184,7 +191,7 @@ class UniformRandomSampler(BaseSampler):
     else:
       samples = util.sample_bernoulli(0.5 * predictions, temperature=1)
     pianorolls = np.where(masks, samples, pianorolls)
-    BB.log(pianorolls=pianorolls, masks=masks, predictions=predictions)
+    Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=predictions)
     return pianorolls
 
 class IndependentSampler(BaseSampler):
@@ -200,7 +207,7 @@ class IndependentSampler(BaseSampler):
     else:
       samples = util.sample_bernoulli(predictions, self.temperature)
     pianorolls = np.where(masks, samples, pianorolls)
-    BB.log(pianorolls=pianorolls, masks=masks, predictions=predictions)
+    Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=predictions)
     return pianorolls
 
 class AncestralSampler(BaseSampler):
@@ -211,7 +218,7 @@ class AncestralSampler(BaseSampler):
     self.selector = selector
     self.temperature = temperature
 
-  @instrument(key, subsample_factor=10)
+  @instrument(key)
   def __call__(self, pianorolls, masks):
     B, T, P, I = pianorolls.shape
     assert Globals.separate_instruments or I == 1
@@ -222,18 +229,21 @@ class AncestralSampler(BaseSampler):
     # FIXME not satisfied inside Gibbs, also maybe it doesn't matter so much
     assert mask_size.size == 1
 
-    for s in range(mask_size):
-      print '\tsequential step', s
-      predictions = self.predict(pianorolls, masks)
-      if Globals.separate_instruments:
-        samples = util.sample_onehot(predictions, axis=2, temperature=self.temperature)
-        assert np.allclose(samples.max(axis=2), 1)
-      else:
-        samples = util.sample_bernoulli(predictions, self.temperature)
-      selection = self.selector(predictions, masks)
-      pianorolls = np.where(selection, samples, pianorolls)
-      BB.log(pianorolls=pianorolls, masks=masks, predictions=predictions)
-      masks = np.where(selection, 0., masks)
+    with Globals.bamboo.scope("sequence", subsample_factor=10):
+      for s in range(mask_size):
+        print '\tsequential step', s
+        predictions = self.predict(pianorolls, masks)
+        if Globals.separate_instruments:
+          samples = util.sample_onehot(predictions, axis=2, temperature=self.temperature)
+          assert np.allclose(samples.max(axis=2), 1)
+        else:
+          samples = util.sample_bernoulli(predictions, self.temperature)
+        selection = self.selector(predictions, masks)
+        pianorolls = np.where(selection, samples, pianorolls)
+        Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=predictions)
+        masks = np.where(selection, 0., masks)
+
+    Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=predictions)
     assert masks.sum() == 0
     if Globals.separate_instruments:
       assert np.allclose(pianorolls.max(axis=2), 1)
@@ -248,18 +258,21 @@ class GibbsSampler(BaseSampler):
     self.schedule = schedule
     self.num_steps = num_steps
 
-  @instrument(key, subsample_factor=10)
+  @instrument(key)
   def __call__(self, pianorolls, masks):
     B, T, P, I = pianorolls.shape
     print 'shape', pianorolls.shape
     num_steps = (np.max(numbers_of_masked_variables(masks))
                  if self.num_steps is None else self.num_steps)
-    for s in range(num_steps):
-      pm = self.schedule(s, num_steps)
-      inner_masks = self.masker(pianorolls.shape, pm=pm, outer_masks=masks)
-      pianorolls = self.sampler(pianorolls, inner_masks)
-      BB.log(pianorolls=pianorolls, masks=inner_masks, predictions=pianorolls)
-    BB.log(pianorolls=pianorolls, masks=masks, predictions=pianorolls)
+
+    with Globals.bamboo.scope("sequence", subsample_factor=10):
+      for s in range(num_steps):
+        pm = self.schedule(s, num_steps)
+        inner_masks = self.masker(pianorolls.shape, pm=pm, outer_masks=masks)
+        pianorolls = self.sampler(pianorolls, inner_masks)
+        Globals.bamboo.log(pianorolls=pianorolls, masks=inner_masks, predictions=pianorolls)
+
+    Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=pianorolls)
     return pianorolls
 
   def __repr__(self):
@@ -484,8 +497,6 @@ class Bamboo(object):
     else:
       self.current_scope.items[-1] = item
     self.log_counts[id(self.current_scope)] += 1
-
-BB = Bamboo()
 
 class Thing(object):
   pass
