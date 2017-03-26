@@ -464,7 +464,6 @@ class Bamboo(object):
   def scope(self, label):
     new_scope = Scope(label=label, items=[])
     self._log(new_scope)
-    self.current_scope.items.append(new_scope)
     self.stack.append(new_scope)
     yield
     self.stack.pop()
