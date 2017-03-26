@@ -106,12 +106,12 @@ def timing(label):
 # unobtrusive structured logging of arbitrary values
 class Bamboo(object):
   def __init__(self):
-    self.root = Scope(label="root", items=[], subsample_factor=1)
+    self.root = Bamboo.Scope("root", subsample_factor=1)
     self.stack = [self.root]
 
   @contextlib.contextmanager
   def scope(self, label, subsample_factor=None):
-    new_scope = Scope(label, subsample_factor=subsample_factor)
+    new_scope = Bamboo.Scope(label, subsample_factor=subsample_factor)
     self.stack[-1].log(new_scope)
     self.stack.append(new_scope)
     yield
