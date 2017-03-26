@@ -48,7 +48,7 @@ def main(unused_argv):
   path = os.path.join(FLAGS.generation_output_dir, label + ".pkl.gz")
   print "Writing to", path
   with gzip.open(path, "wb") as gzfile:
-    pkl.dump(BB.current_scope, gzfile, protocol=pkl.HIGHEST_PROTOCOL)
+    pkl.dump(BB.root, gzfile, protocol=pkl.HIGHEST_PROTOCOL)
 
 
 # decorator for timing and BB.log structuring
@@ -463,6 +463,7 @@ class Bamboo(object):
   @contextlib.contextmanager
   def scope(self, label):
     new_scope = Scope(label=label, items=[])
+    self._log(new_scope)
     self.current_scope.items.append(new_scope)
     self.stack.append(new_scope)
     yield
@@ -473,10 +474,13 @@ class Bamboo(object):
     return self.stack[-1]
 
   def log(self, **kwargs):
+    self._log(kwargs)
+
+  def _log(self, x):
     # append or overwrite such that we retain the values i for which `i % self.subsample_factor ==
     # 0` and the last value logged.
     i = self.log_counts[id(self.current_scope)]
-    item = (i, kwargs)
+    item = (i, x)
     if i % self.subsample_factor == 1 or not self.current_scope.items:
       self.current_scope.items.append(item)
     else:
