@@ -198,7 +198,6 @@ class UniformRandomSampler(BaseSampler):
 
   @instrument(key)
   def __call__(self, pianorolls, masks):
-    print 'random sampling...'
     predictions = np.ones(pianorolls.shape)
     if Globals.separate_instruments:
       samples = util.sample_onehot(predictions, axis=2, temperature=1)
@@ -246,7 +245,6 @@ class AncestralSampler(BaseSampler):
 
     with Globals.bamboo.scope("sequence", subsample_factor=10):
       for s in range(mask_size):
-        print '\tsequential step', s
         predictions = self.predict(pianorolls, masks)
         if Globals.separate_instruments:
           samples = util.sample_onehot(predictions, axis=2, temperature=self.temperature)
