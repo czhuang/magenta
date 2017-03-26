@@ -52,11 +52,11 @@ def main(unused_argv):
 
 
 # decorator for timing and BB.log structuring
-def instrument(label):
+def instrument(label, subsample_factor=None):
   def decorator(fn):
     def wrapped_fn(*args, **kwargs):
       with util.timing(label):
-        with BB.scope(label):
+        with BB.scope(label, subsample_factor=subsample_factor):
           return fn(*args, **kwargs)
     return wrapped_fn
   return decorator
@@ -211,7 +211,7 @@ class AncestralSampler(BaseSampler):
     self.selector = selector
     self.temperature = temperature
 
-  @instrument(key)
+  @instrument(key, subsample_factor=10)
   def __call__(self, pianorolls, masks):
     B, T, P, I = pianorolls.shape
     assert Globals.separate_instruments or I == 1
@@ -248,7 +248,7 @@ class GibbsSampler(BaseSampler):
     self.schedule = schedule
     self.num_steps = num_steps
 
-  @instrument(key)
+  @instrument(key, subsample_factor=10)
   def __call__(self, pianorolls, masks):
     B, T, P, I = pianorolls.shape
     print 'shape', pianorolls.shape
@@ -450,19 +450,19 @@ def numbers_of_masked_variables(masks):
 ### Globals to keep complexity in check ###
 ###########################################
 
-Scope = namedtuple("Scope", "label items")
+Scope = namedtuple("Scope", "label items subsample_factor")
 
 # Unobtrusive structured logging of intermediate values
 class Bamboo(object):
-  def __init__(self, subsample_factor=10):
-    self.root = Scope(label="root", items=[])
+  def __init__(self):
+    self.root = Scope(label="root", items=[], subsample_factor=1)
     self.stack = [self.root]
     self.log_counts = defaultdict(lambda: 0)
-    self.subsample_factor = subsample_factor
 
   @contextlib.contextmanager
-  def scope(self, label):
-    new_scope = Scope(label=label, items=[])
+  def scope(self, label, subsample_factor=None):
+    subsample_factor = 1 is subsample_factor is None else subsample_factor
+    new_scope = Scope(label=label, items=[], subsample_factor=subsample_factor)
     self._log(new_scope)
     self.stack.append(new_scope)
     yield
@@ -476,11 +476,10 @@ class Bamboo(object):
     self._log(kwargs)
 
   def _log(self, x):
-    # append or overwrite such that we retain the values i for which `i % self.subsample_factor ==
-    # 0` and the last value logged.
+    # append or overwrite such that we retain every `subsample_factor`th value and the last value
     i = self.log_counts[id(self.current_scope)]
     item = (i, x)
-    if i % self.subsample_factor == 1 or not self.current_scope.items:
+    if i % self.current_scope.subsample_factor == 1 or not self.current_scope.items:
       self.current_scope.items.append(item)
     else:
       self.current_scope.items[-1] = item
