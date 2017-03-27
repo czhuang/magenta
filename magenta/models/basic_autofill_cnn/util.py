@@ -98,12 +98,12 @@ def timing(label):
 # unobtrusive structured logging of arbitrary values
 class Bamboo(object):
   def __init__(self):
-    self.root = Bamboo.Scope("root", subsample_factor=1)
+    self.root = BambooScope("root", subsample_factor=1)
     self.stack = [self.root]
 
   @contextlib.contextmanager
   def scope(self, label, subsample_factor=None):
-    new_scope = Bamboo.Scope(label, subsample_factor=subsample_factor)
+    new_scope = BambooScope(label, subsample_factor=subsample_factor)
     self.stack[-1].log(new_scope)
     self.stack.append(new_scope)
     yield
@@ -112,18 +112,18 @@ class Bamboo(object):
   def log(self, **kwargs):
     self.stack[-1].log(kwargs)
 
-  class Scope(object):
-    def __init__(self, label, subsample_factor=None):
-      self.label = label
-      self.subsample_factor = 1 if subsample_factor is None else subsample_factor
-      self.items = []
-      self.i = 0
+class BambooScope(object):
+  def __init__(self, label, subsample_factor=None):
+    self.label = label
+    self.subsample_factor = 1 if subsample_factor is None else subsample_factor
+    self.items = []
+    self.i = 0
 
-    def log(self, x):
-      # append or overwrite such that we retain every `subsample_factor`th value and the last value
-      item = (self.i, x)
-      if self.i % self.subsample_factor == 1 or not self.items:
-        self.items.append(item)
-      else:
-        self.items[-1] = item
-      self.i += 1
+  def log(self, x):
+    # append or overwrite such that we retain every `subsample_factor`th value and the last value
+    item = (self.i, x)
+    if self.i % self.subsample_factor == 1 or not self.items:
+      self.items.append(item)
+    else:
+      self.items[-1] = item
+    self.i += 1
