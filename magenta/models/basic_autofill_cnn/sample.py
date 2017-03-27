@@ -251,13 +251,10 @@ class AncestralSampler(BaseSampler):
     assert Globals.separate_instruments or I == 1
 
     # determine how many model evaluations we need to make
-    mask_size = np.unique(numbers_of_masked_variables(masks))
-    # everything is better if mask sizes are the same throughout the batch
-    # FIXME not satisfied inside Gibbs, also maybe it doesn't matter so much
-    assert mask_size.size == 1
+    mask_size = np.max(numbers_of_masked_variables(masks))
 
     with Globals.bamboo.scope("sequence", subsample_factor=10):
-      for s in range(mask_size):
+      for _ in range(mask_size):
         predictions = self.predict(pianorolls, masks)
         if Globals.separate_instruments:
           samples = util.sample_onehot(predictions, axis=2, temperature=self.temperature)
@@ -271,8 +268,6 @@ class AncestralSampler(BaseSampler):
 
     Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=predictions)
     assert masks.sum() == 0
-    if Globals.separate_instruments:
-      assert np.allclose(pianorolls.max(axis=2), 1)
     return pianorolls
 
 class GibbsSampler(BaseSampler):
@@ -291,11 +286,14 @@ class GibbsSampler(BaseSampler):
     num_steps = (np.max(numbers_of_masked_variables(masks))
                  if self.num_steps is None else self.num_steps)
 
-    with Globals.bamboo.scope("sequence", subsample_factor=10):
+    with Globals.bamboo.scope("sequence", subsample_factor=1):
       for s in range(num_steps):
         pm = self.schedule(s, num_steps)
         inner_masks = self.masker(pianorolls.shape, pm=pm, outer_masks=masks)
         pianorolls = self.sampler(pianorolls, inner_masks)
+        if Globals.separate_instruments:
+          # ensure the sampler did actually sample everything under inner_masks
+          assert np.all(np.where(inner_masks.max(axis=2), np.isclose(pianorolls.max(axis=2), 1), 1))
         Globals.bamboo.log(pianorolls=pianorolls, masks=inner_masks, predictions=pianorolls)
 
     Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=pianorolls)
@@ -415,7 +413,10 @@ class ChronologicalSelector(BaseSelector):
       # find index of first (t, p) with mask[:, t, p, :] == 1
       selection = np.argmax(masks.reshape((B, T * P)), axis=1)
       selection = np.eye(T * P)[selection].reshape((B, T, P, I))
-    return selection
+    # Intersect with mask to avoid selecting outside of the mask, e.g. in case some masks[b] is zero
+    # everywhere. This can happen inside blocked Gibbs, where different examples have different
+    # block sizes.
+    return selection * masks
 
 class OrderlessSelector(BaseSelector):
   key = "orderless"
@@ -432,7 +433,10 @@ class OrderlessSelector(BaseSelector):
       selection = masks.reshape([B, T * P])
       selection = util.sample_onehot(selection, axis=1)
       selection = selection.reshape([B, T, P, I])
-    return selection
+    # Intersect with mask to avoid selecting outside of the mask, e.g. in case some masks[b] is zero
+    # everywhere. This can happen inside blocked Gibbs, where different examples have different
+    # block sizes.
+    return selection * masks
 
 
 ####################################
