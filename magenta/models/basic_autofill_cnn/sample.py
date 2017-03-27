@@ -162,27 +162,82 @@ class AgibbsStrategy(BaseStrategy):
     pianorolls = sampler(pianorolls, masks)
     return pianorolls
 
-for percentage in "99 95 90 75 50":
-  class ConstantpAgibbsStrategy(BaseStrategy):
-    key = "agibbs%s" % percentage
-
-    @instrument(key + "_strategy")
-    def __call__(self, pianorolls, masks):
-      pm = float(".%s" % percentage)
-      num_steps = np.max(numbers_of_masked_variables(masks))
-      sampler = GibbsSampler(num_steps=num_steps,
-                             masker=BernoulliMasker(),
-                             sampler=AncestralSampler(self.wmodel, OrderlessSelector(), temperature=FLAGS.temperature),
-                             schedule=ConstantSchedule(pm))
-      pianorolls = sampler(pianorolls, masks)
-      return pianorolls
-
-class ContiguousGibbsStrategy(BaseStrategy):
-  key = "contiguous_gibbs"
+class Agibbs99Strategy(BaseStrategy):
+  key = "agibbs99"
 
   @instrument(key + "_strategy")
   def __call__(self, pianorolls, masks):
-    pm = float(".%s" % percentage)
+    pm = .99
+    num_steps = np.max(numbers_of_masked_variables(masks))
+    sampler = GibbsSampler(num_steps=num_steps,
+                           masker=BernoulliMasker(),
+                           sampler=AncestralSampler(self.wmodel, OrderlessSelector(), temperature=FLAGS.temperature),
+                           schedule=ConstantSchedule(pm))
+    pianorolls = sampler(pianorolls, masks)
+    return pianorolls
+
+class Agibbs95Strategy(BaseStrategy):
+  key = "agibbs95"
+
+  @instrument(key + "_strategy")
+  def __call__(self, pianorolls, masks):
+    pm = .95
+    num_steps = np.max(numbers_of_masked_variables(masks))
+    sampler = GibbsSampler(num_steps=num_steps,
+                           masker=BernoulliMasker(),
+                           sampler=AncestralSampler(self.wmodel, OrderlessSelector(), temperature=FLAGS.temperature),
+                           schedule=ConstantSchedule(pm))
+    pianorolls = sampler(pianorolls, masks)
+    return pianorolls
+
+class Agibbs90Strategy(BaseStrategy):
+  key = "agibbs90"
+
+  @instrument(key + "_strategy")
+  def __call__(self, pianorolls, masks):
+    pm = .90
+    num_steps = np.max(numbers_of_masked_variables(masks))
+    sampler = GibbsSampler(num_steps=num_steps,
+                           masker=BernoulliMasker(),
+                           sampler=AncestralSampler(self.wmodel, OrderlessSelector(), temperature=FLAGS.temperature),
+                           schedule=ConstantSchedule(pm))
+    pianorolls = sampler(pianorolls, masks)
+    return pianorolls
+
+class Agibbs75Strategy(BaseStrategy):
+  key = "agibbs75"
+
+  @instrument(key + "_strategy")
+  def __call__(self, pianorolls, masks):
+    pm = .75
+    num_steps = np.max(numbers_of_masked_variables(masks))
+    sampler = GibbsSampler(num_steps=num_steps,
+                           masker=BernoulliMasker(),
+                           sampler=AncestralSampler(self.wmodel, OrderlessSelector(), temperature=FLAGS.temperature),
+                           schedule=ConstantSchedule(pm))
+    pianorolls = sampler(pianorolls, masks)
+    return pianorolls
+
+class Agibbs50Strategy(BaseStrategy):
+  key = "agibbs50"
+
+  @instrument(key + "_strategy")
+  def __call__(self, pianorolls, masks):
+    pm = .50
+    num_steps = np.max(numbers_of_masked_variables(masks))
+    sampler = GibbsSampler(num_steps=num_steps,
+                           masker=BernoulliMasker(),
+                           sampler=AncestralSampler(self.wmodel, OrderlessSelector(), temperature=FLAGS.temperature),
+                           schedule=ConstantSchedule(pm))
+    pianorolls = sampler(pianorolls, masks)
+    return pianorolls
+
+class Cgibbs50Strategy(BaseStrategy):
+  key = "cgibbs50"
+
+  @instrument(key + "_strategy")
+  def __call__(self, pianorolls, masks):
+    pm = 0.50
     num_steps = np.max(numbers_of_masked_variables(masks))
     sampler = GibbsSampler(num_steps=num_steps,
                            masker=ContiguousMasker(),
