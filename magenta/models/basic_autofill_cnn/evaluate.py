@@ -240,7 +240,7 @@ class ExampleEvaluator(BaseEvaluator):
     return np.sum(varwise_lls)
 
 class EnsemblingEvaluator(BaseEvaluator):
-  key = None
+  key = "_ensembling"
 
   def __init__(self, evaluator, ensemble_size):
     self.evaluator = evaluator
