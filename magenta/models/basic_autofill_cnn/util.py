@@ -1,23 +1,6 @@
 import contextlib, time
 import numpy as np
 
-def softmax(p, axis=None, temperature=1):
-  if axis is None:
-    axis = p.ndim - 1
-  if temperature == 0.:
-    # NOTE: may have multiple equal maxima, normalized below
-    p = p == np.max(p, axis=axis, keepdims=True)
-  else:
-    oldp = p
-    logp = np.log(p)
-    logp /= temperature
-    logp -= logp.max(axis=axis, keepdims=True)
-    p = np.exp(logp)
-  p /= p.sum(axis=axis, keepdims=True)
-  if np.isnan(p).any():
-    import pdb; pdb.set_trace()
-  return p
-
 def sample_bernoulli(p, temperature):
   B, T, P, I = p.shape
   assert I == 1
@@ -40,43 +23,52 @@ def sample_bernoulli(p, temperature):
     sampled = np.random.random(p.shape) < p
   return sampled
 
-def sample_onehot(p, axis=None, temperature=1):
+def softmax(p, axis=None, temperature=1):
+  if axis is None:
+    axis = p.ndim - 1
+  if temperature == 0.:
+    # NOTE: in case of multiple equal maxima, returns uniform distribution over them
+    p = p == np.max(p, axis=axis, keepdims=True)
+  else:
+    oldp = p
+    logp = np.log(p)
+    logp /= temperature
+    logp -= logp.max(axis=axis, keepdims=True)
+    p = np.exp(logp)
+  p /= p.sum(axis=axis, keepdims=True)
+  if np.isnan(p).any():
+    import pdb; pdb.set_trace()
+  return p
+
+def sample(p, axis=None, temperature=1, onehot=False):
+  assert (p >= 0).all() # just making sure we don't put log probabilities in here
+
   if axis is None:
     axis = p.ndim - 1
 
   if temperature != 1:
-    p = softmax(np.log(p), axis=axis, temperature=temperature)
-  else:
-    # callers depend on us taking care of normalization
-    p /= p.sum(axis=axis, keepdims=True)
+    p = p ** (1. / temperature)
+  cmf = p.cumsum(axis=axis)
+  totalmasses = cmf[tuple(slice(None) if d != axis else slice(-1, None) for d in range(cmf.ndim))]
+  u = np.random.random([p.shape[d] if d != axis else 1 for d in range(p.ndim)])
+  i = np.argmax(u * totalmasses < cmf, axis=axis)
 
-  # temporary transpose/reshape to matrix
-  if axis != p.ndim - 1:
-    permutation = list(range(0, axis)) + list(range(axis + 1, p.ndim)) + [axis]
-    p = np.transpose(p, permutation)
-  pshape = p.shape
-  p = p.reshape([-1, p.shape[-1]])
+  return to_onehot(i, axis=axis, depth=p.shape[axis]) if onehot else i
 
-  if not np.allclose(p.sum(axis=1), 1):
-    k = (1 - np.isclose(p.sum(axis=1), 1)).sum()
-    n = p.sum(axis=1).size
-    maxdev = abs(p.sum(axis=1) - 1).max()
-    print ("warning: %i/%i (%.2f) pmfs don't quite sum to 1; max deviation: %g"
-           % (k, n, k * 1. / n, maxdev))
-
-  # sample in a loop i guess -_-
-  x = np.zeros(p.shape, dtype=np.float32)
-  for i in range(p.shape[0]):
-    x[i, np.random.choice(p.shape[1], p=p[i])] = 1.
-  
-  # transpose/reshape back
-  x = x.reshape(pshape)
-  if axis != x.ndim - 1:
-    x = np.transpose(x, permutation)
-
+def to_onehot(i, depth, axis=None):
+  if axis is None:
+    axis = i.ndim
+  x = np.eye(depth)[i]
+  if axis != i.ndim:
+    # move new axis forward
+    axes = list(range(i.ndim))
+    axes.insert(axis, i.ndim)
+    x = np.transpose(x, axes)
   assert np.allclose(x.sum(axis=axis), 1)
   return x
 
+def sample_onehot(p, axis=None, temperature=1):
+  return sample(p, axis=axis, temperature=temperature, onehot=True)
 
 def deepsubclasses(klass):
   for subklass in klass.__subclasses__():
