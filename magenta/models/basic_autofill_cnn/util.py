@@ -122,7 +122,9 @@ class BambooScope(object):
   def log(self, x):
     # append or overwrite such that we retain every `subsample_factor`th value and the last value
     item = (self.i, x)
-    if self.i % self.subsample_factor == 1 or not self.items:
+    if (self.subsample_factor == 1 or
+        self.i % self.subsample_factor == 1 or
+        not self.items):
       self.items.append(item)
     else:
       self.items[-1] = item
