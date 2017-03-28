@@ -298,7 +298,7 @@ class PianorollEncoderDecoder(object):
       for i in range(self.num_instruments):
         # FIXME: Need better way of aligning voices for time steps that are not full voicing.
         # FIXME: this only holds for bach pieces with 4voice encoding.
-        assert len(chord) == self.num_instruments
+        #assert len(chord) == self.num_instruments
         if i < len(chord):
           pitch = chord[i]
           if not np.isnan(pitch):
