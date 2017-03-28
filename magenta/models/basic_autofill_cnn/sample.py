@@ -103,7 +103,7 @@ class TransitionStrategy(BaseStrategy):
   key = "transition"
 
   @instrument(key + "_strategy")
-  def __class__(self, pianorolls, masks):
+  def __call__(self, pianorolls, masks):
     init_sampler = BachSampler(self.wmodel, temperature=FLAGS.temperature)
     pianorolls = init_sampler(pianorolls, masks)
 
