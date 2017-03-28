@@ -78,6 +78,10 @@ class RevoiceStrategy(BaseStrategy):
                            schedule=YaoSchedule(pmin=0.1, pmax=0.9, alpha=0.7))
     for i in range(pianorolls.shape[-1]):
       masks = InstrumentMasker(instrument=i)(masks.shape)
+      with Globals.bamboo.scope("context"):
+        context = np.array([mask_tools.apply_mask(pianoroll, mask)
+                            for pianoroll, mask in zip(pianorolls, masks)])
+        Globals.bamboo.log(pianorolls=context, masks=masks, predictions=context)
       pianorolls = sampler(pianorolls, masks)
     return pianorolls
 
@@ -95,6 +99,11 @@ class HarmonizationStrategy(BaseStrategy):
                          masker=BernoulliMasker(),
                          sampler=IndependentSampler(self.wmodel, temperature=FLAGS.temperature),
                          schedule=YaoSchedule(pmin=0.1, pmax=0.9, alpha=0.7))
+
+    with Globals.bamboo.scope("context"):
+      context = np.array([mask_tools.apply_mask(pianoroll, mask)
+                          for pianoroll, mask in zip(pianorolls, masks)])
+      Globals.bamboo.log(pianorolls=context, masks=masks, predictions=context)
     pianorolls = gibbs(pianorolls, masks)
 
     return pianorolls
@@ -113,6 +122,11 @@ class TransitionStrategy(BaseStrategy):
                          masker=BernoulliMasker(),
                          sampler=IndependentSampler(self.wmodel, temperature=FLAGS.temperature),
                          schedule=YaoSchedule(pmin=0.1, pmax=0.9, alpha=0.7))
+
+    with Globals.bamboo.scope("context"):
+      context = np.array([mask_tools.apply_mask(pianoroll, mask)
+                          for pianoroll, mask in zip(pianorolls, masks)])
+      Globals.bamboo.log(pianorolls=context, masks=masks, predictions=context)
     pianorolls = gibbs(pianorolls, masks)
     return pianorolls
 
