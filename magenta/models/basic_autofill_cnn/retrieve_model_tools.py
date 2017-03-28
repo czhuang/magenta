@@ -102,11 +102,11 @@ def get_checkpoint_hparams(model_name):
   if model_name is None and FLAGS.checkpoint_dir is None:
     raise ModelMisspecificationError('No model name or checkpoint path specified.')
   if model_name is None:
-    hparams_fpath = os.path.join(FLAGS.run_dir, FLAGS.checkpoint_dir, 'config')
+    hparams_fpath = os.path.join(FLAGS.checkpoint_dir, 'config')
     with open(hparams_fpath, 'r') as p:
       hparams = yaml.load(p)
     hparams.checkpoint_fpath = os.path.join(
-        FLAGS.run_dir, FLAGS.checkpoint_dir,
+        FLAGS.checkpoint_dir,
         '%s-best_model.ckpt' % (hparams.conv_arch.name))
     print 'Will load checkpoint from ', hparams.checkpoint_fpath
     return hparams

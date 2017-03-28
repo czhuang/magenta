@@ -138,7 +138,9 @@ class BernoulliInpaintingMasker(object):
     self._context_masks = masker(shape)
     return self._context_masks
 
-  def __call__(self, shape, pm=None):
+  def __call__(self, shape, separate_instruments, pm=None):
+    if not separate_instruments:
+      raise NotImplementedError()
     return sample_masks_within_masks(shape, self.context_masks(shape), pm=pm)
 
   def __repr__(self):
@@ -164,7 +166,7 @@ class BernoulliInpaintingMasker(object):
     masks[:, start:end, :, :] = 1.
     assert masks.max(axis=2).sum() == B * T * I / 2
     return masks
-  
+
   @staticmethod
   def get_inner_voices_masks(shape):
     masks = np.zeros(shape, dtype=np.float32)
@@ -172,9 +174,27 @@ class BernoulliInpaintingMasker(object):
     return masks
   
   @staticmethod
+  def get_soprano_masks(shape):
+    masks = np.zeros(shape, dtype=np.float32)
+    masks[:, :, :, 0] = 1.
+    return masks
+
+  @staticmethod
+  def get_alto_masks(shape):
+    masks = np.zeros(shape, dtype=np.float32)
+    masks[:, :, :, 1] = 1.
+    return masks
+
+  @staticmethod
   def get_tenor_masks(shape):
     masks = np.zeros(shape, dtype=np.float32)
     masks[:, :, :, 2] = 1.
+    return masks
+
+  @staticmethod
+  def get_bass_masks(shape):
+    masks = np.zeros(shape, dtype=np.float32)
+    masks[:, :, :, 3] = 1.
     return masks
 
 class ContiguousMasker(object):
@@ -184,6 +204,24 @@ class ContiguousMasker(object):
   def __repr__(self):
     return "ContiguousMasker()"
 
+
+class BachSampler(object):
+  def __init__(self, **kwargs):
+    pass
+
+  def __call__(self, wmodel, pianorolls, masks):
+    print "Loading validation pieces from %s..." % wmodel.hparams.dataset
+    bach_pianorolls = data_tools.get_data_as_pianorolls(FLAGS.input_dir, wmodel.hparams, 'valid')
+    shape = pianorolls.shape
+    pianorolls = np.array([pianoroll[:shape[1]] for pianoroll in bach_pianorolls])[:shape[0]]
+    yield pianorolls, masks, pianorolls
+
+class ZeroSampler(object):
+  def __init__(self, **kwargs):
+    pass
+
+  def __call__(self, wmodel, pianorolls, masks):
+    yield 0 * pianorolls, masks, 0 * pianorolls
 
 class UniformRandomSampler(object):
   def __init__(self, separate_instruments=None, **kwargs):
@@ -237,6 +275,61 @@ class IndependentSampler(object):
 
   def __repr__(self):
     return "IndependentSampler(temperature=%r)" % self.temperature
+
+class ChronologicalSampler(object):
+  def __init__(self, temperature=1, separate_instruments=None):
+    self.temperature = temperature
+    assert separate_instruments is not None
+    self.separate_instruments = separate_instruments
+
+  def __call__(self, wmodel, pianorolls, masks):
+    B, T, P, I = pianorolls.shape
+    assert self.separate_instruments or I == 1
+
+    # determine how many model evaluations we need to make
+    if self.separate_instruments:
+      mask_size = np.unique(masks.max(axis=2).sum(axis=(1,2)))
+    else:
+      mask_size = np.unique(masks.sum(axis=(1,2,3)))
+    # everything is better if mask sizes are the same throughout the batch
+    assert mask_size.size == 1
+
+    for s in range(mask_size):
+      print '\tsequential step', s
+      input_data = np.asarray([
+          mask_tools.apply_mask_and_stack(pianoroll, mask)
+          for pianoroll, mask in zip(pianorolls, masks)])
+      predictions = wmodel.sess.run(wmodel.model.predictions,
+                                    {wmodel.model.input_data: input_data})
+
+      # sample predictions
+      if self.separate_instruments:
+        samples = generate_tools.sample_onehot(
+            predictions, axis=2, temperature=self.temperature)
+        assert np.allclose(samples.max(axis=2), 1)
+      else:
+        samples = sample_bernoulli(predictions, self.temperature)
+
+      # determine which variable to update
+      if self.separate_instruments:
+        # find index of first (t, i) with mask[:, t, :, i] == 1
+        selection = np.argmax(np.transpose(masks, axes=[0, 2, 1, 3]).reshape((B, P, T * I)), axis=2)
+        selection = np.transpose(np.eye(T * I)[selection].reshape((B, P, T, I)), axes=[0, 2, 1, 3])
+      else:
+        # find index of first (t, p) with mask[:, t, p, :] == 1
+        selection = np.argmax(masks.reshape((B, T * P)), axis=1)
+        selection = np.eye(T * P)[selection].reshape((B, T, P, I))
+
+      pianorolls = np.where(selection, samples, pianorolls)
+      previous_masks = masks.copy()
+      masks = np.where(selection, 0., masks)
+      yield pianorolls, previous_masks, predictions  
+    assert masks.sum() == 0
+    if self.separate_instruments:
+      assert np.allclose(pianorolls.max(axis=2), 1)
+
+  def __repr__(self):
+    return "ChronologicalSampler(temperature=%r)" % self.temperature
 
 class SequentialSampler(object):
   def __init__(self, temperature=1, separate_instruments=None):
@@ -379,9 +472,8 @@ class Gibbs(object):
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_integer("gen_batch_size", 100, "num of samples to generate in a batch.")
 tf.app.flags.DEFINE_integer("num_steps", None, "number of gibbs steps to take")
-tf.app.flags.DEFINE_string("generation_type", None, "unconditioned, inpainting")
-tf.app.flags.DEFINE_string("context_source", "originals", "originals to use the validation piece of the dataset on which the model was trained.")
-tf.app.flags.DEFINE_string("sampler", None, "independent or sequential or bisecting")
+tf.app.flags.DEFINE_string("generation_type", None, "unconditioned, inpainting, voicewise")
+tf.app.flags.DEFINE_string("sampler", None, "independent or sequential or chronological or bisecting")
 tf.app.flags.DEFINE_string("masker", None, "bernoulli or contiguous or bernoulli_inpainting")
 tf.app.flags.DEFINE_string("context_kind", None, "bernoulli, harmonization, transition, inner_voices, tenor")
 tf.app.flags.DEFINE_string("schedule", None, "yao or constant")
@@ -390,7 +482,7 @@ tf.app.flags.DEFINE_float("schedule_yao_pmax", 0.9, "")
 tf.app.flags.DEFINE_float("schedule_yao_alpha", 0.7, "")
 tf.app.flags.DEFINE_float("schedule_constant_p", None, "")
 tf.app.flags.DEFINE_float("temperature", 1, "softmax temperature")
-tf.app.flags.DEFINE_string("initialization", "random", "how to obtain initial piano roll; random or independent or sequential")
+tf.app.flags.DEFINE_string("initialization", "random", "how to obtain initial piano roll; random or independent or sequential or bach or zero")
 tf.app.flags.DEFINE_integer("piece_length", 32, "num of time steps in generated piece")
 # already defined in generate_tools.py
 #tf.app.flags.DEFINE_string(
@@ -410,7 +502,10 @@ def main(unused_argv):
       random=UniformRandomSampler,
       independent=IndependentSampler,
       sequential=SequentialSampler,
-      bisecting=BisectingSampler
+      chronological=ChronologicalSampler,
+      bisecting=BisectingSampler,
+      bach=BachSampler,
+      zero=ZeroSampler,
   )[FLAGS.initialization](temperature=FLAGS.temperature, 
                           separate_instruments=FLAGS.separate_instruments)
   
@@ -421,6 +516,7 @@ def main(unused_argv):
     sampler = dict(
         independent=IndependentSampler,
         sequential=SequentialSampler,
+        chronological=ChronologicalSampler,
         bisecting=BisectingSampler
     )[FLAGS.sampler](temperature=FLAGS.temperature,
                      separate_instruments=FLAGS.separate_instruments)
@@ -444,7 +540,7 @@ def main(unused_argv):
     # TODO: for NADE, because need context mask, would need to setup a BernoulliInpainting master too.  Should separate these different functions.
     masker = dict(bernoulli=BernoulliMasker(),
                   contiguous=ContiguousMasker(),
-                  bernoulli_inpainting=BernoulliInpaintingMasker(FLAGS.context_kind)
+                  bernoulli_inpainting=BernoulliInpaintingMasker(FLAGS.context_kind),
     )[FLAGS.masker]
 
   hparam_updates = {'use_pop_stats': FLAGS.use_pop_stats}
@@ -461,82 +557,68 @@ def main(unused_argv):
   
   intermediates = defaultdict(list)
 
-  # Sets up context and blank slate.  
-  if FLAGS.generation_type == "inpainting":
-    if FLAGS.context_source == "originals":
-      print "Loading validation pieces from %s..." % hparams.dataset
-      piano_rolls = data_tools.get_data_as_pianorolls(FLAGS.input_dir, hparams, 'valid')
-      #pianorolls = np.asarray(list(data_tools.get_data_from(
-      #    FLAGS.validation_set_dir, "valid", FLAGS.piece_length)))
-      
-      # Logs initial complete pieces.
-      intermediates["pianorolls"].append(pianorolls.copy())
-      intermediates["masks"].append(np.zeros_like(pianorolls))
-      intermediates["predictions"].append(np.zeros_like(pianorolls))
-      intermediates["step_idx"].append(-1)
-    else:
-      assert False, 'context source option %s not yet supported' % FLAGS.context_source
-    # if doing inpainting, masker must expose inpainting masks
-    # if doing inpainting, get initial masks and initialize masked-out portion
-    masks = masker.context_masks(pianorolls.shape)
-    pianorolls = np.asarray([mask_tools.apply_mask(pianoroll, mask)
-                             for pianoroll, mask in zip(pianorolls, masks)])
-    # Logs context.
+  def log(pianorolls, masks, predictions, step_idx):
     intermediates["pianorolls"].append(pianorolls.copy())
     intermediates["masks"].append(masks.copy())
-    intermediates["predictions"].append(np.zeros_like(pianorolls))
-    intermediates["step_idx"].append(-1)
-  elif FLAGS.generation_type == "unconditioned":
-    pianorolls = np.zeros([B, T, P, I], dtype=np.float32)
-    masks = np.ones_like(pianorolls)
-  else:
-    assert False, 'Generation type %s not yet supported.' % FLAGS.generation_type  
+    intermediates["predictions"].append(predictions.copy())
+    intermediates["step_idx"].append(step_idx)
 
   # Include initialization time.  Allows us to also time NADE sampling.
   start_time = time.time()
 
-  # sample once to populate masked-out portion
+  pianorolls = np.zeros([B, T, P, I], dtype=np.float32)
+  masks = np.ones([B, T, P, I], dtype=np.float32)
+
+  log_denominator = 1
   if FLAGS.initialization == 'sequential':
-    B, T, P, I = pianorolls.shape
-    if FLAGS.separate_instruments:
-      D = T * I
-    else:
-      D = T * P
+    D = T * I if FLAGS.separate_instruments else T * P
     log_denominator = int(np.ceil(D * FLAGS.log_percent))
     last_step = D
     print 'log_denominator', log_denominator
+
+  # FIXME since context_kind == "original" is now initialization == "bach", there is no way to do
+  # ancestral inpainting on bach pieces.
   iter_idx = 0
   for pianorolls, masks, predictions in init_sampler(wmodel, pianorolls, masks):
     print iter_idx,
-    if FLAGS.initialization != 'sequential' or (
-        iter_idx % log_denominator == 0 or iter_idx == last_step - 1):
+    if iter_idx % log_denominator == 0 or iter_idx == last_step - 1:
       print 'Logging step', iter_idx
-      intermediates["pianorolls"].append(pianorolls.copy())
-      intermediates["masks"].append(masks.copy())
-      intermediates["predictions"].append(predictions.copy())
-      intermediates["step_idx"].append(iter_idx)
+      log(pianorolls=pianorolls, masks=masks, predictions=predictions, step_idx=iter_idx)
     iter_idx += 1
 
   gibbs = Gibbs(num_steps=FLAGS.num_steps,
-                masker=masker,
-                sampler=sampler,
-                schedule=schedule,
+                masker=masker, sampler=sampler, schedule=schedule,
                 separate_instruments=FLAGS.separate_instruments)
-  iter_idx = 0
-  for pianorolls, masks, predictions in gibbs(wmodel, pianorolls):
-    print iter_idx,
-    if (iter_idx % int(FLAGS.log_percent * FLAGS.num_steps) == 0 or
-        FLAGS.num_steps - 1 == iter_idx):
-      print 'Logging step', iter_idx
-      intermediates["pianorolls"].append(pianorolls.copy())
-      intermediates["masks"].append(masks.copy())
-      intermediates["predictions"].append(predictions.copy())
-      intermediates["step_idx"].append(iter_idx)
-    iter_idx += 1
-    #sys.stderr.write(".")
-    #sys.stderr.flush()
-  #sys.stderr.write("\n")
-  print
+
+  def do_gibbs(pianorolls):
+    iter_idx = 0
+    for pianorolls, masks, predictions in gibbs(wmodel, pianorolls):
+      print iter_idx,
+      if (iter_idx % int(FLAGS.log_percent * FLAGS.num_steps) == 0 or
+          FLAGS.num_steps - 1 == iter_idx):
+        print 'Logging step', iter_idx
+        log(pianorolls=pianorolls, masks=masks, predictions=predictions, step_idx=iter_idx)
+      iter_idx += 1
+    return pianorolls
+
+  if FLAGS.generation_type == "inpainting":
+    # if doing inpainting, masker must expose inpainting masks
+    # if doing inpainting, get initial masks and initialize masked-out portion
+    masks = masker.context_masks(pianorolls.shape)
+    # Logs context.
+    log(pianorolls=pianorolls, masks=masks, predictions=np.zeros_like(pianorolls), step_idx=-1)
+    do_gibbs(pianorolls)
+  elif FLAGS.generation_type == "unconditioned":
+    do_gibbs(pianorolls)
+  elif FLAGS.generation_type == "voicewise":
+    for voice in "soprano alto tenor bass".split():
+      assert FLAGS.masker == "bernoulli_inpainting"
+      masker = BernoulliInpaintingMasker(voice)
+      masks = masker.context_masks(pianorolls.shape)
+      gibbs.masker = masker # yuck
+      pianorolls = do_gibbs(pianorolls)
+  else:
+    assert False, 'Generation type %s not yet supported.' % FLAGS.generation_type  
 
   time_taken = (time.time() - start_time) / 60.0 #  In minutes.
   label = "".join(c if c.isalnum() else "_" for c in repr(gibbs))

@@ -474,7 +474,7 @@ def check_dataset():
       pianorolls = data_tools.get_data_as_pianorolls(base_path, hparams, kind)
       print len(pianorolls)
       print sorted(list(set(len(p) for p in pianorolls)))
-
+      
 
 def main(unused_argv):
   #get_duration_hist()

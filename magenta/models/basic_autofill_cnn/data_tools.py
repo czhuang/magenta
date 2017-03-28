@@ -234,9 +234,9 @@ def make_data_feature_maps(sequences, hparams, encoder, start_crop_index=None):
 
 DATASET_PARAMS = {
     'Nottingham': {
-        'pitch_ranges': [31, 93], 'shortest_duration': 0.25, 'num_instruments': 9}, 
+        'pitch_ranges': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 9}, 
     'MuseData': {
-        'pitch_ranges': [21, 105], 'shortest_duration': 0.25, 'num_instruments': 14},
+        'pitch_ranges': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 14},
     'Piano-midi.de': {
         'pitch_ranges': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 12,
         'batch_size': 12},

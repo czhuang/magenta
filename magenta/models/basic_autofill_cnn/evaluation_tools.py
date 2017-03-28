@@ -36,21 +36,23 @@ class InfiniteLoss(Exception):
 class RobustPredictor(object):
   def __init__(self, predictor):
     self.predictor = predictor
-    self.Bmax = np.inf
+    self.maxsize = None
     self.factor = 1.5
 
   def __call__(self, pianoroll, mask):
-    if len(pianoroll) > self.Bmax:
+    if self.maxsize is not None and pianoroll.size > self.maxsize:
       return self.bisect(pianoroll, mask)
     try:
       return self.predictor(pianoroll, mask)
     except tf.errors.ResourceExhaustedError:
-      self.Bmax = int(len(pianoroll) / self.factor)
-      print "ResourceExhaustedError on batch of %s, lowering max batch size to %s" % (len(pianoroll), self.Bmax)
+      if self.maxsize is None:
+        self.maxsize = pianoroll.size
+      self.maxsize = int(self.maxsize / self.factor)
+      print "ResourceExhaustedError on batch of size %s, lowering max size to %s" % (pianoroll.size, self.maxsize)
       return self.bisect(pianoroll, mask)
 
   def bisect(self, pianoroll, mask):
-    i = int(len(pianoroll) / self.factor)
+    i = int(len(pianoroll) / 2)
     return np.concatenate([self(pianoroll[:i], mask[:i]),
                            self(pianoroll[i:], mask[i:])],
                           axis=0)
@@ -141,10 +143,9 @@ def pad_with_zeros(xs, chronological, requested_piece_len):
 def breakup_long_pieces(xs):
   num_pieces = len(xs)
   lens = [len(x) for x in xs]
-  if len(np.unique(lens)) == 1:
-    return xs, lens[0]
   max_len = max(lens)
-  if max_len < 200:
+  # chordwise_batch doesn't do padding, so no need to break up long pieces
+  if max_len < 200 or FLAGS.kind == "chordwise_batch":
     return xs, max_len
 
   sorted_lens = np.sort(lens)
@@ -156,21 +157,21 @@ def breakup_long_pieces(xs):
   print 'max_allowed_len, and longest len', max_allowed_len, sorted_lens[-1]
   print 'lens_too_long', lens_too_long
 
-  added_wraps = 0
-  for i in wrap_inds:
-    len_ = lens[i]
-    num_wraps = int(np.ceil(len_ / float(max_allowed_len)))
-    # if the last wrapped piece is shorter than the shortest piece, then assert.
-    last_wrap_len = len_ % max_allowed_len
-    if last_wrap_len < sorted_lens[0] * 2/3.:
-      assert False, 'Wrapped piece len %d shorter than shortest piece len %d' % (last_wrap_len, sorted_lens[0])
-    temp_x = xs[i]
-    xs[i] = temp_x[:max_allowed_len]
-    for w in range(1, num_wraps): 
-      xs.append(temp_x[w*max_allowed_len:(w+1)*max_allowed_len])
-      added_wraps += 1
-  assert len(xs) == num_pieces + added_wraps
-  return xs, max_allowed_len
+  def bisect_pieces(xs, maxlen):
+    ys = []
+    for x in xs:
+      if len(x) > maxlen:
+        pivot = len(x) // 2
+        ys.extend(bisect_pieces([x[:pivot], x[pivot:]], maxlen))
+      else:
+        ys.append(x)
+    return ys
+
+  old_xs = xs
+  xs = bisect_pieces(xs, max_allowed_len)
+  # assert total length unchanged
+  assert sum(len(x) for x in xs) == sum(len(x) for x in old_xs)
+  return xs, max(len(x) for x in xs)
 
 
 def chordwise_ordering(B, T, D, chronological=False, pitch_chronological=False):
@@ -390,7 +391,7 @@ def evaluation_loop(evaluator, pianorolls, num_crops=5, batch_size=None, eval_da
   return mean_loss, sem_loss, N, ranked_xs_lls
 
 
-def compute_chordwise_loss_batch(predictor, pianorolls, separate_instruments=True, log_eval_progress=False, **kwargs):
+def compute_chordwise_loss_batch(predictor, pianorolls, separate_instruments=True, log_eval_progress=False, chronological=False, **kwargs):
   predictor = RobustPredictor(predictor)
 
   def evaluator(pianorolls, t_sofar):
@@ -404,7 +405,7 @@ def compute_chordwise_loss_batch(predictor, pianorolls, separate_instruments=Tru
 
       xs = np.tile(pianoroll[None], [B, 1, 1, 1])
   
-      ts, ds = chordwise_ordering(1, T, D)
+      ts, ds = chordwise_ordering(1, T, D, chronological=chronological)
       assert ts.shape[1] == 1 and ds.shape[1] == 1
       ts, ds = ts[:, 0], ds[:, 0]
       ts, ds = ts[t_sofar * D:], ds[t_sofar * D:]
@@ -709,7 +710,8 @@ def run(pianorolls=None, wrapped_model=None, sample_name=''):
     print 'WARNING: convnet_len %r,  hparams.crop_piece_len %r, mismatch' % (convnet_len, hparams.crop_piece_len)
   # Warn if training and evaluation lengths are different.
   if not FLAGS.chronological and eval_len != convnet_len:
-    assert False, 'Evaluating on a length (%d) that is different than train len (%d).  Might lead to more cold starts than necessary.' % (eval_len, convnet_len)
+    #assert False, 'Evaluating on a length (%d) that is different than train len (%d).  Might lead to more cold starts than necessary.' % (eval_len, convnet_len)
+    pass
  
  
   # Updates eval_batch_size to be the number of pieces available unless FLAGS gives a smaller one.
