@@ -20,6 +20,10 @@ else:
   WOODWIND_QUARTET_PROGRAMS = OrderedDict(
       [(74, 'flute'), (72, 'clarinet'), (69, 'oboe'), (71, 'bassoon')])
 
+# ok this is better with timidity
+WOODWIND_QUARTET_PROGRAMS = OrderedDict(
+    [(69, 'oboe'), (70, 'english_horn'), (72, 'clarinet'), (71, 'bassoon')])
+
 # In order to have 4 different instruments, not including second violin,
 # and adding in double bass.
 #STRING_QUARTET_PROGRAMS = OrderedDict(

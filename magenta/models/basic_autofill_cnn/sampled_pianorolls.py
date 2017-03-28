@@ -27,7 +27,7 @@ def dump(item, path):
 def pianoroll_to_midi(x):
   import pretty_midi
   midi_data = pretty_midi.PrettyMIDI()
-  programs = [74, 72, 69, 71]
+  programs = [69, 70, 72, 71]
   pitch_offset = 36
   bpm = 120.
   duration = bpm / 60 / 16.
