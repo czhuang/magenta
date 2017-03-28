@@ -3,9 +3,10 @@ import numpy as np
 from magenta.models.basic_autofill_cnn import util
 
 def main():
-  base_path = sys.argv[1]
-  root = pkl.load(gzip.open(base_path))
-  dump((0, root), "%s_pianorolls" % base_path)
+  for base_path in sys.argv[1:]:
+    with gzip.open(base_path) as gzfile:
+      root = pkl.load(gzfile)
+      dump((0, root), "%s_pianorolls" % base_path)
 
 def dump(item, path):
   k, v = item
