@@ -98,7 +98,8 @@ class Hyperparameters(object):
         value = init_hparams[key]
       setattr(self, key, value)
   
-    print self.log_subdir_str
+    # Needs model_name to be given. 
+    #print self.log_subdir_str
 
   @property
   def input_depth(self):

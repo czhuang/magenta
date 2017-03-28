@@ -464,12 +464,16 @@ def check_tessitura_ordering_hist():
 
 def check_dataset():
   from magenta.models.basic_autofill_cnn import hparams_tools
-  hparams = hparams_tools.Hyperparameters(
-      dataset='bach-16th-priorwork-4_voices',
-      quantization_level=0.125)
-  base_path = '/data/lisatmp4/huangche/data/'
-  pianorolls = data_tools.get_data_as_pianorolls(base_path, hparams, 'test')
-  print len(pianorolls)
+  for kind in ['valid', 'test']:
+    for quant in [0.125, 0.25, 0.5]:
+      print kind, quant
+      hparams = hparams_tools.Hyperparameters(
+          dataset='bach-16th-priorwork-4_voices',
+          quantization_level=quant)
+      base_path = '/data/lisatmp4/huangche/data/'
+      pianorolls = data_tools.get_data_as_pianorolls(base_path, hparams, kind)
+      print len(pianorolls)
+      print sorted(list(set(len(p) for p in pianorolls)))
 
 
 def main(unused_argv):
