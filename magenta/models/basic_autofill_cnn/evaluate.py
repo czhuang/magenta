@@ -195,8 +195,8 @@ class NoteEvaluator(BaseEvaluator):
 
   def __call__(self, pianoroll):
     T, P, I = pianoroll.shape
-    assert separate_instruments or I == 1
-    D = I if separate_instruments else P
+    assert self.separate_instruments or I == 1
+    D = I if self.separate_instruments else P
   
     # compile a batch with an example for each variable
     B = T * D
@@ -210,7 +210,7 @@ class NoteEvaluator(BaseEvaluator):
     mask_scratch = np.ones([T, P, I], dtype=np.float32)
     for j, (t, d) in enumerate(zip(ts, ds)):
       mask.append(mask_scratch.copy())
-      if separate_instruments:
+      if self.separate_instruments:
         mask_scratch[t, :, d] = 0
       else:
         mask_scratch[t, d, :] = 0
