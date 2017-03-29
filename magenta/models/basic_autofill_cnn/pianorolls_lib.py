@@ -295,31 +295,37 @@ class PianorollEncoderDecoder(object):
         continue
       t /= skip_interval
       assert t % 1. == 0.
-      for i in range(self.num_instruments):
-        # FIXME: Need better way of aligning voices for time steps that are not full voicing.
-        # FIXME: this only holds for bach pieces with 4voice encoding.
-        #assert len(chord) == self.num_instruments
-        if i < len(chord):
-          pitch = chord[i]
-          if not np.isnan(pitch):
-            if pitch > self.max_pitch or pitch < self.min_pitch:
-              raise PitchOutOfEncodeRangeError(
-                  '%r is out of specified range [%r, %r].' % (
-                      pitch, self.min_pitch, self.max_pitch))
-            p = pitch - self.min_pitch
+      if self.separate_instruments:
+        for i in range(self.num_instruments):
+          # FIXME: Need better way of aligning voices for time steps that are not full voicing.
+          # FIXME: this only holds for bach pieces with 4voice encoding.
+          #assert len(chord) == self.num_instruments
+          if i < len(chord):
+            pitch = chord[i]
+            if not np.isnan(pitch):
+              if pitch > self.max_pitch or pitch < self.min_pitch:
+                raise PitchOutOfEncodeRangeError(
+                    '%r is out of specified range [%r, %r].' % (
+                        pitch, self.min_pitch, self.max_pitch))
+              p = pitch - self.min_pitch
+            else:
+              # Then it's a silence
+              p = P - 1
           else:
             # Then it's a silence
             p = P - 1
-        else:
-          # Then it's a silence
-          p = P - 1
-    
-        assert p % 1. == 0.
-        p = int(p)
- 
-        if self.separate_instruments:
+      
+          assert p % 1. == 0.
+          p = int(p)
+   
           roll[t, p, i] = 1
-        else:
+      else:
+        for pitch in chord:
+          if pitch > self.max_pitch or pitch < self.min_pitch:
+            raise PitchOutOfEncodeRangeError(
+                '%r is out of specified range [%r, %r].' % (
+                    pitch, self.min_pitch, self.max_pitch))
+          p = pitch - self.min_pitch
           if roll[t, p, 0] == 1:
             overlap_counts += 1
           else:
