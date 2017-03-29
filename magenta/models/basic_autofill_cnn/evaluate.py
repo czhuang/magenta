@@ -218,7 +218,7 @@ class NoteEvaluator(BaseEvaluator):
     del mask_scratch
     mask = np.array(mask)
     
-    pxhats = self.predictor(xs_scratch, mask)
+    pxhats = self.predictor(xs, mask)
 
     lls = np.zeros([T, D], dtype=np.float32)
     self.update_lls(lls, xs, pxhats, ts, ds)
