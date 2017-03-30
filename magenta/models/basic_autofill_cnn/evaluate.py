@@ -11,14 +11,15 @@ from magenta.models.basic_autofill_cnn import mask_tools, retrieve_model_tools, 
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('fold', None, 'data fold on which to evaluate (valid or test)')
+tf.app.flags.DEFINE_string('index', None, 'optionally, index of particular data point in fold to evaluate')
 tf.app.flags.DEFINE_string('unit', None, 'note or frame or example')
 tf.app.flags.DEFINE_integer('ensemble_size', 5, 'number of ensemble members to average')
 tf.app.flags.DEFINE_bool('chronological', False, 'indicates evaluation should proceed in chronological order')
 
 def main(unused_argv):
   timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-  name = "eval_%s_%s_%s_ensemble%s_chrono%s" % (
-    timestamp, FLAGS.fold, FLAGS.unit, FLAGS.ensemble_size, FLAGS.chronological)
+  name = "eval_%s_%s%s_%s_ensemble%s_chrono%s" % (
+    timestamp, FLAGS.fold, FLAGS.index if FLAGS.index is not None else "", FLAGS.unit, FLAGS.ensemble_size, FLAGS.chronological)
   save_path = os.path.join(FLAGS.checkpoint_dir, name)
 
   hparam_updates = {'use_pop_stats': FLAGS.use_pop_stats}
@@ -44,6 +45,9 @@ def main(unused_argv):
   print 'max_len', max(lengths)
   print 'unique lengths', np.unique(sorted(pianoroll.shape[0] for pianoroll in pianorolls))
   print 'shape', pianorolls[0].shape
+
+  if FLAGS.index is not None:
+    pianorolls = [pianorolls[int(FLAGS.index)]]
 
   evaluator = BaseEvaluator.make(FLAGS.unit, wmodel=wmodel, chronological=FLAGS.chronological)
   evaluator = EnsemblingEvaluator(evaluator, FLAGS.ensemble_size)
