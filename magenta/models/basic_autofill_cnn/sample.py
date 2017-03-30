@@ -38,7 +38,9 @@ def main(unused_argv):
   pianorolls = strategy(pianorolls, masks)
   time_taken = (time.time() - start_time) / 60.0
 
-  label = "sample_%s_%s_%s_T%g_%.2fmin" % (timestamp, FLAGS.strategy, wmodel.hparams.model_name, FLAGS.temperature, time_taken)
+  Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=pianorolls)
+
+  label = "sample_%s_%s_%s_T%g_l%i_%.2fmin" % (timestamp, FLAGS.strategy, wmodel.hparams.model_name, FLAGS.temperature, FLAGS.piece_length, time_taken)
   path = os.path.join(FLAGS.generation_output_dir, label + ".pkl.gz")
   print "Writing to", path
   with gzip.open(path, "wb") as gzfile:
