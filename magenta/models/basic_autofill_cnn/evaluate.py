@@ -169,13 +169,15 @@ class FrameEvaluator(BaseEvaluator):
       if self.separate_instruments:
         xs_scratch[np.arange(B), t, :, d] = np.eye(P)[np.argmax(pxhats[np.arange(B), t, :, d], axis=1)]
         mask[np.arange(B), t, :, d] = 0
+        # every example in the batch sees one frame more than the previous
+        assert np.allclose((1 - mask).sum(axis=(1, 2, 3)),
+                           [(k * D + d_idx + 1) * P for k in range(mask.shape[0])])
       else:
         xs_scratch[np.arange(B), t, d, :] = pxhats[np.arange(B), t, d, :] > 0.5
         mask[np.arange(B), t, d, :] = 0
-
-      # every example in the batch sees one frame more than the previous
-      assert np.allclose((1 - mask).sum(axis=(1, 2, 3)),
-                         [(k * D + d_idx + 1) * P for k in range(mask.shape[0])])
+        # every example in the batch sees one frame more than the previous
+        assert np.allclose((1 - mask).sum(axis=(1, 2, 3)),
+                           [(k * D + d_idx + 1) * I for k in range(mask.shape[0])])
 
       self.update_lls(lls, xs, pxhats, t, d)
 
