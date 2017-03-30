@@ -18,11 +18,12 @@ def dump(item, path):
       os.makedirs(path)
     npz_path = os.path.join(path, "%s.npz" % k)
     np.savez_compressed(npz_path, pianorolls=v["pianorolls"])
-    for i, pianoroll in enumerate(v["pianorolls"]):
-      midi_data = pianoroll_to_midi(pianoroll)
-      midi_path = os.path.join(path, "%s_%i.midi" % (k, i))
-      print midi_path
-      midi_data.write(midi_path)
+    if True:
+      for i, pianoroll in enumerate(v["pianorolls"]):
+        midi_data = pianoroll_to_midi(pianoroll)
+        midi_path = os.path.join(path, "%s_%i.midi" % (k, i))
+        print midi_path
+        midi_data.write(midi_path)
 
 # NOTE: assumes four separate instruments ordered high to low
 def pianoroll_to_midi(x):
