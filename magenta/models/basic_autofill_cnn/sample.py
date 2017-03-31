@@ -41,10 +41,9 @@ def main(unused_argv):
   Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=pianorolls)
 
   label = "sample_%s_%s_%s_T%g_l%i_%.2fmin" % (timestamp, FLAGS.strategy, wmodel.hparams.model_name, FLAGS.temperature, FLAGS.piece_length, time_taken)
-  path = os.path.join(FLAGS.generation_output_dir, label + ".pkl.gz")
+  path = os.path.join(FLAGS.generation_output_dir, label + ".npz")
   print "Writing to", path
-  with gzip.open(path, "wb") as gzfile:
-    pkl.dump(Globals.bamboo.root, gzfile, protocol=pkl.HIGHEST_PROTOCOL)
+  Globals.bamboo.dump(path)
 
 
 # decorator for timing and Globals.bamboo.log structuring

@@ -3,27 +3,13 @@ import numpy as np
 from magenta.models.basic_autofill_cnn import util
 
 def main():
-  for base_path in sys.argv[1:]:
-    with gzip.open(base_path) as gzfile:
-      root = pkl.load(gzfile)
-      dump((0, root), "%s_pianorolls" % base_path)
-
-def dump(item, path):
-  k, v = item
-  if isinstance(v, util.BambooScope):
-    for subitem in v.items:
-      dump(subitem, os.path.join(path, "%s_%s" % (k, v.label)))
-  else:
-    if not os.path.exists(path):
-      os.makedirs(path)
-    npz_path = os.path.join(path, "%s.npz" % k)
-    np.savez_compressed(npz_path, pianorolls=v["pianorolls"])
-    if True:
-      for i, pianoroll in enumerate(v["pianorolls"]):
-        midi_data = pianoroll_to_midi(pianoroll)
-        midi_path = os.path.join(path, "%s_%i.midi" % (k, i))
-        print midi_path
-        midi_data.write(midi_path)
+  for path in sys.argv[1:]:
+    d = np.load(path)
+    for i, pianoroll in enumerate(d["pianorolls"]):
+      midi_data = pianoroll_to_midi(pianoroll)
+      midi_path = os.path.join(path, "%s_%i.midi" % (path, i))
+      print midi_path
+      midi_data.write(midi_path)
 
 # NOTE: assumes four separate instruments ordered high to low
 def pianoroll_to_midi(x):
