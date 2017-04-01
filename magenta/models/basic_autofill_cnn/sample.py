@@ -38,11 +38,12 @@ def main(unused_argv):
   pianorolls = strategy(pianorolls, masks)
   time_taken = (time.time() - start_time) / 60.0
 
-  label = "sample_%s_%s_%s_T%g_%.2fmin" % (timestamp, FLAGS.strategy, wmodel.hparams.model_name, FLAGS.temperature, time_taken)
-  path = os.path.join(FLAGS.generation_output_dir, label + ".pkl.gz")
+  Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=pianorolls)
+
+  label = "sample_%s_%s_%s_T%g_l%i_%.2fmin" % (timestamp, FLAGS.strategy, wmodel.hparams.model_name, FLAGS.temperature, FLAGS.piece_length, time_taken)
+  path = os.path.join(FLAGS.generation_output_dir, label + ".npz")
   print "Writing to", path
-  with gzip.open(path, "wb") as gzfile:
-    pkl.dump(Globals.bamboo.root, gzfile, protocol=pkl.HIGHEST_PROTOCOL)
+  Globals.bamboo.dump(path)
 
 
 # decorator for timing and Globals.bamboo.log structuring
@@ -64,6 +65,38 @@ def instrument(label, subsample_factor=None):
 class BaseStrategy(util.Factory):
   def __init__(self, wmodel):
     self.wmodel = wmodel
+
+class ScratchUpsamplingStrategy(BaseStrategy):
+  key = "scratch_upsampling"
+
+  @instrument(key + "_strategy")
+  def __call__(self, pianorolls, masks):
+    # start with an empty pianoroll of length 1, then repeatedly upsample
+    desired_length = pianorolls.shape[1]
+    pianorolls = np.zeros_like(pianorolls[:, :1])
+    masks = np.ones_like(masks[:, :1])
+
+    sampler = UpsamplingSampler(desired_length=desired_length,
+                                sampler=GibbsSampler(masker=BernoulliMasker(),
+                                                     sampler=IndependentSampler(self.wmodel, temperature=FLAGS.temperature),
+                                                     schedule=YaoSchedule(pmin=0.1, pmax=0.9, alpha=0.7)))
+    return sampler(pianorolls, masks)
+
+class BachUpsamplingStrategy(BaseStrategy):
+  key = "bach_upsampling"
+
+  @instrument(key + "_strategy")
+  def __call__(self, pianorolls, masks):
+    # optionally start with bach samples
+    init_sampler = BachSampler(self.wmodel, temperature=FLAGS.temperature)
+    pianorolls = init_sampler(pianorolls, masks)
+    masks = np.ones_like(masks)
+    desired_length = 4 * pianorolls.shape[1]
+    sampler = UpsamplingSampler(desired_length=desired_length,
+                                sampler=GibbsSampler(masker=BernoulliMasker(),
+                                                     sampler=IndependentSampler(self.wmodel, temperature=FLAGS.temperature),
+                                                     schedule=YaoSchedule(pmin=0.1, pmax=0.9, alpha=0.7)))
+    return sampler(pianorolls, masks)
 
 class RevoiceStrategy(BaseStrategy):
   key = "revoice"
@@ -385,7 +418,7 @@ class GibbsSampler(BaseSampler):
     num_steps = (np.max(numbers_of_masked_variables(masks))
                  if self.num_steps is None else self.num_steps)
 
-    with Globals.bamboo.scope("sequence", subsample_factor=1):
+    with Globals.bamboo.scope("sequence", subsample_factor=10):
       for s in range(num_steps):
         pm = self.schedule(s, num_steps)
         inner_masks = self.masker(pianorolls.shape, pm=pm, outer_masks=masks)
@@ -400,6 +433,33 @@ class GibbsSampler(BaseSampler):
 
   def __repr__(self):
     return "samplers.gibbs(masker=%r, sampler=%r)" % (self.masker, self.sampler)
+
+class UpsamplingSampler(BaseSampler):
+  key = "upsampling"
+
+  def __init__(self, desired_length, sampler):
+    self.desired_length = desired_length
+    self.sampler = sampler
+
+  @instrument(key)
+  def __call__(self, pianorolls, masks):
+    if not np.all(masks):
+      raise NotImplementedError()
+    with Globals.bamboo.scope("sequence"):
+      while pianorolls.shape[1] < self.desired_length:
+        # upsample by zero-order hold and mask out every second time step
+        pianorolls = np.repeat(pianorolls, 2, axis=1)
+        masks = np.repeat(masks, 2, axis=1)
+        masks[:, 1::2] = 1
+
+        with Globals.bamboo.scope("context"):
+          context = np.array([mask_tools.apply_mask(pianoroll, mask)
+                              for pianoroll, mask in zip(pianorolls, masks)])
+          Globals.bamboo.log(pianorolls=context, masks=masks, predictions=context)
+
+        pianorolls = self.sampler(pianorolls, masks)
+        masks = np.zeros_like(masks)
+    return pianorolls
 
 
 ###############

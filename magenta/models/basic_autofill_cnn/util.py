@@ -1,4 +1,4 @@
-import contextlib, time
+import contextlib, time, os
 import numpy as np
 
 def sample_bernoulli(p, temperature):
@@ -111,6 +111,19 @@ class Bamboo(object):
 
   def log(self, **kwargs):
     self.stack[-1].log(kwargs)
+
+  def dump(self, path):
+    dikt = {}
+    def _compile_npz_dict(item, path):
+      i, node = item
+      if isinstance(node, BambooScope):
+        for subitem in node.items:
+          _compile_npz_dict(subitem, os.path.join(path, "%s_%s" % (i, node.label)))
+      else:
+        for k, v in node.items():
+          dikt[os.path.join(path, "%s_%s" % (i, k))] = v
+    _compile_npz_dict((0, self.root), os.path.splitext(path)[0])
+    np.savez_compressed(path, **dikt)
 
 class BambooScope(object):
   def __init__(self, label, subsample_factor=None):

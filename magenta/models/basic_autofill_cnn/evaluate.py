@@ -11,14 +11,15 @@ from magenta.models.basic_autofill_cnn import mask_tools, retrieve_model_tools, 
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('fold', None, 'data fold on which to evaluate (valid or test)')
+tf.app.flags.DEFINE_string('index', None, 'optionally, index of particular data point in fold to evaluate')
 tf.app.flags.DEFINE_string('unit', None, 'note or frame or example')
 tf.app.flags.DEFINE_integer('ensemble_size', 5, 'number of ensemble members to average')
 tf.app.flags.DEFINE_bool('chronological', False, 'indicates evaluation should proceed in chronological order')
 
 def main(unused_argv):
   timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-  name = "eval_%s_%s_%s_ensemble%s_chrono%s" % (
-    timestamp, FLAGS.fold, FLAGS.unit, FLAGS.ensemble_size, FLAGS.chronological)
+  name = "eval_%s_%s%s_%s_ensemble%s_chrono%s" % (
+    timestamp, FLAGS.fold, FLAGS.index if FLAGS.index is not None else "", FLAGS.unit, FLAGS.ensemble_size, FLAGS.chronological)
   save_path = os.path.join(FLAGS.checkpoint_dir, name)
 
   hparam_updates = {'use_pop_stats': FLAGS.use_pop_stats}
@@ -44,6 +45,9 @@ def main(unused_argv):
   print 'max_len', max(lengths)
   print 'unique lengths', np.unique(sorted(pianoroll.shape[0] for pianoroll in pianorolls))
   print 'shape', pianorolls[0].shape
+
+  if FLAGS.index is not None:
+    pianorolls = [pianorolls[int(FLAGS.index)]]
 
   evaluator = BaseEvaluator.make(FLAGS.unit, wmodel=wmodel, chronological=FLAGS.chronological)
   evaluator = EnsemblingEvaluator(evaluator, FLAGS.ensemble_size)
@@ -165,13 +169,15 @@ class FrameEvaluator(BaseEvaluator):
       if self.separate_instruments:
         xs_scratch[np.arange(B), t, :, d] = np.eye(P)[np.argmax(pxhats[np.arange(B), t, :, d], axis=1)]
         mask[np.arange(B), t, :, d] = 0
+        # every example in the batch sees one frame more than the previous
+        assert np.allclose((1 - mask).sum(axis=(1, 2, 3)),
+                           [(k * D + d_idx + 1) * P for k in range(mask.shape[0])])
       else:
         xs_scratch[np.arange(B), t, d, :] = pxhats[np.arange(B), t, d, :] > 0.5
         mask[np.arange(B), t, d, :] = 0
-
-      # every example in the batch sees one frame more than the previous
-      assert np.allclose((1 - mask).sum(axis=(1, 2, 3)),
-                         [(k * D + d_idx + 1) * P for k in range(mask.shape[0])])
+        # every example in the batch sees one frame more than the previous
+        assert np.allclose((1 - mask).sum(axis=(1, 2, 3)),
+                           [(k * D + d_idx + 1) * I for k in range(mask.shape[0])])
 
       self.update_lls(lls, xs, pxhats, t, d)
 
@@ -195,8 +201,8 @@ class NoteEvaluator(BaseEvaluator):
 
   def __call__(self, pianoroll):
     T, P, I = pianoroll.shape
-    assert separate_instruments or I == 1
-    D = I if separate_instruments else P
+    assert self.separate_instruments or I == 1
+    D = I if self.separate_instruments else P
   
     # compile a batch with an example for each variable
     B = T * D
@@ -210,7 +216,7 @@ class NoteEvaluator(BaseEvaluator):
     mask_scratch = np.ones([T, P, I], dtype=np.float32)
     for j, (t, d) in enumerate(zip(ts, ds)):
       mask.append(mask_scratch.copy())
-      if separate_instruments:
+      if self.separate_instruments:
         mask_scratch[t, :, d] = 0
       else:
         mask_scratch[t, d, :] = 0
@@ -218,7 +224,7 @@ class NoteEvaluator(BaseEvaluator):
     del mask_scratch
     mask = np.array(mask)
     
-    pxhats = self.predictor(xs_scratch, mask)
+    pxhats = self.predictor(xs, mask)
 
     lls = np.zeros([T, D], dtype=np.float32)
     self.update_lls(lls, xs, pxhats, ts, ds)
