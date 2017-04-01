@@ -418,7 +418,7 @@ class GibbsSampler(BaseSampler):
     num_steps = (np.max(numbers_of_masked_variables(masks))
                  if self.num_steps is None else self.num_steps)
 
-    with Globals.bamboo.scope("sequence", subsample_factor=1):
+    with Globals.bamboo.scope("sequence", subsample_factor=10):
       for s in range(num_steps):
         pm = self.schedule(s, num_steps)
         inner_masks = self.masker(pianorolls.shape, pm=pm, outer_masks=masks)
