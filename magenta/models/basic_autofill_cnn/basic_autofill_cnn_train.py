@@ -27,8 +27,9 @@ from magenta.models.basic_autofill_cnn.hparams_tools import Hyperparameters
 #    'input_dir', '/Tmp/huangche/data/bach/qbm120/instrs=4_duration=0.125_sep=True',
 FLAGS = tf.app.flags.FLAGS
 # TODO(annahuang): Set the default input and output_dir to None for opensource.
+#    'input_dir', '/data/lisatmp4/huangche/data/',
 tf.app.flags.DEFINE_string(
-    'input_dir', '/data/lisatmp4/huangche/data/',
+    'input_dir', '/scratch/jvb-000-aa/huangche/run/coconet/',
     'Path to the base directory for different datasets.')
 tf.app.flags.DEFINE_string('run_dir', '/u/huangche/logs',
                            'Path to the directory where checkpoints and '
