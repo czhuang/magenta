@@ -261,7 +261,7 @@ class RobustPredictor(object):
   def __init__(self, predictor):
     self.predictor = predictor
     self.maxsize = None
-    self.factor = 1.5
+    self.factor = 2
 
   def __call__(self, pianoroll, mask):
     if self.maxsize is not None and pianoroll.size > self.maxsize:
