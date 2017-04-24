@@ -462,15 +462,18 @@ def check_tessitura_ordering_hist():
 # print voices.keys()
 
 
-def check_dataset():
+def check_dataset(dataset='bach-16th-priorwork-4_voices'):
+  # datasets avail: Nottingham, MuseData, Piano-midi.de, etc.
   from magenta.models.basic_autofill_cnn import hparams_tools
   for kind in ['valid', 'test']:
-    for quant in [0.125, 0.25, 0.5]:
+    #for quant in [0.125, 0.25, 0.5]:
+    for quant in [0.25]:
       print kind, quant
       hparams = hparams_tools.Hyperparameters(
-          dataset='bach-16th-priorwork-4_voices',
+          dataset=dataset,
           quantization_level=quant)
-      base_path = '/data/lisatmp4/huangche/data/'
+      #base_path = '/data/lisatmp4/huangche/data/'
+      base_path = '/scratch/jvb-000-aa/huangche/datasets/coconet/'
       pianorolls = data_tools.get_data_as_pianorolls(base_path, hparams, kind)
       print len(pianorolls)
       print sorted(list(set(len(p) for p in pianorolls)))
@@ -491,7 +494,7 @@ def main(unused_argv):
 #  read_midi()
 #  read_datasets()
 #  test_pianorolls_lib()
-  check_dataset()
+  check_dataset("Piano-midi.de")
 
 
 if __name__ == '__main__':
