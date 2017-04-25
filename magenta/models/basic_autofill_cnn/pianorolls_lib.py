@@ -326,6 +326,7 @@ class PianorollEncoderDecoder(object):
                 '%r is out of specified range [%r, %r].' % (
                     pitch, self.min_pitch, self.max_pitch))
           p = pitch - self.min_pitch
+          p = int(p)
           if roll[t, p, 0] == 1:
             overlap_counts += 1
           else:
