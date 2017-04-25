@@ -321,18 +321,27 @@ class PianorollEncoderDecoder(object):
           roll[t, p, i] = 1
       else:
         for pitch in chord:
-          if pitch > self.max_pitch or pitch < self.min_pitch:
-            raise PitchOutOfEncodeRangeError(
-                '%r is out of specified range [%r, %r].' % (
-                    pitch, self.min_pitch, self.max_pitch))
-          p = pitch - self.min_pitch
+          if not np.isnan(pitch):
+            if pitch > self.max_pitch or pitch < self.min_pitch:
+              raise PitchOutOfEncodeRangeError(
+                  '%r is out of specified range [%r, %r].' % (
+                      pitch, self.min_pitch, self.max_pitch))
+            p = pitch - self.min_pitch
+          else:
+            # Then it's a silence
+            p = P - 1
+      
+          assert p % 1. == 0.
           p = int(p)
+          
+          # Account for multiple voices having the same pitch in case of instruments separated
           if roll[t, p, 0] == 1:
             overlap_counts += 1
           else:
             roll[t, p, 0] = 1
-    num_notes = np.sum(len(chord) for chord in sequence)
-    if num_notes != (np.sum(roll) + overlap_counts) * skip_interval:
+
+    num_notes = np.sum(len(chord) for t, chord in enumerate(sequence) if t % skip_interval == 0.0)
+    if num_notes != np.sum(roll) + overlap_counts:
       assert False, 'There are %d overlaps, but still (%d != %d).' % (
           overlap_counts, num_notes, np.sum(roll) + overlap_counts)
     if not return_with_additional_encodings:
