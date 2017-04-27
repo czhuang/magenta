@@ -277,6 +277,8 @@ class RobustPredictor(object):
 
   def bisect(self, pianoroll, mask):
     i = int(len(pianoroll) / 2)
+    if i == 0:
+      raise ValueError('Batch size is zero!')
     return np.concatenate([self(pianoroll[:i], mask[:i]),
                            self(pianoroll[i:], mask[i:])],
                           axis=0)
