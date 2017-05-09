@@ -234,9 +234,9 @@ def make_data_feature_maps(sequences, hparams, encoder, start_crop_index=None):
 
 DATASET_PARAMS = {
     'Nottingham': {
-        'pitch_ranges': [31, 93], 'shortest_duration': 0.25, 'num_instruments': 9}, 
+        'pitch_ranges': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 9}, 
     'MuseData': {
-        'pitch_ranges': [21, 105], 'shortest_duration': 0.25, 'num_instruments': 14},
+        'pitch_ranges': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 14},
     'Piano-midi.de': {
         'pitch_ranges': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 12,
         'batch_size': 12},
@@ -246,8 +246,11 @@ DATASET_PARAMS = {
     '4part_Bach_chorales': {
         'pitch_ranges': [36, 88], 'shortest_duration': 0.125, 
         'relative_path': 'bach/qbm120/instrs=4_duration=0.125_sep=True'},
+
     'bach-16th-priorwork-4_voices': {
-        'pitch_ranges': [36, 81], 'shortest_duration': 0.125},
+        'pitch_ranges': [21, 108], 'shortest_duration': 0.125},
+    #'bach-16th-priorwork-4_voices': {
+    #    'pitch_ranges': [36, 81], 'shortest_duration': 0.125},
 
     'MNIST': {'crop_piece_len': 28, 'num_pitches': 28},
     'BinaryMNIST': {'crop_piece_len': 28, 'num_pitches': 28, 

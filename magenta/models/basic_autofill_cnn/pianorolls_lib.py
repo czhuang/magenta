@@ -20,6 +20,10 @@ else:
   WOODWIND_QUARTET_PROGRAMS = OrderedDict(
       [(74, 'flute'), (72, 'clarinet'), (69, 'oboe'), (71, 'bassoon')])
 
+# ok this is better with timidity
+WOODWIND_QUARTET_PROGRAMS = OrderedDict(
+    [(69, 'oboe'), (70, 'english_horn'), (72, 'clarinet'), (71, 'bassoon')])
+
 # In order to have 4 different instruments, not including second violin,
 # and adding in double bass.
 #STRING_QUARTET_PROGRAMS = OrderedDict(
@@ -291,12 +295,32 @@ class PianorollEncoderDecoder(object):
         continue
       t /= skip_interval
       assert t % 1. == 0.
-      for i in range(self.num_instruments):
-        # FIXME: Need better way of aligning voices for time steps that are not full voicing.
-        # FIXME: this only holds for bach pieces with 4voice encoding.
-        assert len(chord) == self.num_instruments
-        if i < len(chord):
-          pitch = chord[i]
+      if self.separate_instruments:
+        for i in range(self.num_instruments):
+          # FIXME: Need better way of aligning voices for time steps that are not full voicing.
+          # FIXME: this only holds for bach pieces with 4voice encoding.
+          #assert len(chord) == self.num_instruments
+          if i < len(chord):
+            pitch = chord[i]
+            if not np.isnan(pitch):
+              if pitch > self.max_pitch or pitch < self.min_pitch:
+                raise PitchOutOfEncodeRangeError(
+                    '%r is out of specified range [%r, %r].' % (
+                        pitch, self.min_pitch, self.max_pitch))
+              p = pitch - self.min_pitch
+            else:
+              # Then it's a silence
+              p = P - 1
+          else:
+            # Then it's a silence
+            p = P - 1
+      
+          assert p % 1. == 0.
+          p = int(p)
+   
+          roll[t, p, i] = 1
+      else:
+        for pitch in chord:
           if not np.isnan(pitch):
             if pitch > self.max_pitch or pitch < self.min_pitch:
               raise PitchOutOfEncodeRangeError(
@@ -306,22 +330,18 @@ class PianorollEncoderDecoder(object):
           else:
             # Then it's a silence
             p = P - 1
-        else:
-          # Then it's a silence
-          p = P - 1
-    
-        assert p % 1. == 0.
-        p = int(p)
- 
-        if self.separate_instruments:
-          roll[t, p, i] = 1
-        else:
+      
+          assert p % 1. == 0.
+          p = int(p)
+          
+          # Account for multiple voices having the same pitch in case of instruments separated
           if roll[t, p, 0] == 1:
             overlap_counts += 1
           else:
             roll[t, p, 0] = 1
-    num_notes = np.sum(len(chord) for chord in sequence)
-    if num_notes != (np.sum(roll) + overlap_counts) * skip_interval:
+
+    num_notes = np.sum(len(chord) for t, chord in enumerate(sequence) if t % skip_interval == 0.0)
+    if num_notes != np.sum(roll) + overlap_counts:
       assert False, 'There are %d overlaps, but still (%d != %d).' % (
           overlap_counts, num_notes, np.sum(roll) + overlap_counts)
     if not return_with_additional_encodings:
