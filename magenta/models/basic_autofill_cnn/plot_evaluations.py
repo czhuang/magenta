@@ -21,7 +21,7 @@ def get_current_time_as_str():
 
 
 def get_fpath_wrapper(fname_tag='', file_type='png'):
-  source_fpath = '/Tmp/huangche/compare_sampling/'
+  source_fpath = '/data/lisatmp4/huangche/compare_sampling/'
   fpath = os.path.join(source_fpath, 
                        '%s_%s.%s' % (fname_tag, get_current_time_as_str(), file_type))
   return fpath
@@ -128,6 +128,21 @@ else:
 #title_fontsize = 'xx-large'
 #label_fontsize = 'xx-large'
 #labelsize='x-large'
+
+# LOAD NEW RESULTS
+results = np.load('progress.npz')
+aggregated_lls_stats = results
+
+method_names = 'agibbs99 agibbs95' # agibbs90 agibbs75 agibbs50 cgibbs50 orderless'
+legend_names = {'sequential':'Contiguous(0.50)',
+                'independent': 'Annealed sampling',
+                '50': 'Bernoulli(0.50)',
+                '75': 'Bernoulli(0.25)',
+                '90': 'Bernoulli(0.10)',
+                'agibbs95': 'Bernoulli(0.05)',
+                'agibbs99': 'Bernoulli(0.01)'}
+nade_mean = 1.15060
+nade_sem = 0.05977
 
 #plt.figure(figsize=(16, 6))
 fig = plt.figure()
