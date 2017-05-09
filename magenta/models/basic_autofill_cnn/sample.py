@@ -608,7 +608,7 @@ def sample_bernoulli_masks(shape, pm=None, outer_masks=1.):
     probs = np.tile(np.random.random([B, T, 1, I]), [1, 1, P, 1])
   else:
     assert I == 1
-    probs = np.random.random([B, T, P, I], dtype=np.float32)
+    probs = np.random.random([B, T, P, I]).astype(np.float32)  #, dtype=np.float32)
   masks = probs < pm
   return masks * outer_masks
 
