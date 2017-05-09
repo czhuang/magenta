@@ -11,14 +11,14 @@ import tensorflow as tf
 
 import pretty_midi
 
-from magenta.models.basic_autofill_cnn import data_tools
+#from magenta.models.basic_autofill_cnn import data_tools
 #from magenta.models.basic_autofill_cnn import seed_tools
 #from magenta.models.basic_autofill_cnn import data_pipeline_tools
-from magenta.models.basic_autofill_cnn import test_tools
-from magenta.models.basic_autofill_cnn import pianorolls_lib
+#from magenta.models.basic_autofill_cnn import test_tools
+#from magenta.models.basic_autofill_cnn import pianorolls_lib
 
-from magenta.music.note_sequence_io import note_sequence_record_iterator, NoteSequenceRecordWriter
-from magenta.music.midi_io import sequence_proto_to_midi_file, midi_to_sequence_proto
+#from magenta.music.note_sequence_io import note_sequence_record_iterator, NoteSequenceRecordWriter
+#from magenta.music.midi_io import sequence_proto_to_midi_file, midi_to_sequence_proto
 
 
 import contextlib
@@ -472,6 +472,30 @@ def check_dataset():
   print len(pianorolls)
 
 
+def convert_to_highest_pickle_protocol():
+  import cPickle as pickle
+  fnames = ['JSB Chorales.pickle', 'JSB_Chorales_8th_Nicolas_style_with_splits_fixed.pickle', 'JSB_Chorales_16th_Nicolas_style_with_splits_fixed.pickle']
+
+  prefix = 'jsb-chorales' 
+  tags = ['quarter', '8th', '16th']
+  lens = dict()
+  for fname, tag in zip(fnames, tags):
+    with open(os.path.join('data', fname), 'rb') as p:
+      data = pickle.load(p)
+    new_fname = '%s-%s.pkl' % (prefix, tag)
+    print fname
+    lens[tag] = np.asarray(sorted(list(set(len(seq) for seq in data['train']))))
+    print len(data['train']), len(data['train'][0])
+    #with open(os.path.join('data', new_fname), 'wb') as p:
+    #  pickle.dump(data, p, protocol=2)
+  
+  for key, items in lens.iteritems():
+    print key, items
+  assert np.allclose(lens['quarter']*2, lens['8th'])
+  assert np.allclose(lens['8th']*2, lens['16th'])
+
+
+
 def main(unused_argv):
   #get_duration_hist()
   #check_num_of_pieces_in_tfrecord()
@@ -487,11 +511,10 @@ def main(unused_argv):
 #  read_midi()
 #  read_datasets()
 #  test_pianorolls_lib()
-  check_dataset()
-
+#  check_dataset()
+  convert_to_highest_pickle_protocol()
 
 if __name__ == '__main__':
-  with pdb_post_mortem():
-    tf.app.run()
+  tf.app.run()
 
 
