@@ -3,7 +3,7 @@ import itertools as it, functools as ft
 from collections import defaultdict
 from datetime import datetime
 import numpy as np, tensorflow as tf
-from magenta.models.basic_autofill_cnn import mask_tools, retrieve_model_tools, data_tools, util
+from magenta.models.basic_autofill_cnn import mask_tools, retrieve_model_tools, data_tools, util, midi_tools
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_integer("gen_batch_size", 100, "num of samples to generate in a batch.")
