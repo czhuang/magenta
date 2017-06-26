@@ -122,7 +122,7 @@ class Bamboo(object):
       else:
         for k, v in node.items():
           dikt[os.path.join(path, "%s_%s" % (i, k))] = v
-    _compile_npz_dict((0, self.root), os.path.splitext(path)[0])
+    _compile_npz_dict((0, self.root), "")
     np.savez_compressed(path, **dikt)
 
 class BambooScope(object):
