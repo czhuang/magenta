@@ -307,7 +307,7 @@ class CompleteManualStrategy(BaseStrategy):
     # fill in the silences
     masks = CompletionMasker()(pianorolls)
     num_steps = np.max(numbers_of_masked_variables(masks))
-    gibbs = GibbsSampler(num_steps=num_steps,
+    gibbs = CorrectingGibbsSampler(num_steps=num_steps,
                          masker=BernoulliMasker(),
                          sampler=IndependentSampler(self.wmodel, temperature=FLAGS.temperature),
                          schedule=YaoSchedule(pmin=0.1, pmax=0.9, alpha=0.7))
@@ -455,6 +455,65 @@ class GibbsSampler(BaseSampler):
           # ensure the sampler did actually sample everything under inner_masks
           assert np.all(np.where(inner_masks.max(axis=2), np.isclose(pianorolls.max(axis=2), 1), 1))
         Globals.bamboo.log(pianorolls=pianorolls, masks=inner_masks, predictions=pianorolls)
+
+    Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=pianorolls)
+    return pianorolls
+
+  def __repr__(self):
+    return "samplers.gibbs(masker=%r, sampler=%r)" % (self.masker, self.sampler)
+
+class CorrectingGibbsSampler(BaseSampler):
+  key = "correctinggibbs"
+
+  def __init__(self, masker, sampler, schedule, num_steps=None):
+    self.masker = masker
+    self.sampler = sampler
+    self.schedule = schedule
+    self.num_steps = num_steps
+    self.wmodel = self.sampler.wmodel # FIXME GibbsSamplers need access to model after all
+
+  @instrument(key)
+  def __call__(self, pianorolls, masks):
+    B, T, P, I = pianorolls.shape
+    D = T * I
+    print 'shape', pianorolls.shape
+    num_steps = (np.max(numbers_of_masked_variables(masks))
+                 if self.num_steps is None else self.num_steps)
+
+    foo = BernoulliMasker()
+
+    with Globals.bamboo.scope("sequence", subsample_factor=10):
+      for s in range(num_steps):
+        # mask out half to test their probability given the other half
+        pmtest = 0.5
+        test_masks = foo(pianorolls.shape, pm=pmtest, outer_masks=masks)
+
+        # choose a reasonable number of variables to resample
+        pm = self.schedule(s, num_steps)
+        kmax = int(test_masks.max(axis=2).sum(axis=(1, 2)).max())
+        k = int(min(1, pm / pmtest) * kmax)
+
+        predictions = self.predict(pianorolls, test_masks)
+        criterion = 1 - np.where(test_masks, pianorolls * predictions, 0)
+        summed_criterion = criterion.sum(axis=2)
+        flat_criterion = summed_criterion.reshape((B, T * I))
+
+        if True:
+          # select top k
+          flat_indices = np.argsort(flat_criterion, axis=1)[:, -k:]
+          flat_inner_masks = np.zeros((B, T * I), dtype=np.float32)
+          flat_inner_masks[np.arange(B)[:, None], flat_indices] = 1.
+          inner_masks = masks * flat_inner_masks.reshape((B, T, I))[:, :, None, :]
+        else:
+          # would like to sample using criterion as probability, except numpy has no way to draw
+          # without replacement from a multinomial/categorical
+          raise NotImplementedError()
+
+        pianorolls = self.sampler(pianorolls, inner_masks)
+        if Globals.separate_instruments:
+          # ensure the sampler did actually sample everything under inner_masks
+          assert np.all(np.where(inner_masks.max(axis=2), np.isclose(pianorolls.max(axis=2), 1), 1))
+        Globals.bamboo.log(pianorolls=pianorolls, masks=inner_masks, predictions=pianorolls, criterion=criterion)
 
     Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=pianorolls)
     return pianorolls
