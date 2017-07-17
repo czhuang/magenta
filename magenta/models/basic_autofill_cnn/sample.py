@@ -1,8 +1,9 @@
-import os, sys, time, contextlib, cPickle as pkl, gzip
+import re, os, sys, time, contextlib, cPickle as pkl, gzip
+import itertools as it, functools as ft
 from collections import defaultdict
 from datetime import datetime
 import numpy as np, tensorflow as tf
-from magenta.models.basic_autofill_cnn import mask_tools, retrieve_model_tools, data_tools, util
+from magenta.models.basic_autofill_cnn import mask_tools, retrieve_model_tools, data_tools, util, midi_tools
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_integer("gen_batch_size", 100, "num of samples to generate in a batch.")
@@ -38,7 +39,8 @@ def main(unused_argv):
   pianorolls = strategy(pianorolls, masks)
   time_taken = (time.time() - start_time) / 60.0
 
-  Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=pianorolls)
+  with Globals.bamboo.scope("result"):
+    Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=pianorolls)
 
   label = "sample_%s_%s_%s_T%g_l%i_%.2fmin" % (timestamp, FLAGS.strategy, wmodel.hparams.model_name, FLAGS.temperature, FLAGS.piece_length, time_taken)
   path = os.path.join(FLAGS.generation_output_dir, label + ".npz")
@@ -293,6 +295,32 @@ class Cgibbs50Strategy(BaseStrategy):
     pianorolls = sampler(pianorolls, masks)
     return pianorolls
 
+class CompleteManualStrategy(BaseStrategy):
+  key = "completemanual"
+
+  @instrument(key + "_strategy")
+  def __call__(self, pianorolls, masks):
+    # get conditioning piano roll from ascii art
+    init_sampler = ManualSampler(self.wmodel, temperature=FLAGS.temperature)
+    pianorolls = init_sampler(pianorolls, masks)
+
+    # fill in the silences
+    masks = CompletionMasker()(pianorolls)
+    num_steps = np.max(numbers_of_masked_variables(masks))
+    gibbs = CorrectingGibbsSampler(num_steps=num_steps,
+                         masker=BernoulliMasker(),
+                         sampler=IndependentSampler(self.wmodel, temperature=FLAGS.temperature),
+                         schedule=YaoSchedule(pmin=0.1, pmax=0.9, alpha=0.7))
+
+    with Globals.bamboo.scope("context"):
+      context = np.array([mask_tools.apply_mask(pianoroll, mask)
+                          for pianoroll, mask in zip(pianorolls, masks)])
+      Globals.bamboo.log(pianorolls=context, masks=masks, predictions=context)
+    pianorolls = gibbs(pianorolls, masks)
+    with Globals.bamboo.scope("result"):
+      Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=pianorolls)
+    return pianorolls
+
 
 ################
 ### Samplers ###
@@ -434,6 +462,65 @@ class GibbsSampler(BaseSampler):
   def __repr__(self):
     return "samplers.gibbs(masker=%r, sampler=%r)" % (self.masker, self.sampler)
 
+class CorrectingGibbsSampler(BaseSampler):
+  key = "correctinggibbs"
+
+  def __init__(self, masker, sampler, schedule, num_steps=None):
+    self.masker = masker
+    self.sampler = sampler
+    self.schedule = schedule
+    self.num_steps = num_steps
+    self.wmodel = self.sampler.wmodel # FIXME GibbsSamplers need access to model after all
+
+  @instrument(key)
+  def __call__(self, pianorolls, masks):
+    B, T, P, I = pianorolls.shape
+    D = T * I
+    print 'shape', pianorolls.shape
+    num_steps = (np.max(numbers_of_masked_variables(masks))
+                 if self.num_steps is None else self.num_steps)
+
+    foo = BernoulliMasker()
+
+    with Globals.bamboo.scope("sequence", subsample_factor=10):
+      for s in range(num_steps):
+        # mask out half to test their probability given the other half
+        pmtest = 0.5
+        test_masks = foo(pianorolls.shape, pm=pmtest, outer_masks=masks)
+
+        # choose a reasonable number of variables to resample
+        pm = self.schedule(s, num_steps)
+        kmax = int(test_masks.max(axis=2).sum(axis=(1, 2)).max())
+        k = int(min(1, pm / pmtest) * kmax)
+
+        predictions = self.predict(pianorolls, test_masks)
+        criterion = 1 - np.where(test_masks, pianorolls * predictions, 0)
+        summed_criterion = criterion.sum(axis=2)
+        flat_criterion = summed_criterion.reshape((B, T * I))
+
+        if True:
+          # select top k
+          flat_indices = np.argsort(flat_criterion, axis=1)[:, -k:]
+          flat_inner_masks = np.zeros((B, T * I), dtype=np.float32)
+          flat_inner_masks[np.arange(B)[:, None], flat_indices] = 1.
+          inner_masks = masks * flat_inner_masks.reshape((B, T, I))[:, :, None, :]
+        else:
+          # would like to sample using criterion as probability, except numpy has no way to draw
+          # without replacement from a multinomial/categorical
+          raise NotImplementedError()
+
+        pianorolls = self.sampler(pianorolls, inner_masks)
+        if Globals.separate_instruments:
+          # ensure the sampler did actually sample everything under inner_masks
+          assert np.all(np.where(inner_masks.max(axis=2), np.isclose(pianorolls.max(axis=2), 1), 1))
+        Globals.bamboo.log(pianorolls=pianorolls, masks=inner_masks, predictions=pianorolls, criterion=criterion)
+
+    Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=pianorolls)
+    return pianorolls
+
+  def __repr__(self):
+    return "samplers.gibbs(masker=%r, sampler=%r)" % (self.masker, self.sampler)
+
 class UpsamplingSampler(BaseSampler):
   key = "upsampling"
 
@@ -461,6 +548,178 @@ class UpsamplingSampler(BaseSampler):
         masks = np.zeros_like(masks)
     return pianorolls
 
+class ManualSampler(BaseSampler):
+  key = "manual"
+
+  def __call__(self, pianorolls, masks):
+    if not np.all(masks):
+      raise NotImplementedError()
+
+    pianoroll = parse_art("""
+    c6|S-------------------------------------------------------------------| 
+    b |--------------------------------------------------------------------| 
+      |--------S-------S---------------------------------------------------|
+    a |--------------------------------------------------------------------| 
+      |------------------------S-------S-----------------------------------|
+    g |--------------------------------------------------------------------| 
+      |----------------------------------------S-------S-------------------|
+    f |A-------A-------------------------------------------------------S---| 
+    e |--------------------------------------------------------S-----------| 
+      |----------------A-------A-------------------------------------------|
+    d |----------------------------------------------------------------T---|
+      |--------------------------------A-------A-----------T-------T-------|
+    c |--------------------------------------------------------------------|
+    b |------------------------------------------------A-------A-----------|
+      |------------------------------------T-------T-----------------------|
+    a |----------------------------------------------------------------A---| 
+      |--------------------T-------T---------------------------------------|
+    g |------------------------------------------------------------B-------| 
+      |----T-------T-------------------------------------------------------|
+    f |--------------------------------------------B-------B---------------| 
+    e |--------------------------------------------------------------------| 
+      |----------------------------B-------B-------------------------------|
+    d |----------------------------------------------------------------B---|
+      |------------B-------B-----------------------------------------------|
+    c |--------------------------------------------------------------------|
+    b |----B---------------------------------------------------------------| 
+      |--------------------------------------------------------------------|
+    """, T=64 + 4)
+
+    pianoroll = parse_art("""
+    c7|----------------------------------------------------------------| 
+    b |----------------------------------------------------------------| 
+      |----------------------------------------------------------------|
+    a |--------------------------------------------------------S---S---| 
+      |----------------------------------------------------S-----------|
+    g |------------------------------------------------S---------------|
+      |--------------------------------------------S-------------------|
+    f |----------------------------------------S-----------A---A-------|
+    e |------------------------------------S-----------------------A---|
+      |--------------------------------S-----------A-------------------|
+    d |----------------------------S-------------------A---T---T-------|
+      |------------------------------------------------------------T---|
+    c |------------------------S-------A---A---A---T-------------------|
+    b |--------------------S-------A-------------------T---------------|
+      |------------------------------------T---------------------------|
+    a |----------------S-------A---------------T-----------------------| 
+      |--------------------A-------------------------------------------|
+    g |------------S---------------T---T-------------------------------| 
+      |----------------------------------------------------------------|
+    f |--------S-------A-----------------------------------------------| 
+    e |----S-------A-------T---T---------------------------------------| 
+      |----------------------------------------------------------------|
+    d |S-------A-------------------------------------------------------|
+      |----A-----------------------------------------------------------|
+    c |------------T---T---------------B-----------B-------------------|
+    b |------------------------------------------------B---------------| 
+      |------------------------------------B---------------B-----------|
+    a |A---T---T---------------B---------------B---------------B-------| 
+      |----------------------------------------------------------------|
+    g |----------------------------B-----------------------------------| 
+      |----------------------------------------------------------------|
+    f |T---------------B-----------------------------------------------| 
+    e |--------------------B-------------------------------------------| 
+      |----------------------------------------------------------------|
+    d |B-------B-------------------------------------------------------|
+      |----------------------------------------------------------------|
+    c |------------B---------------------------------------------------|
+    b |----------------------------------------------------------------| 
+      |----------------------------------------------------------------|
+    a |----B-------------------------------------------------------B---| 
+      |----------------------------------------------------------------|
+    """, T=64)
+
+    pianoroll = parse_art("""
+    c7|----------------------------------------------------------------| 
+    b |----------------------------------------------------------------| 
+      |----------------------------------------------------------------|
+    a |--------------------------------------------------------SSSSSSSS| 
+      |----------------------------------------------------SSSS--------|
+    g |------------------------------------------------SSSS------------|
+      |--------------------------------------------SSSS----------------|
+    f |----------------------------------------SSSS--------AAAAAAAA----|
+    e |------------------------------------SSSS--------------------AAAA|
+      |--------------------------------SSSS--------AAAA----------------|
+    d |----------------------------SSSS----------------AAAATTTTTTTT----|
+      |------------------------------------------------------------TTTT|
+    c |------------------------SSSS----AAAAAAAAAAAATTTT----------------|
+    b |--------------------SSSS----AAAA----------------TTTT------------|
+      |------------------------------------TTTT------------------------|
+    a |----------------SSSS----AAAA------------TTTT--------------------| 
+      |--------------------AAAA----------------------------------------|
+    g |------------SSSS------------TTTTTTTT----------------------------| 
+      |----------------------------------------------------------------|
+    f |--------SSSS----AAAA--------------------------------------------| 
+    e |----SSSS----AAAA----TTTTTTTT------------------------------------| 
+      |----------------------------------------------------------------|
+    d |SSSS----AAAA----------------------------------------------------|
+      |----AAAA--------------------------------------------------------|
+    c |------------TTTTTTTT--------------------------------------------|
+    b |----------------------------------------------------------------| 
+      |----------------------------------------------------------------|
+    a |AAAATTTTTTTT----------------------------------------------------| 
+      |----------------------------------------------------------------|
+    g |----------------------------------------------------------------| 
+      |----------------------------------------------------------------|
+    f |TTTT------------------------------------------------------------| 
+    e |----------------------------------------------------------------| 
+    """, T=64)
+
+    pianoroll = parse_art("""
+    a5|------------------------------------------------------------------------| 
+      |------------------------------------------------------------------------|
+    g |------SSSS----------------------------SSSS------------------------------|
+      |------------------------------------------------------------------------|
+    f |----SS----SS------------------------SS----SS----------------------------|
+    e |SSSS--------SS--------SSSSS-----SSSS--------SS--------SS----------------|
+      |------------------------------------------------------------------------|
+    d |--------------SS----SS-----SSSSS--------------SS----SS--SSS-----SSSSSSSS|
+      |-----------------------------------------------------------SSSSS--------|
+    c |----------------SSSS----------------------------SSSS--------------------|
+    b |------------------------------------------------------------------------|
+    """, T=64 + 8)
+
+    pianoroll = parse_art("""
+    c7|----------------------------------------------------------------|
+    b |----------------------------------------------------------------|
+      |----------------------------------------------------------------|
+    a |----------------------------------------------------------------| 
+      |----------------------------------------------------------------|
+    g |----------------------------------------------------------------| 
+      |----------------------------------------------------------------|
+    f |--------S-------S---------------S-------S-----------------------| 
+    e |--------A-----------------------A---------------S-------S-------| 
+      |----------------------------------------------------------------|
+    d |------------------------------------------------A-------A-------|
+      |----------------------------------------------------------------|
+    c |A-----------------------A---------------------------------------|
+    b |T-----------------------T-----------------------T---------------| 
+      |----------------------------------------------------------------|
+    a |----------------------------------------------------------------| 
+      |--------------------------------------------------------T-------|
+    g |----------------T-----------------------T-----------------------| 
+      |----------------------------------------------------------------|
+    f |----------------------------------------------------------------| 
+    e |------------------------------------------------B---------------| 
+      |----------------------------------------------------------------|
+    d |--------B-------------------------------------------------------|
+      |----------------------------------------------------------------|
+    c |------------------------B---------------------------------------|
+    b |----------------------------------------B-----------------------| 
+      |----------------------------------------------------------------|
+    a |B---------------------------------------------------------------| 
+      |----------------------------------------------------------------|
+    g |----------------B-----------------------------------------------| 
+      |----------------------------------------------------------------|
+    f |--------------------------------B-------------------------------| 
+    e |--------------------------------------------------------B-------| 
+    """, T=64)
+
+    midi = midi_tools.pianoroll_to_midi(pianoroll)
+    midi.write("parsed_art.midi")
+
+    return np.array([pianoroll] * 3)
+    return pianoroll[None, :]
 
 ###############
 ### Maskers ###
@@ -520,6 +779,13 @@ class ContiguousMasker(BaseMasker):
       raise NotImplementedError()
     return sample_contiguous_masks(shape, pm=pm, outer_masks=outer_masks)
 
+class CompletionMasker(BaseMasker):
+  key = "completion"
+
+  def __call__(self, pianorolls, outer_masks=1.):
+    masks = (pianorolls == 0).all(axis=2, keepdims=True)
+    masks = masks + 0 * pianorolls # broadcast explicitly
+    return masks * outer_masks
 
 #################
 ### Schedules ###
@@ -646,6 +912,60 @@ def numbers_of_masked_variables(masks):
     return masks.max(axis=2).sum(axis=(1,2))
   else:
     return masks.sum(axis=(1,2,3))
+
+# ok something else entirely
+def parse_art(art, T=None):
+  assert T is not None
+  I = 4
+  pmin, pmax = 36, 81 # properties of the model, not of the ascii art FIXME get from data_tools
+  P = pmax - pmin + 1
+
+  pianoroll = np.zeros((T, P, I), dtype=np.float32)
+
+  lines = art.strip().splitlines()
+  klasses = "cCdDefFgGaAb"
+  klass = None
+  octave = None
+  cycle = None
+  for li, line in enumerate(lines):
+    match = re.match(r"^\s*(?P<class>[a-gA-G])?(?P<octave>[0-9]|10)?\s*\|(?P<grid>[SATB-]*)\|\s*$", line)
+    if not match:
+      if cycle is not None:
+        print "ignoring unmatched line", li, repr(line)
+      continue
+
+    if cycle is None:
+      # set up cycle through pitches and octaves
+      assert match.group("class") and match.group("class") in klasses
+      assert match.group("octave")
+      klass = match.group("class")
+      octave = int(match.group("octave"))
+      cycle = reversed(list(it.product(range(octave + 1), klasses)))
+      cycle = list(cycle)
+      print cycle
+      cycle = it.dropwhile(lambda ok: ok[1] != match.group("class"), cycle)
+      o, k = next(cycle)
+      assert k == klass
+      assert o == octave
+      cycle = list(cycle)
+      print cycle
+      cycle = iter(cycle)
+    else:
+      octave, klass = next(cycle)
+      if match.group("class"): assert klass == match.group("class")
+      if match.group("octave"): assert octave == int(match.group("octave"))
+
+    pitch = octave * len(klasses) + klasses.index(klass)
+    print klass, octave, pitch, "\t", line
+
+    p = pitch - pmin
+    for t, c in enumerate(match.group("grid")):
+      if c == "-":
+        continue
+      i = "SATB".index(c)
+      pianoroll[t, p, i] = 1.
+
+  return pianoroll
 
 
 ###########################################
