@@ -9,7 +9,6 @@ import tensorflow as tf
 
 import graph
 from hparams_tools import Hyperparameters
-import train
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('checkpoint_dir', None, 'Path to checkpoint directory.')

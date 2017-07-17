@@ -188,10 +188,8 @@ class BasicAutofillCNNGraph(object):
               with tf.control_dependencies(updates):
                 mean, variance = tf.identity(mean), tf.identity(variance)
             else:
-              if hparams.use_pop_stats:
-                mean, variance = layer.popmean, layer.popvariance
-              else:
-                mean, variance = layer.batchmean, layer.batchvariance
+              mean, variance = layer.popmean, layer.popvariance
+              mean, variance = layer.batchmean, layer.batchvariance
 
             self.popstats_by_batchstat[layer.batchmean] = layer.popmean
             self.popstats_by_batchstat[layer.batchvariance] = layer.popvariance

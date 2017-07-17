@@ -66,7 +66,6 @@ class Hyperparameters(object):
       run_dir=None,
       log_process=True,
       save_model_secs=30,
-      use_pop_stats=False,
       # Prediction threshold.
       prediction_threshold=0.5,
       run_id = '')
@@ -202,7 +201,7 @@ class Hyperparameters(object):
         'batch_size': 'bs', 'learning_rate': 'lr', 'optimize_mask_only': 'mask_only',
         'corrupt_ratio': 'corrupt', 'input_depth': 'in', 'crop_piece_len': 'len',
         'use_softmax_loss': 'soft', 'num_instruments': 'num_i', 'num_pitches': 'n_pch',
-        'use_pop_stats': 'pop', 'quantization_level': 'quant', 
+        'quantization_level': 'quant', 
         'encode_silences': 'sil', 'use_residual': 'res',
         'separate_instruments': 'sep', 'rescale_loss': 'rescale', 
         'maskout_method': 'mm'}

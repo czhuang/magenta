@@ -16,12 +16,7 @@ tf.app.flags.DEFINE_integer('ensemble_size', 5, 'number of ensemble members to a
 tf.app.flags.DEFINE_bool('chronological', False, 'indicates evaluation should proceed in chronological order')
 
 def main(argv):
-  # FIXME don't steal flags from elsewhere
-  hparam_updates = {'use_pop_stats': FLAGS.use_pop_stats}
-  wmodel = retrieve_model_tools.retrieve_model(
-    model_name=FLAGS.model_name, hparam_updates=hparam_updates)
-  hparams = wmodel.hparams
-  assert hparams.use_pop_stats == FLAGS.use_pop_stats
+  wmodel = retrieve_model_tools.retrieve_model(model_name=FLAGS.model_name)
 
   evaluator = evaluation.BaseEvaluator.make(FLAGS.unit, wmodel=wmodel,
                                             chronological=FLAGS.chronological)

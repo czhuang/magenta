@@ -26,9 +26,7 @@ tf.app.flags.DEFINE_string(
 
 
 def main(unused_argv):
-  hparam_updates = {'use_pop_stats': FLAGS.use_pop_stats}
-  wmodel = retrieve_model_tools.retrieve_model(
-      model_name=FLAGS.model_name, hparam_updates=hparam_updates)
+  wmodel = retrieve_model_tools.retrieve_model(model_name=FLAGS.model_name)
   hparams = wmodel.hparams
   Globals.separate_instruments = hparams.separate_instruments
 
