@@ -1,4 +1,4 @@
-import contextlib, time, os
+import contextlib, time, os, datetime
 import numpy as np
 
 
@@ -163,3 +163,6 @@ class AggregateMean(object):
   def mean(self):
     """Return the mean."""
     return self.value / self.total_counts
+
+def timestamp():
+  return datetime.now().strftime("%Y%m%d%H%M%S")

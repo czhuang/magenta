@@ -1,6 +1,5 @@
 """Classes for defining hypermaters and model architectures."""
 
-from datetime import datetime
 
 
 class ModelMisspecificationError(Exception):
@@ -11,10 +10,6 @@ class ModelMisspecificationError(Exception):
 def get_checkpoint_hparams(model_name='DeepResidual'):
   """Returns the hyperparameters for the checkpoint model."""
   return hparams_tools.get_checkpoint_hparams(model_name)
-
-
-def get_current_time_as_str():
-  return datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
 
 
 class Hyperparameters(object):

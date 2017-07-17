@@ -1,6 +1,5 @@
 """Script to evaluate a dataset fold under a model."""
 import os
-from datetime import datetime
 import numpy as np
 import tensorflow as tf
 
@@ -32,36 +31,34 @@ def main(argv):
   if bool(paths) == bool(FLAGS.fold is not None):
     raise ValueError("Either --fold must be specified, or paths of npz files to load must be given.")
   if FLAGS.fold is not None:
-    evaluate_fold(evaluator, FLAGS.fold)
+    evaluate_fold(FLAGS.fold, evaluator, wmodel.hparams)
   if paths:
-    evaluate_paths(evaluator, paths)
+    evaluate_paths(paths, evaluator, wmodel.hparams)
 
-def evaluate_fold(evaluator):
-  timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+def evaluate_fold(fold, evaluator, hparams):
   name = "eval_%s_%s%s_%s_ensemble%s_chrono%s" % (
-    timestamp, fold, FLAGS.fold_index if FLAGS.fold_index is not None else "",
+    util.timestamp(), fold, FLAGS.fold_index if FLAGS.fold_index is not None else "",
     FLAGS.unit, FLAGS.ensemble_size, FLAGS.chronological)
   save_path = os.path.join(FLAGS.checkpoint_dir, name)
 
   print 'model_name', hparams.model_name
   print hparams.checkpoint_fpath
 
-  pianorolls = get_fold_pianorolls(fold)
+  pianorolls = get_fold_pianorolls(fold, hparams)
   rval = evaluation.evaluate(evaluator, pianorolls)
   np.savez_compressed("%s.npz" % save_path, **rval)
 
-def evaluate_paths(evaluator):
+def evaluate_paths(paths, evaluator, hparams):
   for path in paths:
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     name = "eval_%s_%s_ensemble%s_chrono%s" % (
-      timestamp, FLAGS.unit, FLAGS.ensemble_size, FLAGS.chronological)
+      util.timestamp(), FLAGS.unit, FLAGS.ensemble_size, FLAGS.chronological)
     save_path = "%s__%s" % (path, name)
 
     pianorolls = get_path_pianoroll(path)
     rval = evaluation.evaluate(evaluator, pianorolls)
     np.savez_compressed("%s.npz" % save_path, **rval)
 
-def get_fold_pianorolls(fold):
+def get_fold_pianorolls(fold, hparams):
   pianorolls = data_tools.get_data_as_pianorolls(FLAGS.data_dir, hparams, fold)
   print '\nRetrieving pianorolls from %s set of %s dataset.\n' % (
       fold, hparams.dataset)

@@ -63,6 +63,10 @@ class BaseEvaluator(util.Factory):
     self.predictor = tfutil.RobustPredictor(predictor)
 
   @property
+  def hparams(self):
+    return self.wmodel.hparams
+
+  @property
   def separate_instruments(self):
     return self.wmodel.hparams.separate_instruments
 

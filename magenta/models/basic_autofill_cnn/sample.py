@@ -1,7 +1,6 @@
 import os, sys, time, contextlib, cPickle as pkl, gzip
 import re
 from collections import defaultdict
-from datetime import datetime
 import numpy as np
 import tensorflow as tf
 
@@ -27,8 +26,6 @@ tf.app.flags.DEFINE_string(
 
 
 def main(unused_argv):
-  timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-
   hparam_updates = {'use_pop_stats': FLAGS.use_pop_stats}
   wmodel = retrieve_model_tools.retrieve_model(
       model_name=FLAGS.model_name, hparam_updates=hparam_updates)
@@ -58,7 +55,7 @@ def main(unused_argv):
   Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=pianorolls)
 
   # Creates a folder for storing the process of the sampling.
-  label = "sample_%s_%s_%s_T%g_l%i_%.2fmin" % (timestamp, FLAGS.strategy, 
+  label = "sample_%s_%s_%s_T%g_l%i_%.2fmin" % (util.timestamp(), FLAGS.strategy, 
     hparams.model_name, FLAGS.temperature, FLAGS.piece_length, time_taken)
   basepath = os.path.join(FLAGS.generation_output_dir, label)
   os.makedirs(basepath)
