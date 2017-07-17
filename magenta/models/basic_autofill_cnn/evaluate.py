@@ -7,7 +7,12 @@ import tensorflow as tf
 import functools as ft
 from scipy.misc import logsumexp
 
-from magenta.models.basic_autofill_cnn import mask_tools, retrieve_model_tools, data_tools, util
+#from magenta.models.basic_autofill_cnn import mask_tools, retrieve_model_tools, data_tools, util
+
+import mask_tools
+import retrieve_model_tools
+#import data_tools
+import util
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('fold', None, 'data fold on which to evaluate (valid or test)')

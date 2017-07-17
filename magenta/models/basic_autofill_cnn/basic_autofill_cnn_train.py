@@ -29,7 +29,7 @@ FLAGS = tf.app.flags.FLAGS
 # TODO(annahuang): Set the default input and output_dir to None for opensource.
 #    'input_dir', '/data/lisatmp4/huangche/data/',
 tf.app.flags.DEFINE_string(
-    'input_dir', '/scratch/jvb-000-aa/huangche/run/coconet/',
+    'input_dir', '/data/lisatmp4/huangche/data/',
     'Path to the base directory for different datasets.')
 tf.app.flags.DEFINE_string('run_dir', '/u/huangche/logs',
                            'Path to the directory where checkpoints and '

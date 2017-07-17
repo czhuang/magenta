@@ -7,9 +7,13 @@ import yaml
 import numpy as np
 import tensorflow as tf
 
-from magenta.models.basic_autofill_cnn import basic_autofill_cnn_graph
-from magenta.models.basic_autofill_cnn.hparams_tools import Hyperparameters
-from magenta.models.basic_autofill_cnn import basic_autofill_cnn_train
+#from magenta.models.basic_autofill_cnn import basic_autofill_cnn_graph
+#from magenta.models.basic_autofill_cnn.hparams_tools import Hyperparameters
+#from magenta.models.basic_autofill_cnn import basic_autofill_cnn_train
+
+import basic_autofill_cnn_graph
+from hparams_tools import Hyperparameters
+#import basic_autofill_cnn_train
 
 
 tf.app.flags.DEFINE_string('checkpoint_dir', None, 'Path to checkpoint directory.')

@@ -10,7 +10,7 @@ import pylab as plt
 
 
 TEST_MODE = False
-NOTEWISE = True
+NOTEWISE = False
 
 COMPARE_BERNOULLI, COMPARE_GIBBS = range(2)
 plot_type = COMPARE_BERNOULLI
@@ -21,7 +21,7 @@ def get_current_time_as_str():
 
 
 def get_fpath_wrapper(fname_tag='', file_type='png'):
-  source_fpath = '/data/lisatmp4/huangche/compare_sampling/'
+  source_fpath = '/data/lisatmp4/huangche/compare_sampling/plots'
   fpath = os.path.join(source_fpath, 
                        '%s_%s.%s' % (fname_tag, get_current_time_as_str(), file_type))
   return fpath
@@ -38,9 +38,11 @@ def get_NADE_nll_mean_and_sem():
   #if NOTEWISE:
   #  losses = evaluation_tools.compute_notewise_loss(wrapped_model, pianorolls)  
   if NOTEWISE:
-    return 0.56509, 0.01071 
-  else: 
-    return 0.96849*4, 0.01253*4
+    #return 0.56509, 0.01071 
+    assert False, 'No new results for notewise yet.'
+  else:
+    #return 0.96849*4, 0.01253*4
+    return 1.09, 0.06
 
 # actual long run
 if NOTEWISE:
@@ -52,30 +54,30 @@ if TEST_MODE:
   # short test run
   stats_fpaths = ['/Tmp/huangche/compare_sampling/stats_2016-11-14_21:31:41.pkl']
 
-# Load pickled statistics.
-lls_stats_by_method = dict()
-for stats_fpath in stats_fpaths:
-  print 'Reading from', stats_fpath
-  with open(stats_fpath, 'rb') as p:
-    lls_stats_by_method_partial = pickle.load(p)
-  lls_stats_by_method.update(lls_stats_by_method_partial)
-
-num_methods = len(lls_stats_by_method)
-num_iters = len(lls_stats_by_method.values()[0])
-iter_keys = lls_stats_by_method.values()[0].keys()
-lls_means = np.zeros((num_methods, num_iters))
-sorted_iters = sorted(lls_stats_by_method.values()[0].keys(), 
-                      key=lambda x: int(x))
-
-aggregated_lls_stats = dict()
-for method_name, lls_stats_by_iter in lls_stats_by_method.items():
-  lls_means = []
-  lls_sem = []
-  for eval_iter in sorted_iters:
-    stats = lls_stats_by_iter[eval_iter]
-    lls_means.append(stats[0])
-    lls_sem.append(stats[2])
-  aggregated_lls_stats[method_name] = (np.asarray(lls_means), np.asarray(lls_sem))
+## Load pickled statistics.
+#lls_stats_by_method = dict()
+#for stats_fpath in stats_fpaths:
+#  print 'Reading from', stats_fpath
+#  with open(stats_fpath, 'rb') as p:
+#    lls_stats_by_method_partial = pickle.load(p)
+#  lls_stats_by_method.update(lls_stats_by_method_partial)
+#
+#num_methods = len(lls_stats_by_method)
+#num_iters = len(lls_stats_by_method.values()[0])
+#iter_keys = lls_stats_by_method.values()[0].keys()
+#lls_means = np.zeros((num_methods, num_iters))
+#sorted_iters = sorted(lls_stats_by_method.values()[0].keys(), 
+#                      key=lambda x: int(x))
+#
+#aggregated_lls_stats = dict()
+#for method_name, lls_stats_by_iter in lls_stats_by_method.items():
+#  lls_means = []
+#  lls_sem = []
+#  for eval_iter in sorted_iters:
+#    stats = lls_stats_by_iter[eval_iter]
+#    lls_means.append(stats[0])
+#    lls_sem.append(stats[2])
+#  aggregated_lls_stats[method_name] = (np.asarray(lls_means), np.asarray(lls_sem))
 
 #method_names = ['sequential', 'independent', '50', '75', '99']
 #method_names = lls_stats_by_method.keys()
@@ -129,11 +131,25 @@ else:
 #label_fontsize = 'xx-large'
 #labelsize='x-large'
 
+
+
+
+# ========= START HERE =========
 # LOAD NEW RESULTS
 results = np.load('progress.npz')
 aggregated_lls_stats = results
+sorted_iters = range(1, 30, 2) + range(31, 256, 16)
+#sorted_iters = range(1, 30, 8) + range(31, 256, 16)
+sorted_iters = range(7, 31, 8) + range(31, 256, 16)
+sorted_iters = np.asarray(sorted_iters) / 2
+sorted_iters = np.concatenate([[0], sorted_iters+1])
 
-method_names = 'agibbs99 agibbs95' # agibbs90 agibbs75 agibbs50 cgibbs50 orderless'
+sorted_iters = range(1, 31, 8) + range(31, 256, 16)
+sorted_iters = np.asarray(sorted_iters) / 2
+ 
+method_names = 'agibbs95 agibbs90 agibbs75 agibbs50'.split() # cgibbs50'.split()  # orderless'.split()
+#method_names = 'agibbs99 agibbs95 agibbs90 agibbs75 agibbs50 cgibbs50'.split()  # orderless'.split()
+#method_names = 'agibbs50 cgibbs50'.split()  # orderless'.split()
 legend_names = {'sequential':'Contiguous(0.50)',
                 'independent': 'Annealed sampling',
                 '50': 'Bernoulli(0.50)',
@@ -141,19 +157,27 @@ legend_names = {'sequential':'Contiguous(0.50)',
                 '90': 'Bernoulli(0.10)',
                 'agibbs95': 'Bernoulli(0.05)',
                 'agibbs99': 'Bernoulli(0.01)'}
-nade_mean = 1.15060
-nade_sem = 0.05977
+legend_names = {'cgibbs50':'Contiguous(0.50)',
+                'independent': 'Annealed sampling',
+                'agibbs50': 'Bernoulli(0.50)',
+                'agibbs75': 'Bernoulli(0.25)',
+                'agibbs90': 'Bernoulli(0.10)',
+                'agibbs95': 'Bernoulli(0.05)',
+                'agibbs99': 'Bernoulli(0.01)'}
 
 #plt.figure(figsize=(16, 6))
 fig = plt.figure()
 #print fig.get_size_inches()
 #plt.subplot(1,2,1)
+init_mean = 16.27800
+init_sem = 0.94975
 ax = plt.gca()
 for i, method_name in enumerate(method_names):
-  means, sems = aggregated_lls_stats[method_name] 
-  if not NOTEWISE:
-    means *= 4
-    sems *= 4
+  means_sems = aggregated_lls_stats[method_name] 
+  means, sems = means_sems[:, 0], means_sems[:, 1]
+  #means = np.concatenate(([init_mean], means))
+  #sems = np.concatenate(([init_sem], sems))
+  
   #plt.errorbar(sorted_iters, means, yerr=sems, marker=markers[i], label='%s' % legend_names[method_name])
   if IS_POSTER:
     plt.plot(sorted_iters, means, '%s%s' % (colors[i], line_styles[i]), linewidth=linewidth, label='%s' % legend_names[method_name])
@@ -169,11 +193,11 @@ plt.legend(ncol=2, prop={'size':'large'})
 #plt.legend(loc="upper left", bbox_to_anchor=[0, 1],
 #           ncol=2, shadow=True, title="Legend", fancybox=True)
 plt.gca().get_legend().get_frame().set_linewidth(0.5)
-plt.ylim(0.4, 0.82)
-yticks = np.arange(0.4, 0.9, 0.1)
+plt.ylim(0.5, 2.05)
+yticks = np.arange(0.5, 2.05, 0.25)
 ax.set_yticks(yticks)
 ax.set_yticklabels(yticks)
-plt.xlim(0, 101)
+plt.xlim(0, 128)
 ax.tick_params(axis='both', which='major', labelsize=labelsize)
 ax.tick_params(axis='both', which='minor', labelsize=labelsize)
 plt.xlabel('# of Gibbs steps', fontsize=label_fontsize)
