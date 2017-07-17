@@ -27,3 +27,11 @@ class RobustPredictor(object):
     return np.concatenate([self(pianoroll[:i], mask[:i]),
                            self(pianoroll[i:], mask[i:])],
                           axis=0)
+
+class WrappedModel(object):
+  """A Wrapper for passing model related and other configs as one object."""
+
+  def __init__(self, model, graph, hparams):
+    self.model = model
+    self.graph = graph
+    self.hparams = hparams

@@ -9,6 +9,7 @@ import tensorflow as tf
 
 import graph
 from hparams_tools import Hyperparameters
+import lib.tfutil as tfutil
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('checkpoint_dir', None, 'Path to checkpoint directory.')
@@ -19,14 +20,14 @@ def retrieve_model(wrapped_model=None, model_name=None, placeholders=None,
   # TODO: change function name to reflect the fact that it updates hparams
   """Builds graph, retrieves checkpoint, and returns wrapped model.
 
-  This function either takes a graph.TFModelWrapper object
+  This function either takes a tfutil.WrappedModel object
   that already has the model graph or calls
   graph.build_graph to return one. It then retrieves its
   weights from the checkpoint file specified in the
   hparams_tools.CHECKPOINT_HPARAMS dictionary.
 
   Returns:
-    wrapped_model: A graph.TFModelWrapper object that
+    wrapped_model: A tfutil.WrappedModel object that
         consists of the model, graph, session and hparams.
   """
   if wrapped_model is None:

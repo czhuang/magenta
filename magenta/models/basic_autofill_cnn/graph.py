@@ -2,6 +2,7 @@
 import tensorflow as tf, numpy as np
 from tensorflow.python.framework.function import Defun
 from collections import OrderedDict
+import lib.tfutil as tfutil
 
 
 class ConvLayerParams(object):
@@ -436,26 +437,8 @@ def build_placeholders_initializers_graph(is_training, hparams, placeholders=Non
   return placeholders["input_data"], placeholders["targets"], placeholders["lengths"], initializer, train_model
 
 
-class TFModelWrapper(object):
-  """A Wrapper for passing model related and other configs as one object."""
-
-  def __init__(self, model, graph, hparams):
-    self.model = model
-    self.graph = graph
-    self.hparams = hparams
-    self._sess = None
-
-  @property
-  def sess(self):
-    return self._sess
-
-  @sess.setter
-  def sess(self, sess):
-    self._sess = sess
-
-
 def build_graph(is_training, hparams, placeholders=None):
   """Build BasicAutofillCNNGraph, input output placeholders, and initializer."""
   _, _, _, _, model = build_placeholders_initializers_graph(
       is_training, hparams, placeholders=placeholders)
-  return TFModelWrapper(model, model.loss.graph, hparams)
+  return tfutil.WrappedModel(model, model.loss.graph, hparams)
