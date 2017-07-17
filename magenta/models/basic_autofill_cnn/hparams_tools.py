@@ -1,16 +1,8 @@
 """Classes for defining hypermaters and model architectures."""
 
-
-
 class ModelMisspecificationError(Exception):
   """Exception for specifying a model that is not currently supported."""
   pass
-
-
-def get_checkpoint_hparams(model_name='DeepResidual'):
-  """Returns the hyperparameters for the checkpoint model."""
-  return hparams_tools.get_checkpoint_hparams(model_name)
-
 
 class Hyperparameters(object):
   """Stores hyperparameters for initialization, batch norm and training."""
