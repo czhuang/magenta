@@ -58,6 +58,7 @@ class BasicAutofillCNNGraph(object):
 
   def __init__(self, is_training, hparams, input_data,
                targets, lengths):  #, target_inspection_index):
+    self.hparams = hparams
     self.batch_size = hparams.batch_size
     self.num_pitches = hparams.num_pitches
     self.is_training = is_training
@@ -120,72 +121,13 @@ class BasicAutofillCNNGraph(object):
           assert specs is conv_specs[-1]
           continue
 
-        if "filters" in specs:
-          # Compute convolution.
-          if specs.get('pitch_locally_connected', False):
-            # Weight instantiation and initialization is wrapped inside.
-            conv, weights = locally_connected_layer_2d_with_second_axis_shared(
-                output, specs['filters'])
-          else:
-            # Instantiate or retrieve filter weights.
-            stddev = tf.sqrt(
-                tf.div(2.0, tf.to_float(tf.reduce_prod(specs['filters'][:-1]))))
-            weights = tf.get_variable(
-                'weights',
-                specs['filters'],
-                initializer=tf.random_normal_initializer(0.0, stddev))
-            stride = specs.get('conv_stride', 1)
-            conv = tf.nn.conv2d(
-                output,
-                weights,
-                strides=[1, stride, stride, 1],
-                padding=specs.get('conv_pad', 'SAME'))
+        input_dim = output.get_shape()[-1]
+        output = self.maybe_conv(output, specs)
+        output_dim = output.get_shape()[-1]
 
-          num_source_filters, num_target_filters = specs['filters'][-2:]
-          if num_target_filters != num_source_filters:
-            output_for_residual = None
-            residual_counter = 0
-
-          # Compute batch normalization or add biases.
-          if not hparams.batch_norm:
-            biases = tf.get_variable(
-                'bias', [num_target_filters],
-                initializer=tf.constant_initializer(0.0))
-            output = tf.nn.bias_add(conv, biases)
-          else:
-            gammas = tf.get_variable(
-                'gamma', [1, 1, 1, num_target_filters],
-                initializer=tf.constant_initializer(hparams.batch_norm_gamma))
-            betas = tf.get_variable(
-                'beta', [num_target_filters],
-                initializer=tf.constant_initializer(0.0))
-            popmean = tf.get_variable(
-                "popmean", shape=[1, 1, 1, num_target_filters], trainable=False,
-                collections=[tf.GraphKeys.MODEL_VARIABLES, tf.GraphKeys.GLOBAL_VARIABLES],
-                initializer=tf.constant_initializer(0.0))
-            popvariance = tf.get_variable(
-                "popvariance", shape=[1, 1, 1, num_target_filters], trainable=False,
-                collections=[tf.GraphKeys.MODEL_VARIABLES, tf.GraphKeys.GLOBAL_VARIABLES],
-                initializer=tf.constant_initializer(1.0))
-            batchmean, batchvariance = tf.nn.moments(conv, [0, 1, 2], keep_dims=True)
-            decay = 0.01
-            if self.is_training:
-              mean, variance = batchmean, batchvariance
-              updates = [popmean.assign_sub(decay * (popmean - mean)),
-                         popvariance.assign_sub(decay * (popvariance - variance))]
-              # make update happen when mean/variance are used
-              with tf.control_dependencies(updates):
-                mean, variance = tf.identity(mean), tf.identity(variance)
-            else:
-              mean, variance = popmean, popvariance
-              mean, variance = batchmean, batchvariance
-
-            self.popstats_by_batchstat[batchmean] = popmean
-            self.popstats_by_batchstat[batchvariance] = popvariance
-
-            output = tf.nn.batch_normalization(
-                conv, mean, variance, betas, gammas,
-                hparams.batch_norm_variance_epsilon)
+        if input_dim != output_dim:
+          output_for_residual = None
+          residual_counter = 0
 
         # Sum residual before nonlinearity if odd layer and residual exist.
         if hparams.use_residual and output_for_residual is not None and (
@@ -208,6 +150,8 @@ class BasicAutofillCNNGraph(object):
               ksize=[1, pooling[0], pooling[1], 1],
               strides=[1, pooling[0], pooling[1], 1],
               padding=specs['pool_pad'])
+          output_for_residual = None
+          residual_counter = 0
 
         self._hiddens.append(output)
 
@@ -345,6 +289,72 @@ class BasicAutofillCNNGraph(object):
   def reshape_back_to_4d(self, data_2d, shape):
     reshaped_data = tf.reshape(data_2d, [-1, shape[1], shape[3], shape[2]])
     return tf.transpose(reshaped_data, [0, 1, 3, 2])
+
+  def maybe_conv(self, x, specs):
+    if "filters" not in specs:
+      return x
+
+    filter_shape = specs["filters"]
+    if specs.get('pitch_locally_connected', False):
+      # Weight instantiation and initialization is wrapped inside.
+      conv, weights = locally_connected_layer_2d_with_second_axis_shared(
+          output, filter_shape)
+    else:
+      # Instantiate or retrieve filter weights.
+      fanin = tf.to_float(tf.reduce_prod(filter_shape[:-1]))
+      stddev = tf.sqrt(tf.div(2.0, fanin))
+      weights = tf.get_variable(
+          'weights', specs['filters'],
+          initializer=tf.random_normal_initializer(0.0, stddev))
+      stride = specs.get('conv_stride', 1)
+      conv = tf.nn.conv2d(x, weights,
+                          strides=[1, stride, stride, 1],
+                          padding=specs.get('conv_pad', 'SAME'))
+
+    # Compute batch normalization or add biases.
+    if not hparams.batch_norm:
+      biases = tf.get_variable('bias', [conv.get_shape()[-1]],
+                               initializer=tf.constant_initializer(0.0))
+      y = tf.nn.bias_add(conv, biases)
+    else:
+      y = self.batchnorm_conv(conv)
+    return y
+
+  def batchnorm_conv(self, x):
+    output_dim = x.get_shape()[-1]
+    gammas = tf.get_variable('gamma', [1, 1, 1, output_dim],
+                             initializer=tf.constant_initializer(1.))
+    betas = tf.get_variable('beta', [output_dim],
+                            initializer=tf.constant_initializer(0.))
+
+    popmean = tf.get_variable(
+        "popmean", shape=[1, 1, 1, output_dim], trainable=False,
+        collections=[tf.GraphKeys.MODEL_VARIABLES, tf.GraphKeys.GLOBAL_VARIABLES],
+        initializer=tf.constant_initializer(0.0))
+    popvariance = tf.get_variable(
+        "popvariance", shape=[1, 1, 1, output_dim], trainable=False,
+        collections=[tf.GraphKeys.MODEL_VARIABLES, tf.GraphKeys.GLOBAL_VARIABLES],
+        initializer=tf.constant_initializer(1.0))
+    batchmean, batchvariance = tf.nn.moments(conv, [0, 1, 2], keep_dims=True)
+
+    decay = 0.01
+    if self.is_training:
+      mean, variance = batchmean, batchvariance
+      updates = [popmean.assign_sub(decay * (popmean - mean)),
+                 popvariance.assign_sub(decay * (popvariance - variance))]
+      # make update happen when mean/variance are used
+      with tf.control_dependencies(updates):
+        mean, variance = tf.identity(mean), tf.identity(variance)
+    else:
+      mean, variance = popmean, popvariance
+      mean, variance = batchmean, batchvariance
+
+    self.popstats_by_batchstat[batchmean] = popmean
+    self.popstats_by_batchstat[batchvariance] = popvariance
+
+    return tf.nn.batch_normalization(
+        x, mean, variance, betas, gammas,
+        self.hparams.batch_norm_variance_epsilon)
 
   @property
   def gradient_norms(self):
