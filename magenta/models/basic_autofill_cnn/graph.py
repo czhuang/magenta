@@ -65,15 +65,16 @@ class BasicAutofillCNNGraph(object):
     self._input_data = input_data
     self._targets = targets
     self._lengths = lengths
+    self._hiddens = []
     self.prediction_threshold = hparams.prediction_threshold
+    self.popstats_by_batchstat = OrderedDict()
+    self.build()
+
+  def build(self):
     input_shape = tf.shape(self._input_data)
     output_depth = input_shape[3] / 2
     conv_specs = hparams.conv_arch.specs
-    num_conv_layers = len(conv_specs) - 1
 
-    residual_period = 2
-
-    # Build convolutional layers.
     output = self._input_data
     if hparams.mask_indicates_context:
       def flip_mask(input):
@@ -86,72 +87,33 @@ class BasicAutofillCNNGraph(object):
       output = tf.split(output, 2, axis=3)[0]
       input_shape = tf.shape(output)
 
-    self.popstats_by_batchstat = OrderedDict()
+    self.residual_init()
 
-    self._hiddens = []
-
-    output_for_residual = None
-    residual_counter = -1
+    n = len(conv_specs)
     for i, specs in enumerate(conv_specs):
       with tf.variable_scope('conv%d' % i):
-        residual_counter += 1
-        # Save output from last layer for residual connections for odd layers.
-        if hparams.use_residual and residual_counter % residual_period == 1:
-          output_for_residual = tf.identity(output)
+        self.residual_counter += 1
+        self.residual_save(output)
 
         # Reshape output if moving into or out of being pitch fully connected.
         if specs.get('change_to_pitch_fully_connected', 0) == 1:
           output_shape = tf.shape(output)
           output = tf.reshape(output, [output_shape[0], output_shape[1], 1,
                                        output_shape[2] * output_shape[3]])
-          # When crossing from pitch not fully connected to yes, clear
-          # kept output for residual.
-          output_for_residual = None
-          # Also reset residual counter.
-          residual_counter = 0
+          self.residual_reset()
 
         elif specs.get('change_to_pitch_fully_connected', 0) == -1:
           output = tf.reshape(
               output, [input_shape[0], input_shape[1], input_shape[2], -1])
-          # When switching back pitch to not fully connected, also clear
-          # kept output for residual as already quite close to the softmax
-          # layer.
-          output_for_residual = None
+          self.residual_reset()
           # Needs to be the layer about the last to do the reshaping
           assert specs is conv_specs[-1]
           continue
 
-        input_dim = output.get_shape()[-1]
-        output = self.maybe_conv(output, specs)
-        output_dim = output.get_shape()[-1]
-
-        if input_dim != output_dim:
-          output_for_residual = None
-          residual_counter = 0
-
-        # Sum residual before nonlinearity if odd layer and residual exist.
-        if hparams.use_residual and output_for_residual is not None and (
-            i > 0 and i < num_conv_layers and
-            residual_counter % residual_period == 0):
-          # Was going to use residual_counter > 0 instead of i > 0,
-          # but didn't since when residual is reset back to 0
-          # output_for_residual is also set to None, which is already checked.
-          output += output_for_residual
-
-        # Pass through nonlinearity, except for the last layer.
-        activation_func = specs.get('activation', tf.nn.relu)
-        output = activation_func(output)
-
-        # Perform pooling layer if specified in specs.
-        if 'pooling' in specs:
-          pooling = specs['pooling']
-          output = tf.nn.max_pool(
-              output,
-              ksize=[1, pooling[0], pooling[1], 1],
-              strides=[1, pooling[0], pooling[1], 1],
-              padding=specs['pool_pad'])
-          output_for_residual = None
-          residual_counter = 0
+        output = self.apply_convolution(output, specs)
+        output = self.apply_residual(output, is_first=i == 0, is_last=i == n - 1)
+        output = self.apply_activation(output, specs)
+        output = self.apply_pooling(output, specs)
 
         self._hiddens.append(output)
 
@@ -290,7 +252,39 @@ class BasicAutofillCNNGraph(object):
     reshaped_data = tf.reshape(data_2d, [-1, shape[1], shape[3], shape[2]])
     return tf.transpose(reshaped_data, [0, 1, 3, 2])
 
-  def maybe_conv(self, x, specs):
+  def residual_init(self):
+    if not self.hparams.use_residual:
+      return
+    self.residual_period = 2
+    self.output_for_residual = None
+    # TODO figure out why this is initialized to -1
+    self.residual_counter = -1
+
+  def residual_reset(self):
+    self.output_for_residual = None
+    self.residual_counter = 0
+
+  def residual_save(self, x):
+    if not self.hparams.use_residual:
+      return
+    if self.residual_counter % self.residual_period == 1:
+      self.output_for_residual = x
+
+  def apply_residual(self, x, is_first, is_last):
+    if not self.hparams.use_residual:
+      return x
+    if self.output_for_residual is None:
+      return x
+    if self.output_for_residual.get_shape()[-1] != x.get_shape()[-1]:
+      # shape mismatch; e.g. change in number of filters
+      self.residual_reset()
+      return x
+    if self.residual_counter % self.residual_period == 0:
+      if not is_first and not is_last:
+        x += self.output_for_residual
+    return x
+
+  def apply_convolution(self, x, specs):
     if "filters" not in specs:
       return x
 
@@ -312,15 +306,15 @@ class BasicAutofillCNNGraph(object):
                           padding=specs.get('conv_pad', 'SAME'))
 
     # Compute batch normalization or add biases.
-    if not hparams.batch_norm:
+    if hparams.batch_norm:
+      y = self.apply_batchnorm(conv)
+    else:
       biases = tf.get_variable('bias', [conv.get_shape()[-1]],
                                initializer=tf.constant_initializer(0.0))
       y = tf.nn.bias_add(conv, biases)
-    else:
-      y = self.batchnorm_conv(conv)
     return y
 
-  def batchnorm_conv(self, x):
+  def apply_batchnorm(self, x):
     output_dim = x.get_shape()[-1]
     gammas = tf.get_variable('gamma', [1, 1, 1, output_dim],
                              initializer=tf.constant_initializer(1.))
@@ -355,6 +349,20 @@ class BasicAutofillCNNGraph(object):
     return tf.nn.batch_normalization(
         x, mean, variance, betas, gammas,
         self.hparams.batch_norm_variance_epsilon)
+
+  def apply_activation(self, x, specs):
+    activation_func = specs.get('activation', tf.nn.relu)
+    return activation_func(x)
+
+  def apply_pooling(self, x, specs):
+    if 'pooling' not in specs:
+      return x
+    pooling = specs['pooling']
+    return tf.nn.max_pool(
+        x,
+        ksize=[1, pooling[0], pooling[1], 1],
+        strides=[1, pooling[0], pooling[1], 1],
+        padding=specs['pool_pad'])
 
   @property
   def gradient_norms(self):
