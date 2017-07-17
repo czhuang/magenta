@@ -145,3 +145,21 @@ class BambooScope(object):
     else:
       self.items[-1] = item
     self.i += 1
+
+class AggregateMean(object):
+  """Aggregates values for mean."""
+
+  def __init__(self, name):
+    self.name = name
+    self.value = 0.
+    self.total_counts = 0
+
+  def add(self, value, counts):
+    """Add an amount to the total and also increment the counts."""
+    self.value += value
+    self.total_counts += counts
+
+  @property
+  def mean(self):
+    """Return the mean."""
+    return self.value / self.total_counts

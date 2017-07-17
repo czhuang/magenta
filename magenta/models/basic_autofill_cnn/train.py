@@ -8,7 +8,7 @@ import numpy as np
 import tensorflow as tf
 
 import data_tools
-import summary_tools
+import util
 from graph import BasicAutofillCNNGraph
 from graph import build_placeholders_initializers_graph
 from hparams_tools import Hyperparameters
@@ -186,11 +186,11 @@ def run_epoch(supervisor,
   batch_size = m.batch_size
   num_batches = input_data.shape[0] // m.batch_size
 
-  losses = summary_tools.AggregateMean('losses_%s' % experiment_type)
-  losses_total = summary_tools.AggregateMean('losses_total_%s' %
+  losses = util.AggregateMean('losses_%s' % experiment_type)
+  losses_total = util.AggregateMean('losses_total_%s' %
                                              experiment_type)
-  losses_mask = summary_tools.AggregateMean('losses_mask_%s' % experiment_type)
-  losses_unmask = summary_tools.AggregateMean('losses_unmasked_%s' %
+  losses_mask = util.AggregateMean('losses_mask_%s' % experiment_type)
+  losses_unmask = util.AggregateMean('losses_unmasked_%s' %
                                               (experiment_type))
   start_time = time.time()
   for step in range(num_batches):
