@@ -71,12 +71,16 @@ class BasicAutofillCNNGraph(object):
     self.build()
 
   def build(self):
+    sym_batch_size, sym_batch_duration, sym_num_pitches, sym_num_instruments = tf.shape_n(self._targets)
     input_shape = tf.shape(self._input_data)
-    output_depth = input_shape[3] / 2
     conv_specs = hparams.conv_arch.specs
 
     output = self._input_data
     if hparams.mask_indicates_context:
+      # flip meaning of mask for convnet purposes: after flipping, mask is hot
+      # where values are known. this makes more sense in light of padding done
+      # by convolution operations: the padded area will have zero mask,
+      # indicating no information to rely on.
       def flip_mask(input):
         stuff, mask = tf.split(output, 2, axis=3)
         return tf.concat([stuff, 1 - mask], axis=3)
@@ -117,84 +121,54 @@ class BasicAutofillCNNGraph(object):
 
         self._hiddens.append(output)
 
-    # Compute total loss.
     self._logits = output
-
-    # If treating each input instrument feature map as monophonic.
-    if hparams.use_softmax_loss:
-      self._logits = output
-      softmax_2d = tf.nn.softmax(self.reshape_to_2d(self._logits))
-      output_shape = [
-          input_shape[0], input_shape[1], input_shape[2], output_depth
-      ]
-
-      self._predictions = self.reshape_back_to_4d(softmax_2d, output_shape)
-      self._cross_entropy = -tf.log(self._predictions) * self._targets
-    else:
-      self._predictions = tf.sigmoid(self._logits)
-      self._cross_entropy = tf.nn.sigmoid_cross_entropy_with_logits(
-          logits=self._logits, labels=self._targets)
-
-    self._unreduced_loss = self._cross_entropy
+    self._predictions = self.compute_predictions(logits=self._logits, labels=self._targets)
+    self._cross_entropy = self.compute_cross_entropy(logits=self._logits, labels=self._targets)
 
     # Adjust loss to not include padding part.
-    shape = tf.shape(self._targets)
-    mask = tf.split(self._input_data, 2, axis=3)[1]
-    non_pad_indicators = tf.to_float(tf.range(shape[1])[None, :, None, None]) < (
-        self.lengths[:, None, None, None])
-    non_pad_indicators = tf.to_float(non_pad_indicators)
-    non_pad_mask = mask * non_pad_indicators
-    #TODO: Make sure the padded parts are zeroed out.
-    self._unreduced_loss *= non_pad_indicators
+    indices = tf.to_float(tf.range(sym_batch_duration))
+    pad_mask = tf.to_float(indices[None, :, None, None] <
+                           self.lengths[:, None, None, None])
+    self._cross_entropy *= pad_mask
 
-    if hparams.use_softmax_loss:
-      # #timesteps * #instruments
-      D = self.lengths[:, None, None, None] * tf.to_float(shape[3])
-      reduced_D = tf.reduce_sum(self.lengths) * tf.to_float(shape[3])
-      # #masked out variables
-      self._mask_size = tf.reduce_sum(
-          non_pad_mask, reduction_indices=[1, 3], keep_dims=True)
-    else:
-      # #timesteps * #pitches
-      D = self.lengths[:, None, None, None] * tf.to_float(shape[2])
-      reduced_D = tf.reduce_sum(self.lengths) * tf.to_float(shape[2])
-      # #masked out variables
-      self._mask_size = tf.reduce_sum(
-          non_pad_mask, reduction_indices=[1, 2], keep_dims=True)
+    # Compute numbers of variables to be predicted
+    # #timesteps * #variables per timestep
+    variable_axis = 3 if hparams.use_softmax_loss else 2
+    D = (self.lengths[:, None, None, None] *
+         tf.to_float(tf.shape(self._targets)[variable_axis]))
+    reduced_D = tf.reduce_sum(D)
+    self._mask = tf.split(self._input_data, 2, axis=3)[1]
+    self._mask_size = tf.reduce_sum(
+        mask * pad_mask, axis=[1, variable_axis], keep_dims=True)
 
-    self.D = D
-    self.reduced_D = reduced_D
-
+    self._unreduced_loss = self._cross_entropy
     if hparams.rescale_loss:
-      def compute_scale():
-        return D / self._mask_size
-      self._unreduced_loss *= compute_scale()
+      self._unreduced_loss *= D / self._mask_size
 
     # Compute total loss.
     self._loss_total = tf.reduce_sum(self._unreduced_loss) / reduced_D
 
     # Compute loss for masked portion.
-    self._mask = tf.split(self._input_data, 2, axis=3)[1]
     self._reduced_mask_size = tf.reduce_sum(self._mask_size[:, :, 0, :])
-    self._loss_mask = tf.reduce_sum(self._mask * self._unreduced_loss) / (
-        self._reduced_mask_size)
+    self._loss_mask = (tf.reduce_sum(self._mask * self._unreduced_loss)
+                       / self._reduced_mask_size)
 
     # Compute loss for out-of-mask (unmask) portion.
-    self._unmask = 1 - self._mask
-    self._unmask *= non_pad_indicators 
-    self._reduced_unmask_size = reduced_D - self._reduced_mask_size
+    self._unmask = (1 - self._mask) * pad_mask
+    self._reduced_unmask_size = tf.reduce_sum(self._unmask[:, :, 0, :])
+    self._loss_unmask = (tf.reduce_sum(self._unmask * self._unreduced_loss)
+                         / self._reduced_unmask_size)
+
     check_unmask_count_equal_op = tf.assert_equal(
-        self._reduced_unmask_size, tf.reduce_sum(self._unmask[:, :, 0, :]))
+        self._reduced_unmask_size, reduced_D - self._reduced_mask_size)
     with tf.control_dependencies([check_unmask_count_equal_op]):
-      self._loss_unmask = tf.reduce_sum(
-          self._unmask * self._unreduced_loss) / self._reduced_unmask_size
+      self._loss_unmask = tf.identity(self._loss_unmask)
 
     # Check which loss to use as objective function.
-    if hparams.optimize_mask_only:
-      self._loss = self._loss_mask
-    else:
-      self._loss = self._loss_total
+    self._loss = (self._loss_mask if hparams.optimize_mask_only else
+                  self._loss_total)
 
+    # FIXME put this ugly stuff into a big ugly method
     if "chronological" in hparams.maskout_method or "fixed_order" in hparams.maskout_method:
       _, mask = tf.split(self._input_data, 2, axis=3)
       flat_prediction_index = tf.to_int32(tf.reduce_sum(1 - mask[:, :, 0, :],
@@ -363,6 +337,19 @@ class BasicAutofillCNNGraph(object):
         ksize=[1, pooling[0], pooling[1], 1],
         strides=[1, pooling[0], pooling[1], 1],
         padding=specs['pool_pad'])
+
+  def compute_predictions(self, logits):
+      return (tf.nn.softmax(logits, dim=2)
+              if self.hparams.use_softmax_loss else
+              tf.nn.sigmoid(logits))
+
+  def compute_cross_entropy(self, logits, labels):
+      return (tf.nn.softmax_cross_entropy_with_logits(logits=logits,
+                                                      labels=labels,
+                                                      dim=2)
+              if self.hparams.use_softmax_loss else
+              tf.nn.sigmoid_cross_entropy_with_logits(logits=logits,
+                                                      labels=labels))
 
   @property
   def gradient_norms(self):
