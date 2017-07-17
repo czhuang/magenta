@@ -58,11 +58,7 @@ def main(unused_argv):
   evaluator = EnsemblingEvaluator(evaluator, FLAGS.ensemble_size)
   rval = evaluate(evaluator, pianorolls)
 
-  if True: # if this works then great!
-    np.savez_compressed("%s.npz" % save_path, **rval)
-  else:
-    with gzip.open("%s.pkl.gz" % save_path, "wb") as file:
-      pkl.dump(rval, file, protocol=pkl.HIGHEST_PROTOCOL)
+  np.savez_compressed("%s.npz" % save_path, **rval)
 
 def evaluate(evaluator, pianorolls):
   example_losses = []
