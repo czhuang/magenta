@@ -1,3 +1,5 @@
+'''Evaluates trained model on given split of dataset.'''
+
 from collections import defaultdict, OrderedDict
 import os, sys, traceback
 import time
@@ -7,7 +9,10 @@ import tensorflow as tf
 import functools as ft
 from scipy.misc import logsumexp
 
-from magenta.models.basic_autofill_cnn import mask_tools, retrieve_model_tools, data_tools, util
+import mask_tools
+import retrieve_model_tools
+import data_tools
+import util
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('fold', None, 'data fold on which to evaluate (valid or test)')
@@ -32,7 +37,7 @@ def main(unused_argv):
   print hparams.checkpoint_fpath
 
   # TODO option to get pianorolls from command line arguments
-  pianorolls = data_tools.get_data_as_pianorolls(FLAGS.input_dir, hparams, FLAGS.fold)
+  pianorolls = data_tools.get_data_as_pianorolls(FLAGS.data_dir, hparams, FLAGS.fold)
   print '\nRetrieving pianorolls from %s set of %s dataset.\n' % (
       FLAGS.fold, hparams.dataset)
 

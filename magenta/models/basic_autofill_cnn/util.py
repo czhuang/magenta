@@ -1,6 +1,7 @@
 import contextlib, time, os
 import numpy as np
 
+
 def sample_bernoulli(p, temperature):
   B, T, P, I = p.shape
   assert I == 1
@@ -87,12 +88,14 @@ class Factory(object):
 
 
 @contextlib.contextmanager
-def timing(label):
-  print "enter %s" % label
+def timing(label, printon=True):
+  if printon:
+    print "enter %s" % label
   start_time = time.time()
   yield
   time_taken = (time.time() - start_time) / 60.0
-  print "exit %s (%.2fmin)" % (label, time_taken)
+  if printon:
+    print "exit %s (%.2fmin)" % (label, time_taken)
 
 
 # unobtrusive structured logging of arbitrary values
@@ -122,7 +125,7 @@ class Bamboo(object):
       else:
         for k, v in node.items():
           dikt[os.path.join(path, "%s_%s" % (i, k))] = v
-    _compile_npz_dict((0, self.root), os.path.splitext(path)[0])
+    _compile_npz_dict((0, self.root), "")
     np.savez_compressed(path, **dikt)
 
 class BambooScope(object):

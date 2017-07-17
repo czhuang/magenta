@@ -1,8 +1,17 @@
 import os, sys, time, contextlib, cPickle as pkl, gzip
+import re
 from collections import defaultdict
 from datetime import datetime
-import numpy as np, tensorflow as tf
-from magenta.models.basic_autofill_cnn import mask_tools, retrieve_model_tools, data_tools, util
+import numpy as np
+import tensorflow as tf
+
+import pretty_midi
+
+import mask_tools
+import retrieve_model_tools
+import data_tools
+from npz_to_midi import pianoroll_to_midi
+import util
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_integer("gen_batch_size", 100, "num of samples to generate in a batch.")
@@ -10,8 +19,12 @@ tf.app.flags.DEFINE_string("strategy", None, "")
 tf.app.flags.DEFINE_float("temperature", 1, "softmax temperature")
 tf.app.flags.DEFINE_integer("piece_length", 32, "num of time steps in generated piece")
 tf.app.flags.DEFINE_string(
-    "generation_output_dir", "/Tmp/cooijmat/autofill/generate",
+    "generation_output_dir", None,
     "Output directory for storing the generated Midi.")
+tf.app.flags.DEFINE_string(
+    "prime_midi_melody_fpath", None,
+    "Path to midi melody to be harmonized.")
+
 
 def main(unused_argv):
   timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -19,38 +32,79 @@ def main(unused_argv):
   hparam_updates = {'use_pop_stats': FLAGS.use_pop_stats}
   wmodel = retrieve_model_tools.retrieve_model(
       model_name=FLAGS.model_name, hparam_updates=hparam_updates)
-  Globals.separate_instruments = wmodel.hparams.separate_instruments
+  hparams = wmodel.hparams
+  Globals.separate_instruments = hparams.separate_instruments
 
   B = FLAGS.gen_batch_size
-  T, P, I = wmodel.hparams.raw_pianoroll_shape
+  T, P, I = hparams.raw_pianoroll_shape
   print B, T, P, I
-  wmodel.hparams.crop_piece_len = FLAGS.piece_length
-  T, P, I = wmodel.hparams.raw_pianoroll_shape
+  hparams.crop_piece_len = FLAGS.piece_length
+  T, P, I = hparams.raw_pianoroll_shape
   print B, T, P, I
   shape = [B, T, P, I]
 
+  # Instantiates generation strategy.
   strategy = BaseStrategy.make(FLAGS.strategy, wmodel)
   Globals.bamboo = util.Bamboo()
 
+  # Generates.
   start_time = time.time()
   pianorolls = np.zeros(shape, dtype=np.float32)
   masks = np.ones(shape, dtype=np.float32)
   pianorolls = strategy(pianorolls, masks)
   time_taken = (time.time() - start_time) / 60.0
-
+  
+  # Logs final step, without predictions (which are pianorolls here).
   Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=pianorolls)
 
-  label = "sample_%s_%s_%s_T%g_l%i_%.2fmin" % (timestamp, FLAGS.strategy, wmodel.hparams.model_name, FLAGS.temperature, FLAGS.piece_length, time_taken)
-  path = os.path.join(FLAGS.generation_output_dir, label + ".npz")
-  print "Writing to", path
-  Globals.bamboo.dump(path)
+  # Creates a folder for storing the process of the sampling.
+  label = "sample_%s_%s_%s_T%g_l%i_%.2fmin" % (timestamp, FLAGS.strategy, 
+    hparams.model_name, FLAGS.temperature, FLAGS.piece_length, time_taken)
+  basepath = os.path.join(FLAGS.generation_output_dir, label)
+  os.makedirs(basepath)
+  
+  # Stores all the (intermediate) steps.
+  path = os.path.join(basepath, 'intermediate_steps.npz')
+  with util.timing('writing_out_sample_npz'):
+    print "Writing to", path
+    Globals.bamboo.dump(path)
+  
+  # Makes function to save midi from pianorolls.
+  def save_midi_from_pianorolls(rolls, label, midi_path):
+    for i, pianoroll in enumerate(rolls):
+      midi_fpath = os.path.join(midi_path, "%s_%i.midi" % (label, i))
+      midi_data = pianoroll_to_midi(
+          pianoroll, qpm=hparams.qpm, quantization_level=hparams.quantization_level, 
+          pitch_offset=hparams.pitch_ranges[0])
+      print midi_fpath
+      midi_data.write(midi_fpath)
+
+  # Saves the results as midi and npy.    
+  midi_path = os.path.join(basepath, "midi")
+  os.makedirs(midi_path)
+  save_midi_from_pianorolls(pianorolls, label, midi_path)
+  np.save(os.path.join(basepath, "generated_result.npy"), pianorolls)
+
+  # Save the prime as midi and npy if in harmonization mode.
+  # First, checks the stored npz for the first (context) and last step.
+  foo = np.load(path)
+  for key in foo.keys():
+    if re.match(r"0_root/.*?_strategy/.*?_context/0_pianorolls", key):
+      context_rolls = foo[key]
+  if 'harm' in FLAGS.strategy:
+    # Only synthesize the one prime if in Midi-melody-prime mode.
+    primes = context_rolls
+    if 'Melody' in FLAGS.strategy:
+      primes = [context_rolls[0]]
+    save_midi_from_pianorolls(primes, label + '_prime', midi_path)
+  np.save(os.path.join(basepath, "context.npy"), context_rolls)
 
 
 # decorator for timing and Globals.bamboo.log structuring
-def instrument(label, subsample_factor=None):
+def instrument(label, printon=True, subsample_factor=None):
   def decorator(fn):
     def wrapped_fn(*args, **kwargs):
-      with util.timing(label):
+      with util.timing(label, printon=printon):
         with Globals.bamboo.scope(label, subsample_factor=subsample_factor):
           return fn(*args, **kwargs)
     return wrapped_fn
@@ -65,6 +119,76 @@ def instrument(label, subsample_factor=None):
 class BaseStrategy(util.Factory):
   def __init__(self, wmodel):
     self.wmodel = wmodel
+
+class HarmonizeMidiMelodyStrategy(BaseStrategy):
+  key = "harmonizeMidiMelody"
+
+  def load_midi_melody(self):
+    midi = pretty_midi.PrettyMIDI(FLAGS.prime_midi_melody_fpath)
+    if len(midi.instruments) != 1:
+      raise ValueError(
+          'Only one melody/instrument allowed, %r given.' % (
+              len(midi.instruments)))
+    tempo_change_times, tempo_changes = midi.get_tempo_changes()
+    assert len(tempo_changes) == 1
+    tempo = tempo_changes[0]
+    assert tempo in [60., 120.]
+    #assert tempo_changes[0] == 60. or tempo_changes[0] == 120.
+    # qpm=60, 16th notes, time taken=1/60 * 1/4
+    # qpm=120, 16th notes, time taken=1/120 * /4
+    # for 16th in qpm=120 to be rendered correctly in qpm=60, fs=2
+    # shape: (128, t)
+    if tempo == 120.:
+      fs = 2 
+    elif tempo == 60.:
+      fs = 4
+    else:
+      assert False, 'Tempo %r not supported yet.' % tempo
+    # Returns matrix of shape (128, time) with summed velocities.
+    roll = midi.get_piano_roll(fs=fs)  # 16th notes
+    roll = np.where(roll>0, 1, 0)
+    print roll.shape
+    roll = roll.T
+    return roll
+  
+  def make_pianoroll_from_melody_roll(self, mroll, pitch_ranges,
+                                      requested_shape):
+    # mroll shape: time, pitch
+    # requested_shape: batch, time, pitch, instrument
+    B, T, P, I = requested_shape
+    print 'requested_shape', requested_shape
+    assert mroll.ndim == 2
+    assert mroll.shape[1] == 128
+    low, high = pitch_ranges
+    requested_range = high - low + 1
+    assert P == requested_range, '%r != %r' % (P, requested_range) 
+    if T != mroll.shape[0]:
+      print 'WARNING: requested T %r != prime T %r' % (T, mroll.shape[0])
+    rolls = np.zeros((B, mroll.shape[0], P, I), dtype=np.float32)
+    rolls[:, :, :, 0] = mroll[None, :, low:high+1]
+    print 'resulting shape', rolls.shape
+    return rolls
+
+  @instrument(key + "_strategy")
+  def __call__(self, pianorolls, masks):
+    mroll = self.load_midi_melody()
+    pianorolls = self.make_pianoroll_from_melody_roll(
+        mroll, self.wmodel.hparams.pitch_ranges, pianorolls.shape)
+    masks = HarmonizationMasker()(pianorolls.shape)
+    num_steps = np.max(numbers_of_masked_variables(masks))
+    print 'num_steps', num_steps
+    gibbs = GibbsSampler(num_steps=num_steps,
+                         masker=BernoulliMasker(),
+                         sampler=IndependentSampler(self.wmodel, temperature=FLAGS.temperature),
+                         schedule=YaoSchedule(pmin=0.1, pmax=0.9, alpha=0.7))
+
+    with Globals.bamboo.scope("context"):
+      context = np.array([mask_tools.apply_mask(pianoroll, mask)
+                          for pianoroll, mask in zip(pianorolls, masks)])
+      Globals.bamboo.log(pianorolls=context, masks=masks, predictions=context)
+    pianorolls = gibbs(pianorolls, masks)
+
+    return pianorolls
 
 class ScratchUpsamplingStrategy(BaseStrategy):
   key = "scratch_upsampling"
@@ -138,6 +262,8 @@ class HarmonizationStrategy(BaseStrategy):
                           for pianoroll, mask in zip(pianorolls, masks)])
       Globals.bamboo.log(pianorolls=context, masks=masks, predictions=context)
     pianorolls = gibbs(pianorolls, masks)
+    with Globals.bamboo.scope("result"):
+      Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=pianorolls)
 
     return pianorolls
 
@@ -323,7 +449,7 @@ class BachSampler(BaseSampler):
   @instrument(key)
   def __call__(self, pianorolls, masks):
     print "Loading validation pieces from %s..." % self.wmodel.hparams.dataset
-    bach_pianorolls = data_tools.get_data_as_pianorolls(FLAGS.input_dir, self.wmodel.hparams, 'valid')
+    bach_pianorolls = data_tools.get_data_as_pianorolls(FLAGS.data_dir, self.wmodel.hparams, 'valid')
     shape = pianorolls.shape
     pianorolls = np.array([pianoroll[:shape[1]] for pianoroll in bach_pianorolls])[:shape[0]]
     Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=pianorolls)
@@ -356,7 +482,7 @@ class UniformRandomSampler(BaseSampler):
 class IndependentSampler(BaseSampler):
   key = "independent"
 
-  @instrument(key)
+  @instrument(key, printon=False)
   def __call__(self, pianorolls, masks):
     predictions = self.predict(pianorolls, masks)
     if Globals.separate_instruments:
@@ -417,6 +543,7 @@ class GibbsSampler(BaseSampler):
     print 'shape', pianorolls.shape
     num_steps = (np.max(numbers_of_masked_variables(masks))
                  if self.num_steps is None else self.num_steps)
+    print 'num_steps', num_steps
 
     with Globals.bamboo.scope("sequence", subsample_factor=10):
       for s in range(num_steps):

@@ -6,65 +6,22 @@ from collections import OrderedDict
 
 import numpy as np
 
-from magenta.protobuf import music_pb2
-import test_tools
 
-OLD_SETTINGS = True
-
-if OLD_SETTINGS:
-  #WOODWIND_QUARTET_PROGRAMS = OrderedDict(
-  #    [(73, 'flute'), (71, 'clarinet'), (68, 'oboe'), (70, 'bassoon')])
-  WOODWIND_QUARTET_PROGRAMS = OrderedDict(
-      [(75, 'flute'), (73, 'clarinet'), (70, 'oboe'), (72, 'bassoon')])
-else:
-  WOODWIND_QUARTET_PROGRAMS = OrderedDict(
-      [(74, 'flute'), (72, 'clarinet'), (69, 'oboe'), (71, 'bassoon')])
-
-# ok this is better with timidity
+# This wood quartet sounds better when using timidity.
 WOODWIND_QUARTET_PROGRAMS = OrderedDict(
     [(69, 'oboe'), (70, 'english_horn'), (72, 'clarinet'), (71, 'bassoon')])
-
-# In order to have 4 different instruments, not including second violin,
-# and adding in double bass.
-#STRING_QUARTET_PROGRAMS = OrderedDict(
-#    [(41, 'violin'), (42, 'viola'), (43, 'cello'), (44, 'contrabass')])
-STRING_QUARTET_PROGRAMS = OrderedDict(
-    [(41, 'violin'), (41, 'violin'), (42, 'viola'), (43, 'cello')])
-#STRING_QUARTET_PROGRAMS = OrderedDict(
-#    [(43, 'violin'), (43, 'violin'), (42, 'viola'), (41, 'cello')])
-
-CHANNEL_START_INDEXS = OrderedDict([('original_context', 0),
-                                    ('generated_in_mask', 3), ('silence', -4)])
 
 
 SYNTH_MODE = False
 if SYNTH_MODE:
   _DEFAULT_QPM = 60 
 else:
-  _DEFAULT_QPM = 60
   _DEFAULT_QPM = 120
+
 
 class PitchOutOfEncodeRangeError(Exception):
   """Exception for when pitch of note is out of encodings range."""
   pass
-
-
-def make_note_sequence(fname='', collection_name=''):
-  # Instantiate a NoteSequence.
-  sequence = music_pb2.NoteSequence()
-  # TODO: A hack.
-  sequence.id = str(np.abs(hash(np.array_str(np.random.random((5,5))))))
-  sequence.filename = '%s' % fname
-  sequence.collection_name = collection_name
-#  sequence.source_info.source_type = source_type
-
-  tempo = sequence.tempos.add()
-  tempo.time = 0.0
-  tempo.qpm = _DEFAULT_QPM
-
-  # Using the MuseScore tick length for quarter notes.
-  sequence.ticks_per_quarter = 480
-  return sequence
 
 
 def find_shortest_duration(note_sequences):
@@ -141,23 +98,6 @@ def are_instruments_monophonic(pianoroll):
 
 
 class PianorollEncoderDecoder(object):
-  """Encodes a NoteSequence into a pianoroll, and decodes it back.
-
-  Args:
-    shortest_duration: A float of the shortest duration in the corpus, or None
-        in which case shortest_duration will be identified in
-        PianorollEncoderDecoder by iterating through all NoteSequences.
-    min_pitch: An integer giving the lowest pitch in the corpus, or None in
-        which case min_pitch will be identified in PianorollEncoderDecoder by
-        iterating through all NoteSequences.
-    max_pitch: An integer giving the highest pitch in the corpus, or None in
-        which case max_pitch will be identified in PianorollEncoderDecoder by
-        iterating through all NoteSequences.
-    sequence_iterator: A TFRecord iterator that iterates through
-        NoteSequences.
-    separate_instruments: A boolean to indicate whether to encode one instrument
-        per pianoroll.
-  """
   velocity = 85
   velocity_in_mask = 127
 
@@ -255,13 +195,6 @@ class PianorollEncoderDecoder(object):
       return self.encode_list_of_lists(
           sequence, duration_ratio=duration_ratio,
           return_with_additional_encodings=return_with_additional_encodings)
-    elif isinstance(sequence, music_pb2.NoteSequence):
-      #return self.encode_NoteSequences(
-      return self.encode_NoteSequences_with_quantization(
-          sequence, duration_ratio=duration_ratio,
-          return_program_to_pianoroll_map=return_program_to_pianoroll_map,
-          return_with_additional_encodings=return_with_additional_encodings)
-          
     else:
       assert False, 'Type %s not yet supported.' % type(sequence)
      
@@ -477,85 +410,3 @@ class PianorollEncoderDecoder(object):
     out_mask_note_sequence.notes.extend(aggregated_notes)
     out_mask_note_sequence.total_time = sorted_notes_by_endtime[-1].end_time
     return out_mask_note_sequence
-
-  def decode(self,
-             pianoroll,
-             pianoroll_to_program_map=None,
-             qpm=_DEFAULT_QPM,
-             velocity=None,
-             channel_start_index=0,
-             filename=None,
-             source_type=music_pb2.NoteSequence.SourceInfo.SCORE_BASED):
-    """Decode pianoroll into NoteSequence."""
-    # TODO(annahuang): Handle unquantized time.
-    if pianoroll.ndim != 3:
-      raise ValueError(
-          'Pianoroll needs to be of 3 dimensional, time, pitch, and instrument.')
-    num_instruments = pianoroll.shape[-1]
-    if pianoroll_to_program_map is None:
-      pianoroll_to_program_map = get_pianoroll_to_program_assignment(
-          range(num_instruments))
-    else:
-      pianoroll_to_program_map = get_pianoroll_to_program_assignment(
-          range(num_instruments), pianoroll_to_program_map)
-      
-    if velocity is None:
-      velocity = self.velocity
-
-    # Instantiate a NoteSequence.
-    sequence = music_pb2.NoteSequence()
-    sequence.id = str(np.abs(hash(np.array_str(pianoroll))))
-    #source_type = 'basic_autofill_cnn_generated'
-    sequence.filename = '%s' % filename
-    sequence.collection_name = 'basic_autofill_cnn_generated'
-    # TODO: Do not set default for source_type
-    sequence.source_info.source_type = source_type
-
-    tempo = sequence.tempos.add()
-    tempo.time = 0.0
-    # TODO(annahuang): Infer and retrieve actual bpm.
-    # Using default bpm.
-    tempo.qpm = qpm
-
-    # Using the MuseScore tick length for quarter notes.
-    sequence.ticks_per_quarter = 480
-
-    # Populate the notes.
-    previously_off = lambda t, n, i: t == 0 or pianoroll[t - 1, n, i] == 0
-    num_time_steps, num_pitches, num_instruments = pianoroll.shape
-    total_time = 0.0
-    for part_index in range(num_instruments):
-      for time_step in range(num_time_steps):
-        for note_number in range(num_pitches):
-          # Check if note is on in this time_step and but not previously.
-          if pianoroll[time_step, note_number, part_index] == 1 and (
-              previously_off(time_step, note_number, part_index)):
-            note = sequence.notes.add()
-            note.pitch = note_number + self.min_pitch
-            note.start_time = time_step * self.shortest_duration
-            if SYNTH_MODE:
-              note.start_time *= 2
-
-            # Count how many contiguous time_steps are on.
-            on_duration = self.shortest_duration
-            for check_end_time_step in range(time_step + 1, num_time_steps):
-              if pianoroll[check_end_time_step, note_number, part_index] != 1.0:
-                break
-              else:
-                on_duration += self.shortest_duration
-            note.end_time = note.start_time + on_duration
-            if SYNTH_MODE:
-              note.end_time = note.start_time + on_duration * 2
-            if note.end_time > total_time:
-              total_time = note.end_time
-            note.velocity = velocity
-            note.instrument = channel_start_index + part_index
-            # Skip percussion channel 9, and shift all the instrument channels
-            # up by one.
-            if note.instrument > 8:
-              note.instrument += 1
-            note.program = pianoroll_to_program_map[part_index]
-            note.part = part_index
-
-    sequence.total_time = total_time
-    return sequence

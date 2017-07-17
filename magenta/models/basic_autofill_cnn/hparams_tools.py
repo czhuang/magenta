@@ -23,12 +23,16 @@ class Hyperparameters(object):
       # Data.
       dataset=None,
       quantization_level=0.125,
+      shortest_Duration=0.125,
+      qpm=60,
       augment_by_transposing=0,
       augment_by_halfing_doubling_durations=0,
       corrupt_ratio=0.25,
       # Input dimensions.
       batch_size=20,
       num_pitches=53,  #53 + 11
+      pitch_ranges=[36, 81],
+      
       crop_piece_len=64, #128, #64, #32,
       pad=False,
       num_instruments=4,

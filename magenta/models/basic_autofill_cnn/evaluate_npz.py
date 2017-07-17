@@ -7,8 +7,13 @@ import tensorflow as tf
 import functools as ft
 from scipy.misc import logsumexp
 
+import mask_tools
+import retrieve_model_tools
+import data_tools
+import util
+
 # TODO: don't import evaluate; it's a toplevel script
-from magenta.models.basic_autofill_cnn import mask_tools, retrieve_model_tools, data_tools, util, evaluate
+import evaluate
 
 FLAGS = tf.app.flags.FLAGS
 

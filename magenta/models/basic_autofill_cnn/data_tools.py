@@ -5,15 +5,27 @@ import os
 import numpy as np
 import tensorflow as tf
 
-from magenta.music.note_sequence_io import note_sequence_record_iterator
-from magenta.protobuf import music_pb2
-
-from magenta.models.basic_autofill_cnn import mask_tools
-from magenta.models.basic_autofill_cnn.mask_tools import MaskUseError
-from magenta.models.basic_autofill_cnn.pianorolls_lib import PianorollEncoderDecoder
+import mask_tools
+from pianorolls_lib import PianorollEncoderDecoder
 
 # Enumerations for data augmentation for durations.
 KEEP_ORIGINAL_DURATIONS, HALF_TIME, DOUBLE_TIME = range(3)
+
+DATASET_PARAMS = {
+    'Nottingham': {
+        'pitch_ranges': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 9}, 
+    'MuseData': {
+        'pitch_ranges': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 14},
+    'Piano-midi.de': {
+        'pitch_ranges': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 12,
+        'batch_size': 12},
+    'jsb-chorales-16th-instrs_separated': {
+        'pitch_ranges': [36, 81], 'shortest_duration': 0.125,
+        'num_instruments': 4, 'qpm': 60},
+}
+
+# TODO: not included in this version.
+IMAGE_DATASETS = ['MNIST', 'BinaryMNIST', 'OMNIGLOT']
 
 
 class DataProcessingError(Exception):
@@ -25,23 +37,7 @@ def random_double_or_halftime_pianoroll_from_note_sequence(
     sequence, augment_by_halfing_doubling_durations, encoder):
   if not augment_by_halfing_doubling_durations:
     return encoder.encode(sequence)
-  assert isinstance(sequence, music_pb2.NoteSequence), 'No support for dataaugmentation on non-NoteSequence data yet.'
-  durations = set(note.end_time - note.start_time for note in sequence.notes)
-  longest_to_double = 4
-  shortest_to_half = 0.25
-  duration_augmentation_type = np.random.randint(3)
-  if duration_augmentation_type == KEEP_ORIGINAL_DURATIONS:
-    return encoder.encode(sequence)
-  elif duration_augmentation_type == HALF_TIME:
-    # Half time.
-    if any(duration < shortest_to_half for duration in durations):
-      return encoder.encode(sequence)
-    #print sequence.filename, sequence.id, sequence.collection_name
-    return encoder.encode(sequence, duration_ratio=0.5)
-  else:
-    if any(duration > longest_to_double for duration in durations):
-      return encoder.encode(sequence)
-    return encoder.encode(sequence, duration_ratio=2)
+  assert False, 'Not yet supported in this version.'
 
 
 def random_crop_pianoroll(pianoroll,
@@ -202,65 +198,6 @@ def make_data_feature_maps(sequences, hparams, encoder, start_crop_index=None):
   return input_data, targets, lengths
 
 
-#def get_pianoroll_from_note_sequence_data(path, type_, len_from_beginning=None):
-#  """Retrieves NoteSequences from a TFRecord and returns piano rolls.
-#
-#  Args:
-#    path: The absolute path to the TFRecord file.
-#    type_: The name of the TFRecord file which also specifies the type of data.
-#
-#  Yields:
-#    3D binary numpy arrays.
-#
-#  Raises:
-#    DataProcessingError: If the type_ specified is not one of train, test or
-#        valid.
-#  """
-#  if type_ not in ['train', 'test', 'valid']:
-#    raise DataProcessingError(
-#        'Data is grouped by train, test or valid. Please specify one.')
-#  fpath = os.path.join(path, '%s.tfrecord' % type_)
-#  encoder = PianorollEncoderDecoder()
-#  seq_reader = note_sequence_record_iterator(fpath)
-#  for seq in seq_reader:
-#    pianoroll = encoder.encode(seq)
-#    if len_from_beginning is None:
-#      yield pianoroll
-#    elif pianoroll.shape[0] >= len_from_beginning:
-#      yield pianoroll[:len_from_beginning]
-#    else:
-#      continue
-
-
-DATASET_PARAMS = {
-    'Nottingham': {
-        'pitch_ranges': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 9}, 
-    'MuseData': {
-        'pitch_ranges': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 14},
-    'Piano-midi.de': {
-        'pitch_ranges': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 12,
-        'batch_size': 12},
-
-    'JSB_Chorales': {
-        'pitch_ranges': [43, 96], 'shortest_duration': 0.5, 'num_instruments': 4},
-    '4part_Bach_chorales': {
-        'pitch_ranges': [36, 88], 'shortest_duration': 0.125, 
-        'relative_path': 'bach/qbm120/instrs=4_duration=0.125_sep=True'},
-
-    'bach-16th-priorwork-4_voices': {
-        'pitch_ranges': [21, 108], 'shortest_duration': 0.125},
-    #'bach-16th-priorwork-4_voices': {
-    #    'pitch_ranges': [36, 81], 'shortest_duration': 0.125},
-
-    'MNIST': {'crop_piece_len': 28, 'num_pitches': 28},
-    'BinaryMNIST': {'crop_piece_len': 28, 'num_pitches': 28, 
-                    'path': '/data/lisatmp4/BinaryMNIST'},
-
-    'OMNIGLOT': {'crop_piece_len': 28, 'num_pitches': 28,
-                 'path': '/data/lisatmp4/huangche/data/omniglot-all_real.npz'}
-}
-
-IMAGE_DATASETS = ['MNIST', 'BinaryMNIST', 'OMNIGLOT']
 
 
 def get_data_as_pianorolls(basepath, hparams, fold):
@@ -311,19 +248,9 @@ def get_image_data(dataset_name, fold, params):
     assert False, 'Dataset %s not yet supported.' % dataset_name
 
 
-def get_bachbot_data(fold, **kwargs):
-  print 'get_bachbot_data'
-  fpath = '/Users/czhuang/packages/bachbot/scratch/concat_corpus.h5'
-  import h5py
-  with h5py.File(fpath, 'r') as p:
-    data = p[fold]
-  print data.shape
-
-
 def get_data_and_update_hparams(basepath, hparams, fold, 
                                 update_hparams=True, 
                                 return_encoder=False):
-  """Returns NoteSequences for '4_part_JSB_Chorales' and list of lists for the rest, and updates dataset specific hparams."""
   dataset_name = hparams.dataset
   params = DATASET_PARAMS[dataset_name]
   
@@ -349,11 +276,12 @@ def get_data_and_update_hparams(basepath, hparams, fold,
     for key, value in params.iteritems():
       if hasattr(hparams, key): 
         setattr(hparams, key, value)
-    #FIXME: just for debug
+    #FIXME: just for debug.
     for key in params:
       if hasattr(hparams, key):
         assert getattr(hparams, key) == params[key], 'hparams did not get updated, %r!=%r' % (getattr(hparams, key), params[key])
   if return_encoder and dataset_name not in IMAGE_DATASETS:
+    assert params['shortest_duration'] == hparams.quantization_level, 'The data has a temporal resolution of shortest duration=%r, requested=%r' % (params['shortest_duration'], hparams.quantization_level)
     encoder = PianorollEncoderDecoder(
         shortest_duration=params['shortest_duration'],
         min_pitch=pitch_range[0],
@@ -369,33 +297,3 @@ def get_data_and_update_hparams(basepath, hparams, fold,
     return seqs, encoder
   else:
     return seqs
-
-
-#def get_note_sequence_data(path, type_):
-#  """Retrieves NoteSequences from a TFRecord.
-#
-#  Args:
-#    path: The absolute path to the TFRecord file.
-#    type_: The name of the TFRecord file which also specifies the type of data.
-#
-#  Yields:
-#    NoteSequences.
-#
-#  Raises:
-#    DataProcessingError: If the type_ specified is not one of train, test or
-#        valid.
-#  """
-#  if type_ not in ['train', 'test', 'valid']:
-#    raise DataProcessingError(
-#        'Data is grouped by train, test or valid. Please specify one.')
-#  fpath = os.path.join(path, '%s.tfrecord' % type_)
-#  print 'fpath', fpath
-#  #seq_reader = note_sequence_record_iterator(fpath)
-#  #for seq in seq_reader:
-#  #  yield seq
-#  reader = tf.python_io.tf_record_iterator(fpath)
-#  for serialized_sequence in reader:
-#    yield music_pb2.NoteSequence.FromString(serialized_sequence)
-
-if __name__ == '__main__':
-  get_bachbot_data('train')
