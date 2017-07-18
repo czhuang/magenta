@@ -57,8 +57,10 @@ class BasicAutofillCNNGraph(object):
         self.hiddens.append(output)
 
     self.logits = output
-    self.predictions = self.compute_predictions(logits=self.logits, labels=self.targets)
-    self.cross_entropy = self.compute_cross_entropy(logits=self.logits, labels=self.targets)
+    self.predictions = self.compute_predictions(logits=self.logits,
+                                                labels=self.targets)
+    self.cross_entropy = self.compute_cross_entropy(logits=self.logits,
+                                                    labels=self.targets)
 
     self.compute_loss(self.cross_entropy)
     self.setup_optimizer()
