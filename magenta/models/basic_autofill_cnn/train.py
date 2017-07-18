@@ -107,51 +107,23 @@ def estimate_popstats(sv, sess, m, raw_data, encoder, hparams):
   tfbatchstats, tfpopstats = list(zip(*m.popstats_by_batchstat.items()))
 
   nepochs = 3
-  totalnpbatchstats = None
-  totalweight = 0
+  nppopstats = [util.AggregateMean("") for _ in tfpopstats]
   for _ in range(nepochs):
-    input_data, targets, lengths = data_tools.make_data_feature_maps(
+    xs, ys, lengths = data_tools.make_data_feature_maps(
         raw_data, hparams, encoder)
-    permutation = np.random.permutation(len(input_data))
-    input_data = input_data[permutation]
-    targets = targets[permutation]
-    lengths = lengths[permutation]
-    batch_size = m.batch_size
-    num_batches = input_data.shape[0] // m.batch_size
-    for step in range(num_batches):
-      start_idx = step * batch_size
-      end_idx = start_idx + batch_size
-      x = input_data[start_idx:end_idx, :, :, :]
-      y = targets[start_idx:end_idx, :, :]
-      lens = lengths[start_idx:end_idx]
-  
-      npbatchstats = sess.run(tfbatchstats,
-                              {m.input_data: x,
-                               m.targets: y,
-                               m.lengths: lens})
-      totalnpbatchstats = ([total + update for total, update in zip(totalnpbatchstats, npbatchstats)]
-                           if totalnpbatchstats is not None else npbatchstats)
-      totalweight += 1
+    batches = util.batches(xs, ys, lengths, size=m.batch_size, shuffle=True)
+    for step, (x, y, length) in enumerate(batches):
+      feed_dict = {m.input_data: x,
+                   m.targets: y,
+                   m.lengths: length}
+      npbatchstats = sess.run(tfbatchstats, feed_dict=feed_dict)
+      for nppopstat, npbatchstat in zip(nppopstats, npbatchstats):
+        nppopstat.add(npbatchstat)
+  nppopstats = [nppopstat.mean for nppopstat in nppopstats]
 
-  nppopstats = [total / totalweight for total in totalnpbatchstats]
+  _print_popstat_info(tfpopstats, nppopstats)
 
-  # keep an eye on them stats
-  mean_errors = []
-  stdev_errors = []
-  for j, (tfpopstat, nppopstat) in enumerate(zip(tfpopstats, nppopstats)):
-    moving_average = tfpopstat.eval()
-    if j % 2 == 0:
-      mean_errors.append(abs(moving_average - nppopstat))
-    else:
-      stdev_errors.append(abs(np.sqrt(moving_average) - np.sqrt(nppopstat)))
-  def flatmean(xs):
-    return np.mean(np.concatenate([x.flatten() for x in xs]))
-  print ("average of pop mean/stdev errors: %g %g"
-         % (flatmean(mean_errors), flatmean(stdev_errors)))
-  print ("average of batch mean/stdev: %g %g"
-         % (flatmean(nppopstats[0::2]),
-            flatmean([np.sqrt(ugh) for ugh in nppopstats[1::2]])))
-
+  # update tfpopstat variables
   for j, (tfpopstat, nppopstat) in enumerate(zip(tfpopstats, nppopstats)):
     tfpopstat.load(nppopstat)
 
@@ -167,22 +139,13 @@ def run_epoch(supervisor,
               best_validation_loss=None,
               best_model_saver=None):
   """Runs an epoch of training or evaluate the model on given data."""
-  if experiment_type == "valid":
-    # switch to fixed random number sequence for validation
-    prev_rng_state = np.random.get_state()
-    np.random.seed(123)
-  input_data, targets, lengths = data_tools.make_data_feature_maps(
-      raw_data, hparams, encoder)
-  permutation = np.random.permutation(len(input_data))
-  input_data = input_data[permutation]
-  targets = targets[permutation]
-  lengths = lengths[permutation]
-  if experiment_type == "valid":
-    # restore main random stream
-    np.random.set_state(prev_rng_state)
-
-  batch_size = m.batch_size
-  num_batches = input_data.shape[0] // m.batch_size
+  # reduce variance in validation loss by fixing the seed
+  data_seed = 123 if experiment_type == "valid" else None
+  with util.numpy_seed(data_seed):
+    xs, ys, lengths = data_tools.make_data_feature_maps(
+        raw_data, hparams, encoder)
+    batches = util.batches(xs, ys, lengths, size=m.batch_size,
+                           shuffle=True, shuffle_rng=data_seed)
 
   losses = util.AggregateMean('losses_%s' % experiment_type)
   losses_total = util.AggregateMean('losses_total_%s' %
@@ -191,34 +154,22 @@ def run_epoch(supervisor,
   losses_unmask = util.AggregateMean('losses_unmasked_%s' %
                                               (experiment_type))
   start_time = time.time()
-  for step in range(num_batches):
-    start_idx = step * batch_size
-    end_idx = start_idx + batch_size
-    x = input_data[start_idx:end_idx, :, :, :]
-    y = targets[start_idx:end_idx, :, :]
-    lens = lengths[start_idx:end_idx]
-
+  for step, (x, y, length) in batches:
     # Evaluate the graph and run back propagation.
-    results = sess.run([m.predictions, m.loss, m.loss_total, m.loss_mask,
-                        m.reduced_mask_size, m.mask, m.loss_unmask, m.reduced_unmask_size,
-                        m.D, m.reduced_D, m._mask_size, m._unreduced_loss,
-                        m.learning_rate, m._lossmask,
-                        eval_op], {m.input_data: x,
-                                   m.targets: y,
-                                   m.lengths: lens})
+    fetches = [m.loss, m.loss_total, m.loss_mask, m.loss_unmask,
+               m.reduced_mask_size, m.reduced_unmask_size,
+               m.learning_rate, eval_op]
+    feed_dict = {m.input_data: x,
+                 m.targets: y,
+                 m.lengths: lens}
+    (loss, loss_total, loss_mask, loss_unmask,
+     reduced_mask_size, reduced_unmask_size, 
+     learning_rate, _) = sess.run(fetches, feed_dict=feed_dict)
 
-    (predictions, loss, loss_total, loss_mask, reduced_mask_size, mask, 
-     loss_unmask, reduced_unmask_size, 
-     D, reduced_D, mask_size, unreduced_loss,
-     learning_rate, lossmask, _) = results
-
-    if reduced_unmask_size < 0:
-      import pdb; pdb.set_trace()
- 
     # Aggregate performances.
     losses_total.add(loss_total, 1)
-    # Multiply the mean loss_mask by reduced_mask_size for aggregation as the mask size
-    # could be different for every batch.
+    # Multiply the mean loss_mask by reduced_mask_size for aggregation as the
+    # mask size could be different for every batch.
     losses_mask.add(loss_mask * reduced_mask_size, reduced_mask_size)
     losses_unmask.add(loss_unmask * reduced_unmask_size, reduced_unmask_size)
 
@@ -401,6 +352,22 @@ def main(unused_argv):
     print "Done."
     return best_validation_loss
 
+def _print_popstat_info(tfpopstats, nppopstats)
+  mean_errors = []
+  stdev_errors = []
+  for j, (tfpopstat, nppopstat) in enumerate(zip(tfpopstats, nppopstats)):
+    moving_average = tfpopstat.eval()
+    if j % 2 == 0:
+      mean_errors.append(abs(moving_average - nppopstat))
+    else:
+      stdev_errors.append(abs(np.sqrt(moving_average) - np.sqrt(nppopstat)))
+  def flatmean(xs):
+    return np.mean(np.concatenate([x.flatten() for x in xs]))
+  print ("average of pop mean/stdev errors: %g %g"
+         % (flatmean(mean_errors), flatmean(stdev_errors)))
+  print ("average of batch mean/stdev: %g %g"
+         % (flatmean(nppopstats[0::2]),
+            flatmean([np.sqrt(ugh) for ugh in nppopstats[1::2]])))
 
 if __name__ == '__main__':
   tf.app.run()

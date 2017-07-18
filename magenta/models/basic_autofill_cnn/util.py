@@ -1,4 +1,4 @@
-import contextlib, time, os, datetime
+import contextlib, time, os, datetime, numbers
 import numpy as np
 
 
@@ -154,7 +154,7 @@ class AggregateMean(object):
     self.value = 0.
     self.total_counts = 0
 
-  def add(self, value, counts):
+  def add(self, value, counts=1):
     """Add an amount to the total and also increment the counts."""
     self.value += value
     self.total_counts += counts
@@ -166,3 +166,34 @@ class AggregateMean(object):
 
 def timestamp():
   return datetime.now().strftime("%Y%m%d%H%M%S")
+
+def batches(*xss, size=1, discard_remainder=True, shuffle=False, shuffle_rng=None):
+  shuffle_rng = get_rng(shuffle_rng)
+  n = int(np.unique(list(map(len, xss))))
+  assert all(len(xs) == len(xss[0]) for xs in xss)
+  indices = np.arange(len(xss[0]))
+  if shuffle:
+    np.random.shuffle(indices)
+  for start in range(0, n, size):
+    batch_indices = indices[start:start + size]
+    if len(batch_indices) < size and discard_remainder:
+      break
+    batch_xss = [xs[batch_indices] for xs in xss]
+    yield batch_xss
+
+def get_rng(rng=None):
+  if rng is None:
+    return np.random
+  if isinstance(rng, numbers.Integral):
+    return np.random.RandomState(rng)
+  else:
+    return rng
+
+@contextlib.contextmanager
+def numpy_seed(seed):
+  if seed is not None:
+    prev_rng_state = np.random.get_state()
+    np.random.seed(seed)
+  yield
+  if seed is not None:
+    np.random.set_state(prev_rng_state)
