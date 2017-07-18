@@ -24,7 +24,7 @@ class BasicAutofillCNNGraph(object):
     self.build()
 
   def build(self):
-    conv_specs = hparams.conv_arch.specs
+    conv_specs = self.hparams.conv_arch.specs
 
     output = self.preprocess_input(self._input_data)
     self.residual_init()
@@ -60,7 +60,7 @@ class BasicAutofillCNNGraph(object):
     self._predictions = self.compute_predictions(logits=self._logits, labels=self._targets)
     self._cross_entropy = self.compute_cross_entropy(logits=self._logits, labels=self._targets)
 
-    self.compute_loss(cross_entropy)
+    self.compute_loss(self._cross_entropy)
     self.setup_optimizer()
 
   def preprocess_input(input_data):
