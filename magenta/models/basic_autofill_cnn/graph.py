@@ -5,54 +5,6 @@ from collections import OrderedDict
 import lib.tfutil as tfutil
 
 
-def locally_connected_layer_2d_with_second_axis_shared(input_, filter_sizes):
-  print 'locally_connected_layer_2d_with_second_axis_shared'
-  filter_time_size, filter_pitch_size, num_in_channels, num_out_channels = filter_sizes
-  print 'filter', filter_sizes
-  assert filter_time_size == filter_pitch_size
-  batch_size = input_.get_shape().as_list()[0]
-  num_timesteps = tf.shape(input_)[1]
-  num_pitches = input_.get_shape().as_list()[2]
-  W_shape = (filter_time_size, filter_pitch_size, 
-             num_pitches, num_in_channels, num_out_channels)
-  print 'W_shape', W_shape, W_shape[:-1] 
-  stddev = tf.sqrt(tf.div(2.0, tf.to_float(tf.reduce_prod(W_shape[:-1]))))
-  W = tf.get_variable('locally_connected_weights', W_shape, 
-                      initializer=tf.random_normal_initializer(0.0, stddev))
-  # Defun needs tensor, and can't accept variables
-  W = tf.convert_to_tensor(W)
- 
-  #@Defun(tf.float32, tf.float32)
-  def compute_pitch_locally_connected_convolution(input_, W):
-    # Defun input looses shape.
-    W.set_shape(W_shape)
-    num_timesteps = tf.shape(input_)[1]
-    input_pad = tf.pad(input_, [[0, 0], [1,1], [1,1], [0, 0]])
-    end = (filter_pitch_size - 1) // 2
-    start = - (filter_pitch_size - 1 - end) 
-    #print start, end
-    Y = tf.zeros((batch_size, num_timesteps, num_pitches, num_out_channels))
-    for dh in range(start, end+1):
-      for dw in range(start, end+1):
-        i = 1+dh
-        j = 1+dw
-        local_input = input_pad[:, i:i+num_timesteps, j:j+num_pitches, :]
-        local_input.set_shape([batch_size, None, num_pitches, num_in_channels])
-        #print tf.shape(W[i, j]).eval(), tf.shape(local_input).eval()
-        # np.einsum('pio,btpi->btpw', W[i, j].eval(), local_X.eval())
-        Y += tf.einsum('def,bcde->bcdf', W[i, j], local_input)
-    return Y
-
-  func_name = "localpitch_" + "_".join(map(str, np.random.choice(100, 10)))
-  do_it = Defun(tf.float32, tf.float32, func_name=func_name)(lambda input_, W: compute_pitch_locally_connected_convolution(input_, W))
-
-  #Y = compute_pitch_locally_connected_convolution(input_, W)
-  Y = do_it(input_, W)
-  # Defun output looses shape.
-  Y.set_shape((batch_size, None, num_pitches, num_out_channels))
-  return Y, W
-
-
 class BasicAutofillCNNGraph(object):
   """Model for predicting autofills given context."""
 
@@ -297,21 +249,16 @@ class BasicAutofillCNNGraph(object):
       return x
 
     filter_shape = specs["filters"]
-    if specs.get('pitch_locally_connected', False):
-      # Weight instantiation and initialization is wrapped inside.
-      conv, weights = locally_connected_layer_2d_with_second_axis_shared(
-          output, filter_shape)
-    else:
-      # Instantiate or retrieve filter weights.
-      fanin = tf.to_float(tf.reduce_prod(filter_shape[:-1]))
-      stddev = tf.sqrt(tf.div(2.0, fanin))
-      weights = tf.get_variable(
-          'weights', specs['filters'],
-          initializer=tf.random_normal_initializer(0.0, stddev))
-      stride = specs.get('conv_stride', 1)
-      conv = tf.nn.conv2d(x, weights,
-                          strides=[1, stride, stride, 1],
-                          padding=specs.get('conv_pad', 'SAME'))
+    # Instantiate or retrieve filter weights.
+    fanin = tf.to_float(tf.reduce_prod(filter_shape[:-1]))
+    stddev = tf.sqrt(tf.div(2.0, fanin))
+    weights = tf.get_variable(
+        'weights', filter_shape,
+        initializer=tf.random_normal_initializer(0.0, stddev))
+    stride = specs.get('conv_stride', 1)
+    conv = tf.nn.conv2d(x, weights,
+                        strides=[1, stride, stride, 1],
+                        padding=specs.get('conv_pad', 'SAME'))
 
     # Compute batch normalization or add biases.
     if hparams.batch_norm:

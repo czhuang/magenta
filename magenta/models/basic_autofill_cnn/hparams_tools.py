@@ -286,41 +286,6 @@ class DeepStraightConvSpecs(ConvArchitecture):
     return self.name
 
 
-class PitchLocallyConnectedConvSpecs(ConvArchitecture):
-  """A convolutional net where each layer has the same number of filters."""
-  model_name = 'PitchLocallyConnectedConvSpecs'
-
-  def __init__(self, input_depth, num_layers, num_filters, num_pitches, 
-               output_depth, **kwargs):
-    num_instruments = output_depth
-    if num_layers < 4:
-      raise ModelMisspecificationError(
-          'The network needs to be at least 4 layers deep, %d given.' %
-          num_layers)
-    super(PitchLocallyConnectedConvSpecs, self).__init__()
-    bottom = [dict(filters=[3, 3, input_depth, num_filters])]
-    middle = []
-    for i in range(num_layers - 4):
-      middle.append(dict(filters=[3, 3, num_filters, num_filters],
-                         pitch_locally_connected=i % 8 == 7))
-    top = [dict(filters=[3, 3, num_filters, num_instruments], pitch_locally_connected = True),
-           dict(filters=[3, 3, num_instruments, num_instruments], pitch_locally_connected = True),
-           dict(change_to_pitch_fully_connected=1,
-                filters=[3, 1, num_pitches * num_instruments, num_pitches * num_instruments],
-                activation=lambda x: x),
-           dict(change_to_pitch_fully_connected=-1, activation=lambda x: x)]
-    self.condensed_specs = bottom + middle + top
-    # -1 because the last layer is just a reshape
-    assert len(self.condensed_specs) - 1 == num_layers
-    self.specs = self.get_spec()
-    assert self.specs
-    if input_depth != 2:
-      self.name_prefix = '%s-multi_instr' % self.model_name
-    else:
-      self.name_prefix = '%s-col_instr' % self.model_name
-    self.name = '%s_depth-%d_filter-%d-%d' % (self.name_prefix, len(self.specs),
-                                              num_filters, num_filters)
-
 class PitchFullyConnectedConvSpecs(ConvArchitecture):
   """A convolutional net where each layer has the same number of filters."""
   model_name = 'PitchFullyConnectedConvSpecs'
