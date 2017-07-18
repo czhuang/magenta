@@ -58,8 +58,6 @@ class Hyperparameters(object):
       run_dir=None,
       log_process=True,
       save_model_secs=30,
-      # Prediction threshold.
-      prediction_threshold=0.5,
       run_id = '')
 
   def __init__(self, *args, **init_hparams):
@@ -181,7 +179,7 @@ class Hyperparameters(object):
         'num_layers', 'num_filters', 'eval_freq',
         'output_depth', 'model_name', 'checkpoint_name',
         'batch_norm_variance_epsilon', 'batch_norm_gamma', 'batch_norm',
-        'init_scale', 'prediction_threshold', 'optimize_mask_only', 'conv_arch',
+        'init_scale', 'optimize_mask_only', 'conv_arch',
         'augment_by_halfing_doubling_durations', 'augment_by_transposing',
         'mask_indicates_context', 'denoise_mode', 
         'run_dir', 'num_epochs', 'log_process', 'save_model_secs', 

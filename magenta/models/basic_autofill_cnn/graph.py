@@ -19,7 +19,6 @@ class BasicAutofillCNNGraph(object):
     self.targets = targets
     self.lengths = lengths
     self.hiddens = []
-    self.prediction_threshold = hparams.prediction_threshold
     self.popstats_by_batchstat = OrderedDict()
     self.build()
 
