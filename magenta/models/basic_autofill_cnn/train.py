@@ -180,11 +180,10 @@ def run_epoch(supervisor,
 
   # Collect run statistics.
   run_stats = dict()
-  run_stats['loss_mask_%s' % experiment_type] = losses_mask.mean
-  run_stats['loss_unmask_%s' % experiment_type] = losses_unmask.mean
-  run_stats['loss_total_%s' % experiment_type] = losses_total.mean
-  run_stats['loss_%s' % experiment_type] = losses.mean
-
+  run_stats['loss_mask'] = losses_mask.mean
+  run_stats['loss_unmask'] = losses_unmask.mean
+  run_stats['loss_total'] = losses_total.mean
+  run_stats['loss'] = losses.mean
   run_stats['learning_rate'] = float(learning_rate)
 
   # Make summaries.
@@ -192,52 +191,27 @@ def run_epoch(supervisor,
     summaries = tf.Summary()
     for stat_name, stat in run_stats.iteritems():
       value = summaries.value.add()
-      value.tag = stat_name
+      value.tag = "%s_%s" % (stat_name, experiment_type)
       value.simple_value = stat
     supervisor.summary_computed(sess, summaries, epoch_count)
 
-  # Checkpoint best model so far if running validation.
-  if FLAGS.log_progress and experiment_type == 'valid' and (
-      best_validation_loss > run_stats['loss_%s' % experiment_type]):
-    tf.logging.info('Previous best validation loss: %.4f.' %
-                    (best_validation_loss))
-    best_validation_loss = run_stats['loss_%s' % experiment_type]
-    save_path = os.path.join(FLAGS.log_dir, hparams.log_subdir_str,
-                             '%s-best_model.ckpt' % hparams.name)
-    # Saving the best model thusfar checkpoint.
-    best_model_saver.save(sess, save_path)
+  tf.logging.info('%s, epoch %d: loss (mask): %.4f, loss (unmask): %.4f, '
+                  'loss (total): %.4f, log lr: %.4f, time taken: %.4f',
+                  experiment_type, epoch_count,
+                  run_stats['loss_mask'],
+                  run_stats['loss_unmask'],
+                  run_stats['loss_total'],
+                  np.log2(run_stats['learning_rate']),
+                  time.time() - start_time)
 
-    tf.logging.info('Storing best model so far with loss %.4f at %s.' %
-                    (best_validation_loss, save_path))
-    print 'Storing best model so far with loss %.4f at %s.' % (
-        best_validation_loss, save_path)
-
-  tf.logging.info('%s, epoch %d: loss (mask): %.4f, ' %
-                  (experiment_type, epoch_count,
-                   run_stats['loss_mask_%s' % experiment_type]))
-  tf.logging.info('loss (unmask): %.4f, ' %
-                  (run_stats['loss_unmask_%s' % experiment_type]))
-  tf.logging.info('loss (total): %.4f, ' %
-                  (run_stats['loss_total_%s' % experiment_type]))
-  tf.logging.info('log lr: %.4f' % np.log2(run_stats['learning_rate']))
-  tf.logging.info('time taken: %.4f' % (time.time() - start_time))
-
-  print '%s, epoch %d: real loss: %.4f, loss (mask): %.4f, ' % (
-      experiment_type, epoch_count, run_stats['loss_%s' % experiment_type],
-      run_stats['loss_mask_%s' % experiment_type]),
-  print 'loss (unmask): %.4f, ' % (
-      run_stats['loss_unmask_%s' % experiment_type]),
-  print 'loss (total): %.4f, ' % (
-      run_stats['loss_total_%s' % experiment_type]),
-  print 'log lr: %.4f' % np.log2(run_stats['learning_rate']),
-  print 'time taken: %.4f' % (time.time() - start_time)
-
-  return best_validation_loss
+  return run_stats["loss"]
 
 
 def main(unused_argv):
   """Builds the graph and then runs training and validation."""
   print 'TensorFlow version:', tf.__version__
+
+  tf.logging.set_verbosity(tf.logging.INFO)
 
   if FLAGS.data_dir is None:
     tf.logging.fatal('No input directory was provided.')
@@ -322,6 +296,7 @@ def main(unused_argv):
       while epoch_count < FLAGS.num_epochs or not FLAGS.num_epochs:
         if sv.should_stop():
           break
+
         # Run training.
         run_epoch(sv, sess, m, train_data, pianoroll_encoder, hparams,
                   m.train_op, 'train', epoch_count)
@@ -330,12 +305,20 @@ def main(unused_argv):
         if epoch_count % hparams.eval_freq == 0:
           estimate_popstats(sv, sess, m, train_data, pianoroll_encoder, hparams)
 
-          new_best_validation_loss = run_epoch(
+          loss = run_epoch(
               sv, sess, mvalid, valid_data, pianoroll_encoder, hparams,
               no_op, 'valid', epoch_count, best_validation_loss, 
               best_model_saver)
-          if new_best_validation_loss < best_validation_loss:
-            best_validation_loss = new_best_validation_loss
+          if loss < best_validation_loss:
+            if FLAGS.log_progress:
+              tf.logging.info('Previous best validation loss: %.4f.' %
+                              best_validation_loss)
+              save_path = os.path.join(FLAGS.log_dir, hparams.log_subdir_str,
+                                       '%s-best_model.ckpt' % hparams.name)
+              best_model_saver.save(sess, save_path)
+              tf.logging.info('Storing best model so far with loss %.4f at %s.' %
+                              (loss, save_path))
+            best_validation_loss = loss
             time_since_improvement = 0
             true_time_since_improvement = 0
           else:
@@ -346,6 +329,7 @@ def main(unused_argv):
               time_since_improvement = 0
             if true_time_since_improvement > 5 * FLAGS.patience:
               break
+
         epoch_count += 1
 
     print "best validation loss", best_validation_loss
