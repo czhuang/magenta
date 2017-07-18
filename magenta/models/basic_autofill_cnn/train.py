@@ -219,33 +219,7 @@ def main(unused_argv):
   print FLAGS.maskout_method, 'seperate', FLAGS.separate_instruments
   print 'Augmentation', FLAGS.augment_by_transposing, FLAGS.augment_by_halfing_doubling_durations
 
-  # Load hyperparameter settings, configs, and data.
-  hparams = Hyperparameters(
-      dataset=FLAGS.dataset,
-      quantization_level=FLAGS.quantization_level,
-      num_instruments=FLAGS.num_instruments,
-      separate_instruments=FLAGS.separate_instruments,
-      crop_piece_len=FLAGS.crop_piece_len,
-      pad=FLAGS.pad,
-      model_name=FLAGS.model_name,
-      num_layers=FLAGS.num_layers,
-      num_filters=FLAGS.num_filters,
-      start_filter_size=FLAGS.start_filter_size,
-      encode_silences=FLAGS.encode_silences,
-      use_residual=FLAGS.use_residual,
-      batch_size=FLAGS.batch_size,
-      maskout_method=FLAGS.maskout_method,
-      mask_indicates_context=FLAGS.mask_indicates_context,
-      optimize_mask_only=FLAGS.optimize_mask_only,
-      rescale_loss=FLAGS.rescale_loss,
-      patience=FLAGS.patience,
-      augment_by_transposing=FLAGS.augment_by_transposing,
-      augment_by_halfing_doubling_durations=FLAGS.
-      augment_by_halfing_doubling_durations,
-      denoise_mode=FLAGS.denoise_mode,
-      corrupt_ratio=FLAGS.corrupt_ratio,
-      eval_freq=FLAGS.eval_freq,
-      run_id=FLAGS.run_id)
+  hparams = _hparams_from_flags()
   
   # Get data.
   train_data, pianoroll_encoder = data_tools.get_data_and_update_hparams(
@@ -254,8 +228,6 @@ def main(unused_argv):
       FLAGS.data_dir, hparams, 'valid', return_encoder=False)
   print '# of train_data:', len(train_data)
   print '# of valid_data:', len(valid_data)
-
-  best_validation_loss = np.inf
 
   # Build the graph and subsequently running it for train and validation.
   with tf.Graph().as_default() as graph:
@@ -370,6 +342,19 @@ def _print_popstat_info(tfpopstats, nppopstats)
   print ("average of batch mean/stdev: %g %g"
          % (flatmean(nppopstats[0::2]),
             flatmean([np.sqrt(ugh) for ugh in nppopstats[1::2]])))
+
+def _hparams_from_flags():
+  keys = ("""
+      dataset quantization_level num_instruments separate_instruments
+      crop_piece_len pad model_name num_layers num_filters start_filter_size
+      encode_silences use_residual batch_size maskout_method
+      mask_indicates_context optimize_mask_only rescale_loss patience
+      augment_by_transposing augment_by_halfing_doubling_durations
+      denoise_mode corrupt_ratio eval_freq run_id
+      """.split())
+  hparams = Hyperparameters(**dict((key, getattr(FLAGS, key))
+                                   for key in keys))
+  return hparams
 
 if __name__ == '__main__':
   tf.app.run()
