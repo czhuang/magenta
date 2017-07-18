@@ -144,16 +144,6 @@ class BasicAutofillCNNGraph(object):
             self._loss, var_list=tf.trainable_variables())
     ]
 
-  def reshape_to_2d(self, data):
-    # Collapse the batch, time, and instrument dimension of a tensor that has a
-    # shape of (batch, time, pitch, instrument) into 2D.
-    transposed_data = tf.transpose(data, perm=[0, 1, 3, 2])
-    return tf.reshape(transposed_data, [-1, tf.shape(data)[2]])
-
-  def reshape_back_to_4d(self, data_2d, shape):
-    reshaped_data = tf.reshape(data_2d, [-1, shape[1], shape[3], shape[2]])
-    return tf.transpose(reshaped_data, [0, 1, 3, 2])
-
   def compute_loss(self, unreduced_loss):
     # construct mask due to identify zero padding that was introduced to make
     # the batch rectangular
