@@ -15,10 +15,10 @@ class BasicAutofillCNNGraph(object):
     self.num_pitches = hparams.num_pitches
     self.num_instruments = hparams.num_instruments
     self.is_training = is_training
-    self._input_data = input_data
-    self._targets = targets
-    self._lengths = lengths
-    self._hiddens = []
+    self.input_data = input_data
+    self.targets = targets
+    self.lengths = lengths
+    self.hiddens = []
     self.prediction_threshold = hparams.prediction_threshold
     self.popstats_by_batchstat = OrderedDict()
     self.build()
@@ -26,7 +26,7 @@ class BasicAutofillCNNGraph(object):
   def build(self):
     conv_specs = self.hparams.conv_arch.specs
 
-    output = self.preprocess_input(self._input_data)
+    output = self.preprocess_input(self.input_data)
     self.residual_init()
 
     n = len(conv_specs)
@@ -44,7 +44,7 @@ class BasicAutofillCNNGraph(object):
         elif specs.get('change_to_pitch_fully_connected', 0) == -1:
           # assume it is the last layer and shape to the required output shape
           assert i == n - 1
-          bb, tt, pp, _ = tf.shape_n(self._input_data)
+          bb, tt, pp, _ = tf.shape_n(self.input_data)
           output = tf.reshape(output, [bb, tt, pp, self.num_instruments])
           self.residual_reset()
           continue
@@ -54,13 +54,13 @@ class BasicAutofillCNNGraph(object):
         output = self.apply_activation(output, specs)
         output = self.apply_pooling(output, specs)
 
-        self._hiddens.append(output)
+        self.hiddens.append(output)
 
-    self._logits = output
-    self._predictions = self.compute_predictions(logits=self._logits, labels=self._targets)
-    self._cross_entropy = self.compute_cross_entropy(logits=self._logits, labels=self._targets)
+    self.logits = output
+    self.predictions = self.compute_predictions(logits=self.logits, labels=self.targets)
+    self.cross_entropy = self.compute_cross_entropy(logits=self.logits, labels=self.targets)
 
-    self.compute_loss(self._cross_entropy)
+    self.compute_loss(self.cross_entropy)
     self.setup_optimizer()
 
   def preprocess_input(input_data):
@@ -87,90 +87,90 @@ class BasicAutofillCNNGraph(object):
 
     # If not training, don't need to add optimizer to the graph.
     if not self.is_training:
-      self._train_op = tf.no_op
+      self.train_op = tf.no_op
       return
 
     # FIXME 0.5 -> hparams.decay_rate
     self.decay_op = tf.assign(self.learning_rate, 0.5*self.learning_rate)
-    self._optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
-    self._train_op = self._optimizer.minimize(self._loss)
-    self._gradient_norms = [
+    self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
+    self.train_op = self.optimizer.minimize(self.loss)
+    self.gradient_norms = [
         tf.sqrt(tf.reduce_sum(gradient[0]**2))
-        for gradient in self._optimizer.compute_gradients(
-            self._loss, var_list=tf.trainable_variables())
+        for gradient in self.optimizer.compute_gradients(
+            self.loss, var_list=tf.trainable_variables())
     ]
 
   def compute_loss(self, unreduced_loss):
-    # construct mask due to identify zero padding that was introduced to make
-    # the batch rectangular
-    batch_duration = tf.shape(self._targets)[1]
+    # construct mask to identify zero padding that was introduced to
+    # make the batch rectangular
+    batch_duration = tf.shape(self.targets)[1]
     indices = tf.to_float(tf.range(batch_duration))
-    self._pad_mask = tf.to_float(indices[None, :, None, None] <
+    self.pad_mask = tf.to_float(indices[None, :, None, None] <
                                  self.lengths[:, None, None, None])
 
     # construct mask and its complement, respecting pad mask
-    self._mask = tf.split(self._input_data, 2, axis=3)[1]
-    self._mask = self._mask * self._pad_mask
-    self._unmask = (1 - self._mask) * self._pad_mask
+    self.mask = tf.split(self.input_data, 2, axis=3)[1]
+    self.mask = self.mask * self.pad_mask
+    self.unmask = (1 - self.mask) * self.pad_mask
 
     # Compute numbers of variables
     # #timesteps * #variables per timestep
     variable_axis = 3 if self.hparams.use_softmax_loss else 2
     D = (self.lengths[:, None, None, None] *
-         tf.to_float(tf.shape(self._targets)[variable_axis]))
+         tf.to_float(tf.shape(self.targets)[variable_axis]))
     reduced_D = tf.reduce_sum(D)
 
     # Compute numbers of variables to be predicted/conditioned on
-    self._mask_size = tf.reduce_sum(
-        self._mask, axis=[1, variable_axis], keep_dims=True)
-    self._unmask_size = tf.reduce_sum(
-        self._unmask, axis=[1, variable_axis], keep_dims=True)
+    self.mask_size = tf.reduce_sum(
+        self.mask, axis=[1, variable_axis], keep_dims=True)
+    self.unmask_size = tf.reduce_sum(
+        self.unmask, axis=[1, variable_axis], keep_dims=True)
 
-    self._unreduced_loss = unreduced_loss * self._pad_mask
+    self.unreduced_loss = unreduced_loss * self.pad_mask
     if self.hparams.rescale_loss:
-      self._unreduced_loss *= D / self._mask_size
+      self.unreduced_loss *= D / self.mask_size
 
     # Compute average loss over entire set of variables
-    self._loss_total = tf.reduce_sum(self._unreduced_loss) / reduced_D
+    self.loss_total = tf.reduce_sum(self.unreduced_loss) / reduced_D
 
     # Compute loss for masked variables
     # NOTE: indexing the pitch dimension with 0 because the mask is constant
     # across pitch. Except in the sigmoid case, but then the pitch dimension
     # will have been reduced over.
-    self._reduced_mask_size = tf.reduce_sum(self._mask_size[:, :, 0, :])
-    self._loss_mask = (tf.reduce_sum(self._mask * self._unreduced_loss)
-                       / self._reduced_mask_size)
+    self.reduced_mask_size = tf.reduce_sum(self.mask_size[:, :, 0, :])
+    self.loss_mask = (tf.reduce_sum(self.mask * self.unreduced_loss)
+                       / self.reduced_mask_size)
 
     # Compute loss for out-of-mask (unmask) portion.
-    self._reduced_unmask_size = tf.reduce_sum(self._unmask_size[:, :, 0, :])
-    self._loss_unmask = (tf.reduce_sum(self._unmask * self._unreduced_loss)
-                         / self._reduced_unmask_size)
+    self.reduced_unmask_size = tf.reduce_sum(self.unmask_size[:, :, 0, :])
+    self.loss_unmask = (tf.reduce_sum(self.unmask * self.unreduced_loss)
+                         / self.reduced_unmask_size)
 
     assert_partition_op = tf.group(
-        tf.assert_equal(tf.reduce_sum(self._mask * self._unmask), 0),
-        tf.assert_equal(self._reduced_mask_size + self._reduced_unmask_size,
+        tf.assert_equal(tf.reduce_sum(self.mask * self.unmask), 0),
+        tf.assert_equal(self.reduced_mask_size + self.reduced_unmask_size,
                         reduced_D))
     with tf.control_dependencies([assert_partition_op]):
-      self._loss_mask = tf.identity(self._loss_mask)
-      self._loss_unmask = tf.identity(self._loss_unmask)
+      self.loss_mask = tf.identity(self.loss_mask)
+      self.loss_unmask = tf.identity(self.loss_unmask)
 
     # Check which loss to use as objective function.
-    self._loss = (self._loss_mask if self.hparams.optimize_mask_only else
-                  self._loss_total)
+    self.loss = (self.loss_mask if self.hparams.optimize_mask_only else
+                  self.loss_total)
 
     # Use another loss altogether for particular maskout methods. In this case
     # all of the above work must be done anyway because things break if the
     # appropriate attributes are not available.
-    self._maybe_compute_fixedorder_loss_instead()
+    self.maybe_compute_fixedorder_loss_instead()
 
   def maybe_compute_fixedorder_loss_instead(self):
     """Recompute and overwrite loss for special maskout methods."""
     if hparams.maskout_method not in "chronological_ti chronological_it fixed_order".split():
-      self._lossmask = tf.no_op()
+      self.lossmask = tf.no_op()
       return
 
     if self.hparams.rescale_loss:
-      # If this is true then self._unreduced_losses will have been rescaled,
+      # If this is true then self.unreduced_losses will have been rescaled,
       # which biases the loss.
       raise ValueError("rescale_loss doesn't make sense with maskout_method %r"
                        % hparams.maskout_method)
@@ -179,7 +179,7 @@ class BasicAutofillCNNGraph(object):
     # with the orderless NADE training procedure. Instead of training a whole
     # set of conditional distributions at once, we train exactly one. We use
     # the mask to determine which variable is next in the ordering.
-    _, mask = tf.split(self._input_data, 2, axis=3)
+    _, mask = tf.split(self.input_data, 2, axis=3)
     # If the variables are predicted in T, I order, then the number of known
     # variables corresponds to the index of the variable that would be sampled
     # next. Next, we transform this array to fit the maskout_method's ordering.
@@ -205,7 +205,7 @@ class BasicAutofillCNNGraph(object):
     lossmask = tf.one_hot(flat_prediction_index,
                           depth=num_timesteps * num_instruments)
     # Get rid of that pesky pitch dimension.
-    loss3d = tf.reduce_sum(self._unreduced_loss, reduction_indices=2)
+    loss3d = tf.reduce_sum(self.unreduced_loss, reduction_indices=2)
 
     if hparams.maskout_method == "chronological_it":
       # This ordering loops over time first; permute the dimensions to match.
@@ -213,8 +213,8 @@ class BasicAutofillCNNGraph(object):
 
     # Flatten the loss to match lossmask and reduce.
     flatloss = tf.reshape(loss3d, [batch_size, num_timesteps * num_instruments])
-    self._loss = tf.reduce_sum(lossmask * flatloss) / tf.to_float(batch_size)
-    self._lossmask = lossmask
+    self.loss = tf.reduce_sum(lossmask * flatloss) / tf.to_float(batch_size)
+    self.lossmask = lossmask
 
   def residual_init(self):
     if not self.hparams.use_residual:
@@ -336,61 +336,6 @@ class BasicAutofillCNNGraph(object):
               tf.nn.sigmoid_cross_entropy_with_logits(logits=logits,
                                                       labels=labels))
 
-  @property
-  def gradient_norms(self):
-    return self._gradient_norms
-
-  @property
-  def input_data(self):
-    return self._input_data
-
-  @property
-  def lengths(self):
-    return self._lengths
-
-  @property
-  def mask(self):
-    return self._mask
-
-  @property
-  def reduced_mask_size(self):
-    return self._reduced_mask_size
-
-  @property
-  def reduced_unmask_size(self):
-    return self._reduced_unmask_size
-
-  @property
-  def targets(self):
-    return self._targets
-
-  @property
-  def train_op(self):
-    return self._train_op
-
-  @property
-  def logits(self):
-    return self._logits
-
-  @property
-  def predictions(self):
-    return self._predictions
-
-  @property
-  def loss_mask(self):
-    return self._loss_mask
-
-  @property
-  def loss_unmask(self):
-    return self._loss_unmask
-
-  @property
-  def loss_total(self):
-    return self._loss_total
-
-  @property
-  def loss(self):
-    return self._loss
 
 def get_placeholders(hparams):
   # NOTE: fixed batch_size because einstein sum can only deal with up to 1 unknown dimension
