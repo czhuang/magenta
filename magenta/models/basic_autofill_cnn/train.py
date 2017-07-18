@@ -221,6 +221,15 @@ def main(unused_argv):
 
   hparams = _hparams_from_flags()
   
+  # Save hparam configs.
+  logdir = os.path.join(FLAGS.log_dir, hparams.log_subdir_str)
+  if not os.path.exists(logdir):
+    os.makedirs(logdir)
+  config_fpath = os.path.join(logdir, 'config')
+  print 'Writing to', config_fpath
+  with open(config_fpath, 'w') as p:
+    yaml.dump(hparams, p)
+
   # Get data.
   train_data, pianoroll_encoder = data_tools.get_data_and_update_hparams(
       FLAGS.data_dir, hparams, 'train', return_encoder=True)
@@ -239,20 +248,6 @@ def main(unused_argv):
     _, mvalid = build_graph(is_training=False, hparams=hparams,
                             placeholders=placeholders)
 
-    # Instantiate a supervisor and use it to start a managed session.
-    saver = 0  # Use default saver from supervisor.
-    if not FLAGS.log_progress:
-      saver = None
-
-    # Save hparam configs.
-    logdir = os.path.join(FLAGS.log_dir, hparams.log_subdir_str)
-    if not os.path.exists(logdir):
-      os.makedirs(logdir)
-    config_fpath = os.path.join(logdir, 'config')
-    print 'Writing to', config_fpath
-    with open(config_fpath, 'w') as p:
-      yaml.dump(hparams, p)
-
     tracker = Tracker(label="validation loss",
                       patience=FLAGS.patience,
                       decay_op=m.decay_op,
@@ -264,7 +259,7 @@ def main(unused_argv):
     sv = tf.train.Supervisor(
         graph=graph,
         logdir=logdir,
-        saver=saver,
+        saver=tf.USE_DEFAULT if FLAGS.log_progress else None,
         summary_op=None,
         save_model_secs=FLAGS.save_model_secs)
     with sv.PrepareSession() as sess:
