@@ -228,20 +228,17 @@ def get_data_and_update_hparams(basepath, hparams, fold,
     for key in params:
       if hasattr(hparams, key):
         assert getattr(hparams, key) == params[key], 'hparams did not get updated, %r!=%r' % (getattr(hparams, key), params[key])
-  if return_encoder:
-    assert params['shortest_duration'] == hparams.quantization_level, 'The data has a temporal resolution of shortest duration=%r, requested=%r' % (params['shortest_duration'], hparams.quantization_level)
-    encoder = PianorollEncoderDecoder(
-        shortest_duration=params['shortest_duration'],
-        min_pitch=pitch_range[0],
-        max_pitch=pitch_range[1],
-        separate_instruments=separate_instruments,
-        num_instruments=hparams.num_instruments,
-        encode_silences=hparams.encode_silences,
-        quantization_level=hparams.quantization_level)
-  else:
-    encoder = None
-  
-  if return_encoder:
-    return seqs, encoder
-  else:
+
+  if not return_encoder:
     return seqs
+
+  assert params['shortest_duration'] == hparams.quantization_level, 'The data has a temporal resolution of shortest duration=%r, requested=%r' % (params['shortest_duration'], hparams.quantization_level)
+  encoder = PianorollEncoderDecoder(
+      shortest_duration=params['shortest_duration'],
+      min_pitch=pitch_range[0],
+      max_pitch=pitch_range[1],
+      separate_instruments=separate_instruments,
+      num_instruments=hparams.num_instruments,
+      encode_silences=hparams.encode_silences,
+      quantization_level=hparams.quantization_level)
+  return seqs, encoder
