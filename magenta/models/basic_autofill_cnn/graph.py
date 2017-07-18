@@ -13,6 +13,7 @@ class BasicAutofillCNNGraph(object):
     self.hparams = hparams
     self.batch_size = hparams.batch_size
     self.num_pitches = hparams.num_pitches
+    self.num_instruments = hparams.num_instruments
     self.is_training = is_training
     self._input_data = input_data
     self._targets = targets
@@ -23,7 +24,6 @@ class BasicAutofillCNNGraph(object):
     self.build()
 
   def build(self):
-    sym_batch_size, sym_batch_duration, sym_num_pitches, sym_num_instruments = tf.shape_n(self._targets)
     input_shape = tf.shape(self._input_data)
     conv_specs = hparams.conv_arch.specs
 
