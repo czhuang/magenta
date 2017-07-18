@@ -24,9 +24,6 @@ DATASET_PARAMS = {
         'num_instruments': 4, 'qpm': 60},
 }
 
-# TODO: not included in this version.
-IMAGE_DATASETS = ['MNIST', 'BinaryMNIST', 'OMNIGLOT']
-
 
 class DataProcessingError(Exception):
   """Exception for when data does not meet the expected requirements."""
@@ -146,9 +143,6 @@ def make_data_feature_maps(sequences, hparams, encoder, start_crop_index=None):
     else:
       # For images, no encoder, already in pianoroll-like form.
       pianoroll = sequence
-      if hparams.dataset == 'OMNIGLOT':
-        #print 'binarizing images', pianoroll.shape
-        pianoroll = np.random.random(pianoroll.shape) < pianoroll
     try:
       if hparams.pad:
         # TODO: Padding function does not support augment_by_transposing yet.
@@ -203,49 +197,8 @@ def make_data_feature_maps(sequences, hparams, encoder, start_crop_index=None):
 def get_data_as_pianorolls(basepath, hparams, fold):
   seqs, encoder = get_data_and_update_hparams(
       basepath, hparams, fold, update_hparams=False, return_encoder=True)
-  if hparams.dataset not in IMAGE_DATASETS:
-    assert encoder.quantization_level == hparams.quantization_level
-    return [encoder.encode(seq) for seq in seqs]
-
-  if hparams.dataset == 'OMNIGLOT':
-    prev_rng_state = np.random.get_state()
-    np.random.seed(123)
-    
-    seqs = np.asarray(seqs)
-    print 'binarizing images', seqs.shape
-    seqs = np.random.random(seqs.shape) < seqs
-
-    # restore main random stream
-    np.random.set_state(prev_rng_state)
-  return seqs
-
-
-def get_image_data(dataset_name, fold, params):
-  if dataset_name == 'MNIST':
-    from tensorflow.examples.tutorials.mnist import input_data
-    print 'Downloading or unpacking MNIST data...'
-    mnist = input_data.read_data_sets("MNIST_data/", one_hot=True)
-    if fold == 'valid':
-      fold = 'validation'
-    data = getattr(mnist, fold).images
-    data = np.reshape(data, (-1, 28, 28, 1))
-    print 'MNIST', data.shape
-    return data
-  elif dataset_name == 'BinaryMNIST':
-    fpath = os.path.join(params['path'], 'binarized_mnist_%s.amat' % fold)
-    print 'Loading BinaryMNIST data from', fpath
-    with open(fpath) as f:
-      lines = f.readlines()
-    data = np.array([[int(i) for i in line.split()] for line in lines])    
-    data = np.reshape(data, (-1, 28, 28, 1))
-    print 'BinaryMNIST', data.shape
-    return data
-  elif dataset_name == 'OMNIGLOT':
-    data = np.load(params['path'])[fold]
-    data = np.reshape(data, (-1, 28, 28, 1))
-    return data
-  else:
-    assert False, 'Dataset %s not yet supported.' % dataset_name
+  assert encoder.quantization_level == hparams.quantization_level
+  return [encoder.encode(seq) for seq in seqs]
 
 
 def get_data_and_update_hparams(basepath, hparams, fold, 
@@ -254,25 +207,20 @@ def get_data_and_update_hparams(basepath, hparams, fold,
   dataset_name = hparams.dataset
   params = DATASET_PARAMS[dataset_name]
   
-  if dataset_name in IMAGE_DATASETS: 
-    # for image datasets
-    seqs = get_image_data(dataset_name, fold, params)
+  separate_instruments = hparams.separate_instruments
+  # TODO: Read dataset params from JSON file or the like.
+  pitch_range = params['pitch_ranges']
+  if '4part_Bach_chorales' in dataset_name:
+    fpath = os.path.join(basepath, params['relative_path'], '%s.tfrecord' % fold)
+    seqs = list(note_sequence_record_iterator(fpath))
   else:
-    separate_instruments = hparams.separate_instruments
-    # TODO: Read dataset params from JSON file or the like.
-    pitch_range = params['pitch_ranges']
-    if '4part_Bach_chorales' in dataset_name:
-      fpath = os.path.join(basepath, params['relative_path'], '%s.tfrecord' % fold)
-      seqs = list(note_sequence_record_iterator(fpath))
-    else:
-      fpath = os.path.join(basepath, dataset_name+'.npz')
-      data = np.load(fpath)
-      seqs = data[fold]
+    fpath = os.path.join(basepath, dataset_name+'.npz')
+    data = np.load(fpath)
+    seqs = data[fold]
 
   # Update hparams.
   if update_hparams:
-    if dataset_name not in IMAGE_DATASETS:
-      hparams.num_pitches = pitch_range[1] - pitch_range[0] + 1
+    hparams.num_pitches = pitch_range[1] - pitch_range[0] + 1
     for key, value in params.iteritems():
       if hasattr(hparams, key): 
         setattr(hparams, key, value)
@@ -280,7 +228,7 @@ def get_data_and_update_hparams(basepath, hparams, fold,
     for key in params:
       if hasattr(hparams, key):
         assert getattr(hparams, key) == params[key], 'hparams did not get updated, %r!=%r' % (getattr(hparams, key), params[key])
-  if return_encoder and dataset_name not in IMAGE_DATASETS:
+  if return_encoder:
     assert params['shortest_duration'] == hparams.quantization_level, 'The data has a temporal resolution of shortest duration=%r, requested=%r' % (params['shortest_duration'], hparams.quantization_level)
     encoder = PianorollEncoderDecoder(
         shortest_duration=params['shortest_duration'],
