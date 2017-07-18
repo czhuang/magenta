@@ -183,8 +183,7 @@ class BasicAutofillCNNGraph(object):
         flat_prediction_index = tf.gather(flat_order, flat_prediction_index)
 
       lossmask = tf.one_hot(flat_prediction_index, depth=tf.shape(mask)[1] * tf.shape(mask)[3])
-      # reduce_mean over pitch to be consistent with above
-      loss3d = tf.reduce_mean(self._unreduced_loss, reduction_indices=2)
+      loss3d = tf.reduce_sum(self._unreduced_loss, reduction_indices=2)
 
       if hparams.maskout_method.endswith("_ti") or "fixed_order" in hparams.maskout_method:
         pass
