@@ -135,9 +135,7 @@ def run_epoch(supervisor,
               hparams,
               eval_op,
               experiment_type,
-              epoch_count,
-              best_validation_loss=None,
-              best_model_saver=None):
+              epoch_count):
   """Runs an epoch of training or evaluate the model on given data."""
   # reduce variance in validation loss by fixing the seed
   data_seed = 123 if experiment_type == "valid" else None
@@ -147,12 +145,11 @@ def run_epoch(supervisor,
     batches = util.batches(xs, ys, lengths, size=m.batch_size,
                            shuffle=True, shuffle_rng=data_seed)
 
-  losses = util.AggregateMean('losses_%s' % experiment_type)
-  losses_total = util.AggregateMean('losses_total_%s' %
-                                             experiment_type)
-  losses_mask = util.AggregateMean('losses_mask_%s' % experiment_type)
-  losses_unmask = util.AggregateMean('losses_unmasked_%s' %
-                                              (experiment_type))
+  losses = util.AggregateMean('losses')
+  losses_total = util.AggregateMean('losses_total')
+  losses_mask = util.AggregateMean('losses_mask')
+  losses_unmask = util.AggregateMean('losses_unmask')
+
   start_time = time.time()
   for step, (x, y, length) in batches:
     # Evaluate the graph and run back propagation.
@@ -277,8 +274,7 @@ def main(unused_argv):
           estimate_popstats(sv, sess, m, train_data, pianoroll_encoder, hparams)
           loss = run_epoch(
               sv, sess, mvalid, valid_data, pianoroll_encoder, hparams,
-              no_op, 'valid', epoch_count, best_validation_loss, 
-              best_model_saver)
+              no_op, 'valid', epoch_count)
           tracker(loss, sess)
 
         epoch_count += 1
