@@ -22,7 +22,7 @@ def retrieve_model(wrapped_model=None, model_name=None, placeholders=None,
 
   This function either takes a tfutil.WrappedModel object
   that already has the model graph or calls
-  graph.build_graph to return one. It then retrieves its
+  graph.build_wrapped_model to return one. It then retrieves its
   weights from the checkpoint file specified in the
   hparams_tools.CHECKPOINT_HPARAMS dictionary.
 
@@ -44,7 +44,7 @@ def retrieve_model(wrapped_model=None, model_name=None, placeholders=None,
       else:
         assert False, 'hparams does not have this parameters %s' % key
 
-  wrapped_model = graph.build_graph(
+  wrapped_model = graph.build_wrapped_model(
       is_training=False, hparams=hparams, placeholders=placeholders)
   with wrapped_model.graph.as_default():
     saver = tf.train.Saver()

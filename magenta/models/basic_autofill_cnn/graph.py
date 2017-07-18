@@ -340,30 +340,28 @@ class BasicAutofillCNNGraph(object):
 
 
 def get_placeholders(hparams):
-  # NOTE: fixed batch_size because einstein sum can only deal with up to 1 unknown dimension
-  return dict(input_data=tf.placeholder(tf.float32, [None, None] + hparams.input_shape[-2:]),
-              targets=tf.placeholder(tf.float32, [None, None] + hparams.output_shape[-2:]),
-              lengths=tf.placeholder(tf.float32, [None]))
-
-def build_placeholders_initializers_graph(is_training, hparams, placeholders=None):
-  """Builds input and target placeholders, initializer, and training graph."""
-  if placeholders is None:
-    placeholders = get_placeholders(hparams)
-
-  # Setup initializer.
-  initializer = tf.random_uniform_initializer(-hparams.init_scale,
-                                              hparams.init_scale)
-  # Build training graph.
-  with tf.variable_scope('model', reuse=None, initializer=initializer):
-    train_model = BasicAutofillCNNGraph(
-        is_training=is_training,
-        hparams=hparams,
-        **placeholders)
-  return placeholders["input_data"], placeholders["targets"], placeholders["lengths"], initializer, train_model
+  return dict(
+      input_data=tf.placeholder(tf.float32,
+                                [None, None] + hparams.input_shape[-2:]),
+      targets=tf.placeholder(tf.float32,
+                             [None, None] + hparams.output_shape[-2:]),
+      lengths=tf.placeholder(tf.float32, [None]))
 
 
 def build_graph(is_training, hparams, placeholders=None):
+  """Builds input and target placeholders, initializer, and training graph."""
+  if placeholders is None:
+    placeholders = get_placeholders(hparams)
+  initializer = tf.random_uniform_initializer(-hparams.init_scale,
+                                              hparams.init_scale)
+  with tf.variable_scope('model', reuse=None, initializer=initializer):
+    graph = BasicAutofillCNNGraph(is_training=is_training,
+                                  hparams=hparams,
+                                  **placeholders)
+  return placeholders, graph
+
+
+def build_wrapped_model(is_training, hparams, placeholders=None):
   """Build BasicAutofillCNNGraph, input output placeholders, and initializer."""
-  _, _, _, _, model = build_placeholders_initializers_graph(
-      is_training, hparams, placeholders=placeholders)
+  _, model = build_graph(is_training, hparams, placeholders=placeholders)
   return tfutil.WrappedModel(model, model.loss.graph, hparams)

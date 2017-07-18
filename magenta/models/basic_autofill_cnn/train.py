@@ -10,7 +10,7 @@ import tensorflow as tf
 import data_tools
 import util
 from graph import BasicAutofillCNNGraph
-from graph import build_placeholders_initializers_graph
+from graph import build_graph
 from hparams_tools import Hyperparameters
 
 
@@ -336,19 +336,11 @@ def main(unused_argv):
   with tf.Graph().as_default() as graph:
     no_op = tf.no_op()
 
-    # Builds input and target placeholders, initializer, and training graph.
-    graph_objects = build_placeholders_initializers_graph(
-        is_training=True, hparams=hparams)
-    input_data, targets, lengths, initializer, m = graph_objects
-
-    # Build validation graph, reusing the model parameters from training graph.
-    with tf.variable_scope('model', reuse=True, initializer=initializer):
-      mvalid = BasicAutofillCNNGraph(
-          is_training=False,
-          hparams=hparams,
-          input_data=input_data,
-          targets=targets,
-          lengths=lengths)
+    # Build placeholders and training graph, and validation graph with reuse.
+    placeholders, m = build_graph(is_training=True, hparams=hparams)
+    tf.get_variable_scope().reuse_variables()
+    _, mvalid = build_graph(is_training=False, hparams=hparams,
+                            placeholders=placeholders)
 
     # Instantiate a supervisor and use it to start a managed session.
     saver = 0  # Use default saver from supervisor.
