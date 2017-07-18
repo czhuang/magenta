@@ -24,25 +24,9 @@ class BasicAutofillCNNGraph(object):
     self.build()
 
   def build(self):
-    input_shape = tf.shape(self._input_data)
     conv_specs = hparams.conv_arch.specs
 
-    output = self._input_data
-    if hparams.mask_indicates_context:
-      # flip meaning of mask for convnet purposes: after flipping, mask is hot
-      # where values are known. this makes more sense in light of padding done
-      # by convolution operations: the padded area will have zero mask,
-      # indicating no information to rely on.
-      def flip_mask(input):
-        stuff, mask = tf.split(output, 2, axis=3)
-        return tf.concat([stuff, 1 - mask], axis=3)
-      output = flip_mask(output)
-
-    # For denoising case, don't use masks in model
-    if hparams.denoise_mode:
-      output = tf.split(output, 2, axis=3)[0]
-      input_shape = tf.shape(output)
-
+    output = self.preprocess_input(self._input_data)
     self.residual_init()
 
     n = len(conv_specs)
@@ -53,17 +37,16 @@ class BasicAutofillCNNGraph(object):
 
         # Reshape output if moving into or out of being pitch fully connected.
         if specs.get('change_to_pitch_fully_connected', 0) == 1:
-          output_shape = tf.shape(output)
-          output = tf.reshape(output, [output_shape[0], output_shape[1], 1,
-                                       output_shape[2] * output_shape[3]])
+          bb, tt, pp, ii = tf.shape_n(output)
+          output = tf.reshape(output, [bb, tt, 1, pp * ii])
           self.residual_reset()
 
         elif specs.get('change_to_pitch_fully_connected', 0) == -1:
-          output = tf.reshape(
-              output, [input_shape[0], input_shape[1], input_shape[2], -1])
+          # assume it is the last layer and shape to the required output shape
+          assert i == n - 1
+          bb, tt, pp, _ = tf.shape_n(self._input_data)
+          output = tf.reshape(output, [bb, tt, pp, self.num_instruments])
           self.residual_reset()
-          # Needs to be the layer about the last to do the reshaping
-          assert specs is conv_specs[-1]
           continue
 
         output = self.apply_convolution(output, specs)
@@ -78,11 +61,32 @@ class BasicAutofillCNNGraph(object):
     self._cross_entropy = self.compute_cross_entropy(logits=self._logits, labels=self._targets)
 
     self.compute_loss(cross_entropy)
+    self.setup_optimizer()
 
-    self.learning_rate = tf.Variable(hparams.learning_rate, name="learning_rate", trainable=False, dtype=tf.float32)
+  def preprocess_input(input_data):
+    if self.hparams.mask_indicates_context:
+      # flip meaning of mask for convnet purposes: after flipping, mask is hot
+      # where values are known. this makes more sense in light of padding done
+      # by convolution operations: the padded area will have zero mask,
+      # indicating no information to rely on.
+      def flip_mask(input):
+        stuff, mask = tf.split(input, 2, axis=3)
+        return tf.concat([stuff, 1 - mask], axis=3)
+      input_data = flip_mask(input_data)
+
+    # For denoising case, don't use masks in model
+    if self.hparams.denoise_mode:
+      input_data, _ = tf.split(input_data, 2, axis=3)
+
+    return input_data
+
+  def setup_optimizer(self):
+    self.learning_rate = tf.Variable(self.hparams.learning_rate,
+                                     name="learning_rate",
+                                     trainable=False, dtype=tf.float32)
 
     # If not training, don't need to add optimizer to the graph.
-    if not is_training:
+    if not self.is_training:
       self._train_op = tf.no_op
       return
 
