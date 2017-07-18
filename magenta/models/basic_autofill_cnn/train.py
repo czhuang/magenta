@@ -271,7 +271,6 @@ def main(unused_argv):
     saver = 0  # Use default saver from supervisor.
     if not FLAGS.log_progress:
       saver = None
-    best_model_saver = tf.train.Saver()
 
     # Save hparam configs.
     logdir = os.path.join(FLAGS.log_dir, hparams.log_subdir_str)
@@ -282,6 +281,13 @@ def main(unused_argv):
     with open(config_fpath, 'w') as p:
       yaml.dump(hparams, p)
 
+    tracker = Tracker(label="validation loss",
+                      patience=FLAGS.patience,
+                      decay_op=m.decay_op,
+                      save_path=os.path.join(FLAGS.log_dir,
+                                             hparams.log_subdir_str,
+                                             'best_model.ckpt' % hparams.name))
+
     # Graph will be finalized after instantiating supervisor.
     sv = tf.train.Supervisor(
         graph=graph,
@@ -291,8 +297,6 @@ def main(unused_argv):
         save_model_secs=FLAGS.save_model_secs)
     with sv.PrepareSession() as sess:
       epoch_count = 0
-      time_since_improvement = 0
-      true_time_since_improvement = 0
       while epoch_count < FLAGS.num_epochs or not FLAGS.num_epochs:
         if sv.should_stop():
           break
@@ -304,37 +308,51 @@ def main(unused_argv):
         # Run validation.
         if epoch_count % hparams.eval_freq == 0:
           estimate_popstats(sv, sess, m, train_data, pianoroll_encoder, hparams)
-
           loss = run_epoch(
               sv, sess, mvalid, valid_data, pianoroll_encoder, hparams,
               no_op, 'valid', epoch_count, best_validation_loss, 
               best_model_saver)
-          if loss < best_validation_loss:
-            if FLAGS.log_progress:
-              tf.logging.info('Previous best validation loss: %.4f.' %
-                              best_validation_loss)
-              save_path = os.path.join(FLAGS.log_dir, hparams.log_subdir_str,
-                                       '%s-best_model.ckpt' % hparams.name)
-              best_model_saver.save(sess, save_path)
-              tf.logging.info('Storing best model so far with loss %.4f at %s.' %
-                              (loss, save_path))
-            best_validation_loss = loss
-            time_since_improvement = 0
-            true_time_since_improvement = 0
-          else:
-            time_since_improvement += 1
-            true_time_since_improvement += 1
-            if time_since_improvement > FLAGS.patience:
-              sess.run(m.decay_op)
-              time_since_improvement = 0
-            if true_time_since_improvement > 5 * FLAGS.patience:
-              break
+          tracker(loss, sess)
 
         epoch_count += 1
 
-    print "best validation loss", best_validation_loss
+    print "best", tracker.label, tracker.best
     print "Done."
-    return best_validation_loss
+    return tracker.best
+
+
+class Tracker(object):
+  def __init__(self, label, save_path, sign=-1, patience=5, decay_op=None):
+    self.label = label
+    self.sign = sign
+    self.best = np.inf
+    self.saver = tf.train.Saver()
+    self.save_path = save_path
+    self.patience = patience
+    # NOTE: age is reset with decay, but true_age is not
+    self.age = 0
+    self.true_age = 0
+    self.decay_op = decay_op
+
+  def __call__(self, x, sess):
+    if self.sign * x > self.sign * self.best:
+      if FLAGS.log_progress:
+        tf.logging.info('Previous best %s: %.4f.', self.label, self.best)
+        self.saver.save(sess, self.save_path)
+        tf.logging.info('Storing best model so far with loss %.4f at %s.' %
+                        (loss, self.save_path))
+      self.best = loss
+      self.age = 0
+      self.true_age = 0
+    else:
+      self.age += 1
+      self.true_age += 1
+      if self.age > self.patience:
+        sess.run([self.decay_op])
+        self.age = 0
+      if self.true_age > 5 * self.patience:
+        break
+
 
 def _print_popstat_info(tfpopstats, nppopstats)
   mean_errors = []
