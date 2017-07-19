@@ -41,7 +41,6 @@ tf.app.flags.DEFINE_bool('separate_instruments', True,
                          'Separate instruments into different input feature'
                          'maps or not.')
 tf.app.flags.DEFINE_integer('crop_piece_len', 64, 'The number of time steps included in a crop')
-tf.app.flags.DEFINE_integer('encode_silences', False, 'Encode silence as the lowest pitch.')
 
 # Model architecture.
 tf.app.flags.DEFINE_string('model_name', None,
@@ -318,7 +317,7 @@ def _hparams_from_flags():
   keys = ("""
       dataset quantization_level num_instruments separate_instruments
       crop_piece_len model_name num_layers num_filters start_filter_size
-      encode_silences use_residual batch_size maskout_method
+      use_residual batch_size maskout_method
       mask_indicates_context optimize_mask_only rescale_loss patience
       corrupt_ratio eval_freq run_id
       """.split())

@@ -108,10 +108,8 @@ class PianorollEncoderDecoder(object):
                sequence_iterator=None,
                separate_instruments=True,
                num_instruments=None,
-               encode_silences=None,
                quantization_level=None):
     assert num_instruments is not None
-    assert encode_silences is not None
     self.shortest_duration = shortest_duration
     self.min_pitch = min_pitch
     self.max_pitch = max_pitch
@@ -124,7 +122,6 @@ class PianorollEncoderDecoder(object):
     self.shortest_duration = float(self.shortest_duration)
     self.separate_instruments = separate_instruments
     self.num_instruments = num_instruments
-    self.encode_silences = encode_silences
 
     self.quantization_level = quantization_level
     if quantization_level is None:

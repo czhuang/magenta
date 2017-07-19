@@ -92,6 +92,5 @@ def get_data_and_update_hparams(basepath, hparams, fold,
       max_pitch=pitch_range[1],
       separate_instruments=hparams.separate_instruments,
       num_instruments=hparams.num_instruments,
-      encode_silences=hparams.encode_silences,
       quantization_level=hparams.quantization_level)
   return seqs, encoder

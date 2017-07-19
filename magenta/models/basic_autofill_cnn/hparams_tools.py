@@ -22,7 +22,6 @@ class Hyperparameters(object):
       crop_piece_len=64, #128, #64, #32,
       num_instruments=4,
       separate_instruments=False,
-      encode_silences=False,
       #input_depth=None, #8,
       #output_depth=None, #4,
       # Batch norm parameters.
@@ -92,12 +91,6 @@ class Hyperparameters(object):
     return self.num_instruments if self.separate_instruments else 1
   
   @property
-  def num_extra_encodings(self):
-    if self.encode_silences:
-      return 1
-    return 0   
-  
-  @property
   def conv_arch(self):
     return self.get_conv_arch()
   
@@ -112,18 +105,12 @@ class Hyperparameters(object):
   @property
   def input_shape(self):
     """Returns the shape of input data."""
-    if self.encode_silences:
-      return [self.crop_piece_len, self.num_pitches+1, self.input_depth]
-    else:
-      return [self.crop_piece_len, self.num_pitches, self.input_depth]
+    return [self.crop_piece_len, self.num_pitches, self.input_depth]
 
   @property
   def output_shape(self):
     """Returns the shape of output data."""
-    if self.encode_silences:
-      return [self.crop_piece_len, self.num_pitches+1, self.output_depth]
-    else:
-      return [self.crop_piece_len, self.num_pitches, self.output_depth]
+    return [self.crop_piece_len, self.num_pitches, self.output_depth]
   
   @property
   def raw_pianoroll_shape(self):
@@ -166,7 +153,7 @@ class Hyperparameters(object):
         'corrupt_ratio': 'corrupt', 'input_depth': 'in', 'crop_piece_len': 'len',
         'use_softmax_loss': 'soft', 'num_instruments': 'num_i', 'num_pitches': 'n_pch',
         'quantization_level': 'quant', 
-        'encode_silences': 'sil', 'use_residual': 'res',
+        'use_residual': 'res',
         'separate_instruments': 'sep', 'rescale_loss': 'rescale', 
         'maskout_method': 'mm'}
 
