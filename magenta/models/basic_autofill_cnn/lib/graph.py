@@ -24,21 +24,20 @@ class CoconetGraph(object):
     self.build()
 
   def build(self):
-    conv_specs = self.hparams.conv_arch.specs
-
     output = self.preprocess_input(self.input_data)
     self.residual_init()
 
-    n = len(conv_specs)
-    for i, specs in enumerate(conv_specs):
+    layers = self.hparams.conv_arch.layers
+    n = len(layers)
+    for i, layer in enumerate(layers):
       with tf.variable_scope('conv%d' % i):
         self.residual_counter += 1
         self.residual_save(output)
 
-        output = self.apply_convolution(output, specs)
+        output = self.apply_convolution(output, layer)
         output = self.apply_residual(output, is_first=i == 0, is_last=i == n - 1)
-        output = self.apply_activation(output, specs)
-        output = self.apply_pooling(output, specs)
+        output = self.apply_activation(output, layer)
+        output = self.apply_pooling(output, layer)
 
         self.hiddens.append(output)
 
@@ -173,21 +172,21 @@ class CoconetGraph(object):
         x += self.output_for_residual
     return x
 
-  def apply_convolution(self, x, specs):
-    if "filters" not in specs:
+  def apply_convolution(self, x, layer):
+    if "filters" not in layer:
       return x
 
-    filter_shape = specs["filters"]
+    filter_shape = layer["filters"]
     # Instantiate or retrieve filter weights.
     fanin = tf.to_float(tf.reduce_prod(filter_shape[:-1]))
     stddev = tf.sqrt(tf.div(2.0, fanin))
     weights = tf.get_variable(
         'weights', filter_shape,
         initializer=tf.random_normal_initializer(0.0, stddev))
-    stride = specs.get('conv_stride', 1)
+    stride = layer.get('conv_stride', 1)
     conv = tf.nn.conv2d(x, weights,
                         strides=[1, stride, stride, 1],
-                        padding=specs.get('conv_pad', 'SAME'))
+                        padding=layer.get('conv_pad', 'SAME'))
 
     # Compute batch normalization or add biases.
     if hparams.batch_norm:
@@ -234,19 +233,19 @@ class CoconetGraph(object):
         x, mean, variance, betas, gammas,
         self.hparams.batch_norm_variance_epsilon)
 
-  def apply_activation(self, x, specs):
-    activation_func = specs.get('activation', tf.nn.relu)
+  def apply_activation(self, x, layer):
+    activation_func = layer.get('activation', tf.nn.relu)
     return activation_func(x)
 
-  def apply_pooling(self, x, specs):
-    if 'pooling' not in specs:
+  def apply_pooling(self, x, layer):
+    if 'pooling' not in layer:
       return x
-    pooling = specs['pooling']
+    pooling = layer['pooling']
     return tf.nn.max_pool(
         x,
         ksize=[1, pooling[0], pooling[1], 1],
         strides=[1, pooling[0], pooling[1], 1],
-        padding=specs['pool_pad'])
+        padding=layer['pool_pad'])
 
   def compute_predictions(self, logits):
       return (tf.nn.softmax(logits, dim=2)
