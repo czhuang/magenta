@@ -334,7 +334,6 @@ def get_placeholders(hparams):
 
 
 def build_graph(is_training, hparams, placeholders=None):
-  """Builds input and target placeholders, initializer, and training graph."""
   if placeholders is None:
     placeholders = get_placeholders(hparams)
   initializer = tf.random_uniform_initializer(-hparams.init_scale,
@@ -343,7 +342,7 @@ def build_graph(is_training, hparams, placeholders=None):
     graph = CoconetGraph(is_training=is_training,
                          hparams=hparams,
                          **placeholders)
-  return placeholders, graph
+  return graph
 
 def load_checkpoint(path):
   """Builds graph, loads checkpoint, and returns wrapped model.
@@ -352,10 +351,9 @@ def load_checkpoint(path):
     wrapped_model: tfutil.WrappedModel
   """
   hparams = util.load_hparams(path)
-  placeholders, model = build_graph(is_training=False, hparams=hparams)
+  model = build_graph(is_training=False, hparams=hparams)
   wmodel = tfutil.WrappedModel(model, model.loss.graph, hparams)
   with wmodel.graph.as_default():
-    wmodel.placeholders = placeholders
     wmodel.sess = tf.Session()
     saver = tf.train.Saver()
     tf.logging.info('loading checkpoint %s', path)

@@ -239,10 +239,9 @@ def main(unused_argv):
     no_op = tf.no_op()
 
     # Build placeholders and training graph, and validation graph with reuse.
-    placeholders, m = graph.build_graph(is_training=True, hparams=hparams)
+    m = graph.build_graph(is_training=True, hparams=hparams)
     tf.get_variable_scope().reuse_variables()
-    _, mvalid = graph.build_graph(is_training=False, hparams=hparams,
-                                  placeholders=placeholders)
+    mvalid = graph.build_graph(is_training=False, hparams=hparams)
 
     tracker = Tracker(label="validation loss",
                       patience=FLAGS.patience,
