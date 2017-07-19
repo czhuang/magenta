@@ -11,7 +11,7 @@ class Hyperparameters(object):
       # Data.
       dataset=None,
       quantization_level=0.125,
-      shortest_Duration=0.125,
+      shortest_duration=0.125,
       qpm=60,
       corrupt_ratio=0.25,
       # Input dimensions.
