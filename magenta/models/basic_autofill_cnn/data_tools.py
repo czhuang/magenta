@@ -22,42 +22,6 @@ DATASET_PARAMS = {
 }
 
 
-def random_crop_pianoroll(pianoroll, length):
-  leeway = len(pianoroll) - length
-  start = np.random.randint(1 + max(0, leeway))
-  pianoroll = pianoroll[start:start + length]
-  return pianoroll
-
-
-def pad_and_stack(*xss):
-  """Pad and stack lists of examples.
-
-  Each argument `xss[i]` is taken to be a list of variable-length examples.
-  The examples are padded to a common length and stacked into an array.
-  Example lengths must match across the `xss[i]`.
-
-  Args:
-    *xss: lists of examples to stack
-
-  Returns:
-    A tuple `(yss, lengths)`. `yss` is a list of arrays of padded examples,
-    each `yss[i]` corresponding to `xss[i]`. `lengths` is an array of example
-    lengths.
-  """
-  yss = []
-  lengths = list(map(len, xss[0]))
-  for xs in xss:
-    # example lengths must be the same across arguments
-    assert lengths == list(map(len, xs))
-    max_length = max(lengths)
-    rest_shape = xs[0].shape[1:]
-    ys = np.zeros((len(xs), max_length,) + rest_shape, dtype=xs[0].dtype)
-    for i in range(len(xs)):
-      ys[i, :len(xs[i])] = xs[i]
-    yss.append(ys)
-  return yss, np.asarray(lengths)
-
-
 def make_data_feature_maps(sequences, hparams, encoder):
   """Return input and output pairs of masked out and full pianorolls.
 
@@ -79,11 +43,11 @@ def make_data_feature_maps(sequences, hparams, encoder):
   targets = []
   for sequence in sequences:
     pianoroll = encoder.encode(sequence)
-    pianoroll = random_crop_pianoroll(pianoroll, hparams.crop_piece_len)
-    mask_fn = getattr(mask_tools, 'get_%s_mask' % hparams.maskout_method)
-    mask = mask_fn(pianoroll.shape,
-                   separate_instruments=hparams.separate_instruments,
-                   blankout_ratio=hparams.corrupt_ratio)
+    pianoroll = util.random_crop(pianoroll, hparams.crop_piece_len)
+    mask = mask_tools.get_mask(
+        hparams.maskout_method, pianoroll.shape,
+        separate_instruments=hparams.separate_instruments,
+        blankout_ratio=hparams.corrupt_ratio)
     if hparams.denoise_mode:
       masked_pianoroll = mask_tools.perturb_and_stack(pianoroll, mask)
     else:
@@ -91,7 +55,7 @@ def make_data_feature_maps(sequences, hparams, encoder):
     input_data.append(masked_pianoroll)
     targets.append(pianoroll)
 
-  (input_data, targets), lengths = pad_and_stack(input_data, targets)
+  (input_data, targets), lengths = util.pad_and_stack(input_data, targets)
   assert input_data.ndim == 4 and targets.ndim == 4
   return input_data, targets, lengths
 

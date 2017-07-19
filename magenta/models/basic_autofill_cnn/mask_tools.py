@@ -120,6 +120,9 @@ def perturb_and_stack(pianoroll, mask):
   # Check that every timestep has no more than 1 pitch.  Can use the check from pianorolls_lib
   return np.concatenate([masked_pianoroll, mask], 2)
 
+def get_mask(maskout_method, *args, **kwargs):
+  mask_fn = globals()['get_%s_mask' % maskout_method]
+  return mask_fn(*args, **kwargs)
 
 def get_no_mask(pianoroll_shape):
   return np.zeros((painoroll_shape))

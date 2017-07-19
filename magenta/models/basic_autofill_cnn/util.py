@@ -203,3 +203,39 @@ def load_hparams(checkpoint_path):
   with open(hparams_fpath, 'r') as p:
     hparams = yaml.load(p)
   return hparams
+
+def random_crop(x, length):
+  leeway = len(x) - length
+  start = np.random.randint(1 + max(0, leeway))
+  x = x[start:start + length]
+  return x
+
+
+def pad_and_stack(*xss):
+  """Pad and stack lists of examples.
+
+  Each argument `xss[i]` is taken to be a list of variable-length examples.
+  The examples are padded to a common length and stacked into an array.
+  Example lengths must match across the `xss[i]`.
+
+  Args:
+    *xss: lists of examples to stack
+
+  Returns:
+    A tuple `(yss, lengths)`. `yss` is a list of arrays of padded examples,
+    each `yss[i]` corresponding to `xss[i]`. `lengths` is an array of example
+    lengths.
+  """
+  yss = []
+  lengths = list(map(len, xss[0]))
+  for xs in xss:
+    # example lengths must be the same across arguments
+    assert lengths == list(map(len, xs))
+    max_length = max(lengths)
+    rest_shape = xs[0].shape[1:]
+    ys = np.zeros((len(xs), max_length,) + rest_shape, dtype=xs[0].dtype)
+    for i in range(len(xs)):
+      ys[i, :len(xs[i])] = xs[i]
+    yss.append(ys)
+  return yss, np.asarray(lengths)
+
