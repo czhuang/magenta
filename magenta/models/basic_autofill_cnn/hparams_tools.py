@@ -27,7 +27,6 @@ class Hyperparameters(object):
       # Batch norm parameters.
       batch_norm=True,
       batch_norm_variance_epsilon=1e-7,
-      batch_norm_gamma=0.1,
       # Initialization.
       init_scale=0.1,
       # Model architecture.
@@ -140,7 +139,7 @@ class Hyperparameters(object):
     keys_to_filter_out = [
         'num_layers', 'num_filters', 'eval_freq',
         'output_depth', 'model_name', 'checkpoint_name',
-        'batch_norm_variance_epsilon', 'batch_norm_gamma', 'batch_norm',
+        'batch_norm_variance_epsilon', 'batch_norm',
         'init_scale', 'optimize_mask_only', 'conv_arch',
         'mask_indicates_context',
         'run_dir', 'num_epochs', 'log_process', 'save_model_secs', 
