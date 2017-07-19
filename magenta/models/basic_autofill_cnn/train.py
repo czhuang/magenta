@@ -29,7 +29,7 @@ tf.app.flags.DEFINE_bool('log_progress', True,
                          'statistics.')
 
 # Dataset.
-tf.app.flags.DEFINE_string('dataset', None, '4part_JSB_Chorales,' 
+tf.app.flags.DEFINE_string('dataset', None,
                            ' JSB_Chorales, MuseData, Nottingham, Piano-midi.de')
 tf.app.flags.DEFINE_float('quantization_level', 0.125, 'Quantization duration.'
                           'For qpm=120, notated quarter note equals 0.5.')
@@ -43,8 +43,8 @@ tf.app.flags.DEFINE_bool('separate_instruments', True,
 tf.app.flags.DEFINE_integer('crop_piece_len', 64, 'The number of time steps included in a crop')
 
 # Model architecture.
-tf.app.flags.DEFINE_string('model_name', None,
-                           'A string specifying the name of the model.  Not available in the current version.')
+tf.app.flags.DEFINE_string('architecture', 'straight',
+                           'Convnet style. Choices: straight')
 tf.app.flags.DEFINE_integer('num_layers', 64,
                             'The number of convolutional layers.')
 tf.app.flags.DEFINE_integer('num_filters', 128,
@@ -315,7 +315,7 @@ def _print_popstat_info(tfpopstats, nppopstats)
 def _hparams_from_flags():
   keys = ("""
       dataset quantization_level num_instruments separate_instruments
-      crop_piece_len model_name num_layers num_filters use_residual
+      crop_piece_len architecture num_layers num_filters use_residual
       batch_size maskout_method mask_indicates_context optimize_mask_only
       rescale_loss patience corrupt_ratio eval_freq run_id
       """.split())

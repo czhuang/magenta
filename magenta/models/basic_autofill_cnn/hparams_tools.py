@@ -30,7 +30,7 @@ class Hyperparameters(object):
       # Initialization.
       init_scale=0.1,
       # Model architecture.
-      model_name=None,
+      architecture=None,
       num_layers=28,
       num_filters=256,
       use_residual=True,
@@ -136,7 +136,7 @@ class Hyperparameters(object):
     # directory name.
     # Want to show 'dataset', input_depth', and use_softmax_loss, learning rate, 'batch_size'
     blacklist = """
-        num_layers num_filters eval_freq output_depth model_name checkpoint_name
+        num_layers num_filters eval_freq output_depth architecture checkpoint_name
         batch_norm_variance_epsilon batch_norm init_scale optimize_mask_only
         conv_arch mask_indicates_context run_dir num_epochs log_process
         save_model_secs batch_size input_depth num_instruments num_pitches
@@ -162,49 +162,28 @@ class Hyperparameters(object):
 
   def get_conv_arch(self):
     """Returns the model architecture."""
-    try:
-      return globals()[self.model_name](
-          self.input_depth, self.num_layers, self.num_filters, 
-          self.num_pitches, output_depth=self.output_depth)
-    except ValueError:
-      raise ModelMisspecificationError('Model name %s does not exist.' % self.model_name)
+    return Architecture.make(
+        self.architecture, 
+        self.input_depth, self.num_layers, self.num_filters, 
+        self.num_pitches, output_depth=self.output_depth)
 
 
-class ReturnIdentity(object):
-  def __call__(self, x):
-    return x
+class Architecture(util.Factory):
+  pass
 
 
-class ConvArchitecture(object):
-  """Parent class for convnet architectures in condensed representations."""
-
-  def __init__(self):
-    self.condensed_specs = None
-
-  def get_spec(self):
-    """Expand the expanded convnet architeciture."""
-    conv_specs_expanded = []
-    for layer in self.condensed_specs:
-      conv_specs_expanded.append(layer)
-    return conv_specs_expanded
-
-
-class DeepStraightConvSpecs(ConvArchitecture):
+class Straight(Architecture):
   """A convolutional net where each layer has the same number of filters."""
-  model_name = 'DeepStraightConvSpecs'
+  key = 'straight'
 
   def __init__(self, input_depth, num_layers, num_filters, num_pitches, 
                output_depth, **kwargs):
-    print self.model_name, input_depth, output_depth
-    if num_layers < 4:
-      raise ModelMisspecificationError(
-          'The network needs to be at least 4 layers deep, %d given.' %
-          num_layers)
-    super(DeepStraightConvSpecs, self).__init__()
+    print self.key, input_depth, output_depth
+    assert num_layers >= 4
 
-    layers = []
+    self.layers = []
     def _add(**kwargs):
-      layers.append(kwargs)
+      self.layers.append(kwargs)
 
     _add(filters=[3, 3, input_depth, num_filters])
     for _ in range(num_layers - 3):
@@ -213,10 +192,7 @@ class DeepStraightConvSpecs(ConvArchitecture):
     _add(filters=[2, 2, num_filters, output_depth],
         activation=util.identity)
 
-    self.condensed_specs = layers
-    self.specs = self.get_spec()
-    assert self.specs
-    self.name = '%s-%d-%d' % (self.model_name, len(self.specs), num_filters)
+    self.name = '%s-%d-%d' % (self.key, len(self.layers), num_filters)
   
   def __str__(self):
     #FIXME: a hack.

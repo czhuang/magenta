@@ -55,7 +55,7 @@ def main(unused_argv):
 
   # Creates a folder for storing the process of the sampling.
   label = "sample_%s_%s_%s_T%g_l%i_%.2fmin" % (util.timestamp(), FLAGS.strategy, 
-    hparams.model_name, FLAGS.temperature, FLAGS.piece_length, time_taken)
+    hparams.architecture, FLAGS.temperature, FLAGS.piece_length, time_taken)
   basepath = os.path.join(FLAGS.generation_output_dir, label)
   os.makedirs(basepath)
   
