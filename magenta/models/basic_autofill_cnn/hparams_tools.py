@@ -20,7 +20,6 @@ class Hyperparameters(object):
       pitch_ranges=[36, 81],
       
       crop_piece_len=64, #128, #64, #32,
-      pad=False,
       num_instruments=4,
       separate_instruments=False,
       encode_silences=False,

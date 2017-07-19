@@ -27,35 +27,6 @@ class DataProcessingError(Exception):
   pass
 
 
-def random_crop_pianoroll(pianoroll,
-                          crop_len,
-                          start_crop_index=None):
-  """Return a random crop in time of a pianoroll.
-
-  Args:
-    pianoroll: A 3D matrix, with time as the first axis.
-    crop_len: The number of rows.
-
-  Returns:
-    A 3D matrix with the first axis cropped to the length of crop_len.
-
-  Raises:
-    DataProcessingError: If the pianoroll shorter than the desired crop_len.
-  """
-  if len(pianoroll) < crop_len:
-    # TODO(annahuang): Pad pianoroll when too short, and add mask to loss.
-    raise DataProcessingError(
-        'Piece needs to be at least %d steps, currently %d steps.' %
-        (crop_len, len(pianoroll)))
-  if len(pianoroll) == crop_len:
-    start_time_idx = 0
-  elif start_crop_index is not None:
-    start_time_idx = start_crop_index
-  else:
-    start_time_idx = np.random.randint(len(pianoroll) - crop_len)
-  return pianoroll = pianoroll[start_time_idx:start_time_idx + crop_len]
-
-
 def random_crop_pianoroll_pad(pianoroll,
                               crop_len,
                               start_crop_index=None):
@@ -95,39 +66,24 @@ def make_data_feature_maps(sequences, hparams, encoder, start_crop_index=None):
   lengths = []
   seq_count = 0
   for sequence in sequences:
-    if encoder is not None:
-      pianoroll = encoder.encode(sequence)
-    else:
-      # For images, no encoder, already in pianoroll-like form.
-      pianoroll = sequence
-    try:
-      if hparams.pad:
-        cropped_pianoroll, length = random_crop_pianoroll_pad(
-            pianoroll, hparams.crop_piece_len, start_crop_index)
-      else:  
-        cropped_pianoroll = random_crop_pianoroll(
-            pianoroll, hparams.crop_piece_len, start_crop_index)
-        length = hparams.crop_piece_len
-    except DataProcessingError:
-      tf.logging.warning('Piece shorter than requested crop length.')
-      continue
+    pianoroll = encoder.encode(sequence)
+    cropped_pianoroll, length = random_crop_pianoroll_pad(
+        pianoroll, hparams.crop_piece_len, start_crop_index)
     seq_count += 1
-   
+
     # Get mask.
     T, P, I = cropped_pianoroll.shape
     unpadded_shape = length, P, I
     assert np.sum(cropped_pianoroll[length:, :, :]) == 0
-    mask = getattr(mask_tools, 'get_%s_mask' % hparams.maskout_method)(
-        unpadded_shape, separate_instruments=hparams.separate_instruments,
-        blankout_ratio=hparams.corrupt_ratio)
-    if not hparams.pad:
-      assert mask.shape[0] == cropped_pianoroll.shape[0]
+    mask_fn = getattr(mask_tools, 'get_%s_mask' % hparams.maskout_method)
+    mask = mask_fn(unpadded_shape,
+                   separate_instruments=hparams.separate_instruments,
+                   blankout_ratio=hparams.corrupt_ratio)
     if hparams.denoise_mode:
       # TODO: Denoise not yet supporting padding.
       masked_pianoroll = mask_tools.perturb_and_stack(cropped_pianoroll, mask)
     else:
-      masked_pianoroll = mask_tools.apply_mask_and_stack(
-          cropped_pianoroll, mask, hparams.pad)
+      masked_pianoroll = mask_tools.apply_mask_and_stack(cropped_pianoroll, mask)
 
     input_data.append(masked_pianoroll)
     targets.append(cropped_pianoroll)

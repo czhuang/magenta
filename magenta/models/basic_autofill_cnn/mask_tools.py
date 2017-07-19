@@ -33,7 +33,7 @@ def apply_mask_and_interleave(pianoroll, mask):
   return pianoroll_and_mask
 
 
-def apply_mask_and_stack(pianoroll, mask, pad=False):
+def apply_mask_and_stack(pianoroll, mask):
   """Stack pianorolls and masks on the last dimension.
 
   Args:
@@ -47,11 +47,10 @@ def apply_mask_and_stack(pianoroll, mask, pad=False):
   Raises:
     MaskUseError: If the shape of pianoroll and mask do not match.
   """
-  if pianoroll.shape != mask.shape and not pad:
-    raise MaskUseError('Shape mismatch in pianoroll and mask.')
   if pianoroll.shape[1:] != mask.shape[1:]: 
     raise MaskUseError('Shape mismatch in pianoroll and mask.')
 
+  # FIXME is this really the right place to pad?
   T, P, I = pianoroll.shape
   pad_length = T - mask.shape[0]
   assert np.sum(pianoroll[(T-pad_length):, :, :]) == 0
