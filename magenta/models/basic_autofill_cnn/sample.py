@@ -7,7 +7,7 @@ import tensorflow as tf
 import pretty_midi
 
 import mask_tools
-import retrieve_model_tools
+import graph
 import data_tools
 from npz_to_midi import pianoroll_to_midi
 import util
@@ -23,11 +23,11 @@ tf.app.flags.DEFINE_string(
 tf.app.flags.DEFINE_string(
     "prime_midi_melody_fpath", None,
     "Path to midi melody to be harmonized.")
-tf.app.flags.DEFINE_string('checkpoint_dir', None, 'Path to checkpoint directory.')
+tf.app.flags.DEFINE_string('checkpoint', None, 'path to checkpoint file')
 
 
 def main(unused_argv):
-  wmodel = retrieve_model_tools.retrieve_model(FLAGS.checkpoint_dir)
+  wmodel = graph.load_checkpoint(FLAGS.checkpoint)
   hparams = wmodel.hparams
   Globals.separate_instruments = hparams.separate_instruments
 

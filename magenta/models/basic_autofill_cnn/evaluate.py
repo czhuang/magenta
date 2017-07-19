@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 
 import lib.evaluation as evaluation
-import retrieve_model_tools
+import graph
 import data_tools
 import util
 
@@ -14,10 +14,10 @@ tf.app.flags.DEFINE_string('fold_index', None, 'optionally, index of particular 
 tf.app.flags.DEFINE_string('unit', None, 'note or frame or example')
 tf.app.flags.DEFINE_integer('ensemble_size', 5, 'number of ensemble members to average')
 tf.app.flags.DEFINE_bool('chronological', False, 'indicates evaluation should proceed in chronological order')
-tf.app.flags.DEFINE_string('checkpoint_dir', None, 'Path to checkpoint directory.')
+tf.app.flags.DEFINE_string('checkpoint', None, 'path to checkpoint file')
 
 def main(argv):
-  wmodel = retrieve_model_tools.retrieve_model(FLAGS.checkpoint_dir)
+  wmodel = graph.load_checkpoint(FLAGS.checkpoint)
 
   evaluator = evaluation.BaseEvaluator.make(FLAGS.unit, wmodel=wmodel,
                                             chronological=FLAGS.chronological)
@@ -35,7 +35,7 @@ def evaluate_fold(fold, evaluator, hparams):
   name = "eval_%s_%s%s_%s_ensemble%s_chrono%s" % (
     util.timestamp(), fold, FLAGS.fold_index if FLAGS.fold_index is not None else "",
     FLAGS.unit, FLAGS.ensemble_size, FLAGS.chronological)
-  save_path = os.path.join(FLAGS.checkpoint_dir, name)
+  save_path = "%s__%s" % (FLAGS.checkpoint, name)
 
   pianorolls = get_fold_pianorolls(fold, hparams)
   rval = evaluation.evaluate(evaluator, pianorolls)

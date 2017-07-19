@@ -1,4 +1,4 @@
-import contextlib, time, os, datetime, numbers
+import contextlib, time, os, datetime, numbers, yaml
 import numpy as np
 
 
@@ -197,3 +197,9 @@ def numpy_seed(seed):
   yield
   if seed is not None:
     np.random.set_state(prev_rng_state)
+
+def load_hparams(checkpoint_path):
+  hparams_fpath = os.path.join(os.path.dirname(checkpoint_path), 'config')
+  with open(hparams_fpath, 'r') as p:
+    hparams = yaml.load(p)
+  return hparams

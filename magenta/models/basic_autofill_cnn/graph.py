@@ -1,8 +1,8 @@
 """Defines the graph for a convolutional net designed for music autofill."""
 import tensorflow as tf, numpy as np
-from tensorflow.python.framework.function import Defun
 from collections import OrderedDict
 import lib.tfutil as tfutil
+import lib.util as util
 
 
 class BasicAutofillCNNGraph(object):
@@ -345,3 +345,19 @@ def build_graph(is_training, hparams, placeholders=None):
                                   **placeholders)
   return placeholders, graph
 
+def load_checkpoint(path):
+  """Builds graph, loads checkpoint, and returns wrapped model.
+
+  Returns:
+    wrapped_model: tfutil.WrappedModel
+  """
+  hparams = util.load_hparams(path)
+  placeholders, model = build_graph(is_training=False, hparams=hparams)
+  wmodel = tfutil.WrappedModel(model, model.loss.graph, hparams)
+  with wmodel.graph.as_default():
+    wmodel.placeholders = placeholders
+    wmodel.sess = tf.Session()
+    saver = tf.train.Saver()
+    tf.logging.info('loading checkpoint %s', path)
+    saver.restore(wmodel.sess, path)
+  return wmodel

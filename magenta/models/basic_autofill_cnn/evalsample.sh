@@ -7,6 +7,7 @@ code_dir=$(dirname $0)
 sample_file="$code_dir/samples/sample_20170517233731_igibbs_DeepStraightConvSpecs_T0.99_l64_0.28min/final_pianorolls.npz"
 
 # Path to trained model.
+# FIXME checkpoint_dir flag is now called checkpoint and contains the path to the file
 checkpoint_dir="trained_models/DeepStraightConvSpecs-64-128-start_fs=3_corrupt=0.5,len=128,dataset=bach-16th-priorwork-4_voices,sil=False,lr=0.0625,mm=balanced_by_scaling,mask_only=False,pad=True,patience=5,quant=0.125,rescale=True,run_id=,sep=True,pop=True,res=1,soft=True,"
 
 # Evaluation settings.

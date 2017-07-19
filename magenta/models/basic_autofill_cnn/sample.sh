@@ -9,6 +9,7 @@ log_dir="$code_dir/logs"
 generation_output_dir="$code_dir/samples"
 
 # Path to trained model.
+# FIXME checkpoint_dir flag is now called checkpoint and contains the path to the file
 checkpoint_dir="trained_models/DeepStraightConvSpecs-64-128-start_fs=3_corrupt=0.5,len=128,dataset=bach-16th-priorwork-4_voices,sil=False,lr=0.0625,mm=balanced_by_scaling,mask_only=False,pad=True,patience=5,quant=0.125,rescale=True,run_id=,sep=True,pop=True,res=1,soft=True,"
 
 # Generation parameters.
