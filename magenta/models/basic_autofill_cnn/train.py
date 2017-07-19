@@ -61,13 +61,8 @@ tf.app.flags.DEFINE_integer('batch_size', 20,
 
 # Mask related.
 tf.app.flags.DEFINE_string('maskout_method', 'balanced_by_scaling', 
-                           "The choices include: 'bernoulli', "
-                           "'random_patches', 'random_pitch_range',"
-                           'random_time_range, random_multiple_instrument_time, '
-                           'random_multiple_instrument_time,'
-                           'random_easy, random_medium, random_hard,'
-                           'chronological_ti, chronological_it, fixed_order, '
-                           'balanced, and balanced_by_scaling (which '
+                           "The choices include: 'bernoulli' "
+                           'and balanced_by_scaling (which '
                            'invokes gradient rescaling as per NADE).')
 tf.app.flags.DEFINE_bool('mask_indicates_context', True, 
                          'Feed inverted mask into convnet so that zero-padding makes sense')

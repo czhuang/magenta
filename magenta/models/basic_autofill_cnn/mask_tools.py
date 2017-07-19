@@ -79,53 +79,6 @@ def get_bernoulli_mask(pianoroll_shape, separate_instruments=True,
   return mask
 
 
-def get_chronological_ti_mask(pianoroll_shape):
-  # ti means the class of masks corresponds to the time-major ordering
-  # over the time/instrument matrix, i.e. s1a1t1b1s2a2t2b2s3a3t3b3
-  T, P, I = pianoroll_shape
-  mask = np.ones([T * I]).astype(np.float32)
-  j = np.random.randint(len(mask))
-  mask[:j] = 0.
-  mask = mask.reshape([T, 1, I])
-  mask = np.tile(mask, [1, P, 1])
-  return mask
-
-
-def get_chronological_it_mask(pianoroll_shape):
-  # it means the class of masks corresponds to the instrument-major
-  # ordering over the time/instrument matrix,
-  # i.e. s1s2s3s4...a1a2a3a4...t1t2t3t4...b1b2b3b4
-  T, P, I = pianoroll_shape
-  mask = np.ones([T * I]).astype(np.float32)
-  j = np.random.randint(len(mask))
-  mask[:j] = 0.
-  mask = mask.reshape([I, 1, T])
-  mask = mask.T
-  mask = np.tile(mask, [1, P, 1])
-  return mask
-
-
-def get_fixed_order_order(num_timesteps):
-  order = []
-  for step in reversed(range(int(np.log2(num_timesteps)))):
-    for j in reversed(range(0, num_timesteps, 2**step)):
-      if j not in order:
-        order.append(j)
-  assert len(order) == num_timesteps
-  return order
-
-
-def get_fixed_order_mask(pianoroll_shape):
-  T, P, I = pianoroll_shape
-  order = get_fixed_order_order(T)
-  t = np.random.randint(T)
-  i = np.random.randint(I)
-  mask = np.ones(pianoroll_shape)
-  mask[order[:t]] = 0.
-  mask[order[t], :, :i] = 0.
-  return mask
-
-
 def get_balanced_by_scaling_mask(pianoroll_shape, separate_instruments=True, **kwargs):
   T, P, I = pianoroll_shape
 

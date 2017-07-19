@@ -140,64 +140,6 @@ class CoconetGraph(object):
     self.loss = (self.loss_mask if self.hparams.optimize_mask_only else
                   self.loss_total)
 
-    # Use another loss altogether for particular maskout methods. In this case
-    # all of the above work must be done anyway because things break if the
-    # appropriate attributes are not available.
-    self.maybe_compute_fixedorder_loss_instead()
-
-  def maybe_compute_fixedorder_loss_instead(self):
-    """Recompute and overwrite loss for special maskout methods."""
-    if hparams.maskout_method not in "chronological_ti chronological_it fixed_order".split():
-      self.lossmask = tf.no_op()
-      return
-
-    if self.hparams.rescale_loss:
-      # If this is true then self.unreduced_losses will have been rescaled,
-      # which biases the loss.
-      raise ValueError("rescale_loss doesn't make sense with maskout_method %r"
-                       % hparams.maskout_method)
-
-    # These maskout methods correspond to fixed orderings and are incompatible
-    # with the orderless NADE training procedure. Instead of training a whole
-    # set of conditional distributions at once, we train exactly one. We use
-    # the mask to determine which variable is next in the ordering.
-    _, mask = tf.split(self.input_data, 2, axis=3)
-    # If the variables are predicted in T, I order, then the number of known
-    # variables corresponds to the index of the variable that would be sampled
-    # next. Next, we transform this array to fit the maskout_method's ordering.
-    flat_prediction_index = tf.to_int32(tf.reduce_sum(1 - mask[:, :, 0, :],
-                                                      reduction_indices=(1, 2)))
-
-    if hparams.maskout_method == "fixed_order":
-      # Fixed order is a particular order in which the time steps are permuted
-      # but the instruments are in order. We construct the permutation by
-      # obtaining the time ordering and then expanding the array to squeeze in
-      # the inner loop over instruments.
-      time_order = mask_tools.get_fixed_order_order(hparams.crop_piece_len)
-      flat_order = (self.num_instruments * np.array(time_order)[:, None]
-                    + np.arange(self.num_instruments)[None, :])
-      flat_order = flat_order.ravel()
-
-      # Treat `flat_prediction_index` as an index into the permutation
-      # `flat_order`. (`o_d` in NADE parlance.)
-      flat_prediction_index = tf.gather(flat_order, flat_prediction_index)
-
-    # Create a mask that has a single 1 for each example in the batch.
-    batch_size, num_timesteps, _, num_instruments = tf.shape_n(mask)
-    lossmask = tf.one_hot(flat_prediction_index,
-                          depth=num_timesteps * num_instruments)
-    # Get rid of that pesky pitch dimension.
-    loss3d = tf.reduce_sum(self.unreduced_loss, reduction_indices=2)
-
-    if hparams.maskout_method == "chronological_it":
-      # This ordering loops over time first; permute the dimensions to match.
-      loss3d = tf.transpose(loss3d, perm=[0, 2, 1])
-
-    # Flatten the loss to match lossmask and reduce.
-    flatloss = tf.reshape(loss3d, [batch_size, num_timesteps * num_instruments])
-    self.loss = tf.reduce_sum(lossmask * flatloss) / tf.to_float(batch_size)
-    self.lossmask = lossmask
-
   def residual_init(self):
     if not self.hparams.use_residual:
       return
