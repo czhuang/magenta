@@ -9,8 +9,7 @@ import tensorflow as tf
 
 import data_tools
 import util
-from graph import BasicAutofillCNNGraph
-from graph import build_graph
+import graph
 from hparams_tools import Hyperparameters
 
 
@@ -240,10 +239,10 @@ def main(unused_argv):
     no_op = tf.no_op()
 
     # Build placeholders and training graph, and validation graph with reuse.
-    placeholders, m = build_graph(is_training=True, hparams=hparams)
+    placeholders, m = graph.build_graph(is_training=True, hparams=hparams)
     tf.get_variable_scope().reuse_variables()
-    _, mvalid = build_graph(is_training=False, hparams=hparams,
-                            placeholders=placeholders)
+    _, mvalid = graph.build_graph(is_training=False, hparams=hparams,
+                                  placeholders=placeholders)
 
     tracker = Tracker(label="validation loss",
                       patience=FLAGS.patience,

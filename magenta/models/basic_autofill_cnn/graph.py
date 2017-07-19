@@ -5,7 +5,7 @@ import lib.tfutil as tfutil
 import lib.util as util
 
 
-class BasicAutofillCNNGraph(object):
+class CoconetGraph(object):
   """Model for predicting autofills given context."""
 
   def __init__(self, is_training, hparams, input_data,
@@ -340,9 +340,9 @@ def build_graph(is_training, hparams, placeholders=None):
   initializer = tf.random_uniform_initializer(-hparams.init_scale,
                                               hparams.init_scale)
   with tf.variable_scope('model', reuse=None, initializer=initializer):
-    graph = BasicAutofillCNNGraph(is_training=is_training,
-                                  hparams=hparams,
-                                  **placeholders)
+    graph = CoconetGraph(is_training=is_training,
+                         hparams=hparams,
+                         **placeholders)
   return placeholders, graph
 
 def load_checkpoint(path):
