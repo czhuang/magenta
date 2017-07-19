@@ -9,7 +9,7 @@ class BasicAutofillCNNGraph(object):
   """Model for predicting autofills given context."""
 
   def __init__(self, is_training, hparams, input_data,
-               targets, lengths):  #, target_inspection_index):
+               targets, lengths):
     self.hparams = hparams
     self.batch_size = hparams.batch_size
     self.num_pitches = hparams.num_pitches
@@ -33,20 +33,6 @@ class BasicAutofillCNNGraph(object):
       with tf.variable_scope('conv%d' % i):
         self.residual_counter += 1
         self.residual_save(output)
-
-        # Reshape output if moving into or out of being pitch fully connected.
-        if specs.get('change_to_pitch_fully_connected', 0) == 1:
-          bb, tt, pp, ii = tf.shape_n(output)
-          output = tf.reshape(output, [bb, tt, 1, pp * ii])
-          self.residual_reset()
-
-        elif specs.get('change_to_pitch_fully_connected', 0) == -1:
-          # assume it is the last layer and shape to the required output shape
-          assert i == n - 1
-          bb, tt, pp, _ = tf.shape_n(self.input_data)
-          output = tf.reshape(output, [bb, tt, pp, self.num_instruments])
-          self.residual_reset()
-          continue
 
         output = self.apply_convolution(output, specs)
         output = self.apply_residual(output, is_first=i == 0, is_last=i == n - 1)
