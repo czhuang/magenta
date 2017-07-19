@@ -9,7 +9,7 @@ import tensorflow as tf
 
 import data_tools
 import util
-import graph
+import lib.graph as graph
 from hparams_tools import Hyperparameters
 
 
@@ -235,7 +235,7 @@ def main(unused_argv):
   print '# of valid_data:', len(valid_data)
 
   # Build the graph and subsequently running it for train and validation.
-  with tf.Graph().as_default() as graph:
+  with tf.Graph().as_default():
     no_op = tf.no_op()
 
     # Build placeholders and training graph, and validation graph with reuse.
@@ -252,7 +252,6 @@ def main(unused_argv):
 
     # Graph will be finalized after instantiating supervisor.
     sv = tf.train.Supervisor(
-        graph=graph,
         logdir=logdir,
         saver=tf.USE_DEFAULT if FLAGS.log_progress else None,
         summary_op=None,

@@ -7,7 +7,7 @@ import tensorflow as tf
 import pretty_midi
 
 import mask_tools
-import graph
+import lib.graph as graph
 import data_tools
 from npz_to_midi import pianoroll_to_midi
 import util

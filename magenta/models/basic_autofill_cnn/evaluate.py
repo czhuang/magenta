@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 
 import lib.evaluation as evaluation
-import graph
+import lib.graph as graph
 import data_tools
 import util
 
