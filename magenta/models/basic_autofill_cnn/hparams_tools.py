@@ -1,4 +1,5 @@
 """Classes for defining hypermaters and model architectures."""
+import itertools as it
 
 class ModelMisspecificationError(Exception):
   """Exception for specifying a model that is not currently supported."""
@@ -77,15 +78,12 @@ class Hyperparameters(object):
     unknown_params = set(init_hparams) - set(Hyperparameters._defaults)
     if unknown_params:
       raise ValueError('Unknown hyperparameters: %s', unknown_params)
+    self.update(Hyperparameters._defaults)
+    self.update(init_hparams)
 
-    # Update instance with default class variables.
-    for key, value in Hyperparameters._defaults.items():
-      if key in init_hparams:
-        value = init_hparams[key]
+  def update(self, dikt, **kwargs):
+    for key, value in it.chain(dikt.iteritems(), kwargs.iteritems()):
       setattr(self, key, value)
-  
-    # Needs model_name to be given. 
-    #print self.log_subdir_str
 
   @property
   def input_depth(self):

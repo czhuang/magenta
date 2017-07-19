@@ -10,14 +10,14 @@ from pianorolls_lib import PianorollEncoderDecoder
 
 DATASET_PARAMS = {
     'Nottingham': {
-        'pitch_ranges': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 9}, 
+        'pitch_range': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 9},
     'MuseData': {
-        'pitch_ranges': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 14},
+        'pitch_range': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 14},
     'Piano-midi.de': {
-        'pitch_ranges': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 12,
+        'pitch_range': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 12,
         'batch_size': 12},
     'jsb-chorales-16th-instrs_separated': {
-        'pitch_ranges': [36, 81], 'shortest_duration': 0.125,
+        'pitch_range': [36, 81], 'shortest_duration': 0.125,
         'num_instruments': 4, 'qpm': 60},
 }
 
@@ -157,38 +157,28 @@ def get_data_and_update_hparams(basepath, hparams, fold,
                                 return_encoder=False):
   dataset_name = hparams.dataset
   params = DATASET_PARAMS[dataset_name]
-  
-  separate_instruments = hparams.separate_instruments
-  # TODO: Read dataset params from JSON file or the like.
-  pitch_range = params['pitch_ranges']
-  if '4part_Bach_chorales' in dataset_name:
-    fpath = os.path.join(basepath, params['relative_path'], '%s.tfrecord' % fold)
-    seqs = list(note_sequence_record_iterator(fpath))
-  else:
-    fpath = os.path.join(basepath, dataset_name+'.npz')
-    data = np.load(fpath)
-    seqs = data[fold]
+  fpath = os.path.join(basepath, dataset_name+'.npz')
+  data = np.load(fpath)
+  seqs = data[fold]
+  pitch_range = params['pitch_range']
 
-  # Update hparams.
   if update_hparams:
     hparams.num_pitches = pitch_range[1] - pitch_range[0] + 1
-    for key, value in params.iteritems():
-      if hasattr(hparams, key): 
-        setattr(hparams, key, value)
-    #FIXME: just for debug.
-    for key in params:
-      if hasattr(hparams, key):
-        assert getattr(hparams, key) == params[key], 'hparams did not get updated, %r!=%r' % (getattr(hparams, key), params[key])
+    hparams.update(params)
 
   if not return_encoder:
     return seqs
 
-  assert params['shortest_duration'] == hparams.quantization_level, 'The data has a temporal resolution of shortest duration=%r, requested=%r' % (params['shortest_duration'], hparams.quantization_level)
+  if params['shortest_duration'] != hparams.quantization_level:
+    raise ValueError('The data has a temporal resolution of shortest '
+                     'duration=%r, requested=%r' %
+                     (params['shortest_duration'], hparams.quantization_level))
+
   encoder = PianorollEncoderDecoder(
       shortest_duration=params['shortest_duration'],
       min_pitch=pitch_range[0],
       max_pitch=pitch_range[1],
-      separate_instruments=separate_instruments,
+      separate_instruments=hparams.separate_instruments,
       num_instruments=hparams.num_instruments,
       encode_silences=hparams.encode_silences,
       quantization_level=hparams.quantization_level)
