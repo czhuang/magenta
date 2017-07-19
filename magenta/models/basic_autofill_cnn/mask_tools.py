@@ -1,6 +1,7 @@
 """Tools for masking out pianorolls in different ways, such as by instrument."""
  
 import numpy as np
+import lib.util as util
 
 
 class MaskUseError(Exception):
@@ -21,10 +22,7 @@ def apply_mask_and_stack(pianoroll, mask):
   Raises:
     MaskUseError: If the shape of pianoroll and mask do not match.
   """
-  if pianoroll.shape != mask.shape:
-    raise MaskUseError('Shape mismatch in pianoroll and mask.')
-  masked_pianoroll = pianoroll * (1 - mask)
-  return np.concatenate([masked_pianoroll, mask], 2)
+  return np.concatenate([apply_mask(pianoroll, mask), mask], 2)
 
 
 def apply_mask(pianoroll, mask):
@@ -54,49 +52,55 @@ def print_mask(mask):
   print "\n".join("".join(str({True: 1, False: 0}[z]) for z in y) for y in mask)
 
 
+class MaskoutMethod(util.Factory):
+  pass
+
+
 def get_mask(maskout_method, *args, **kwargs):
-  mask_fn = globals()['get_%s_mask' % maskout_method]
-  return mask_fn(*args, **kwargs)
+  mm = MaskoutMethod.make(maskout_method)
+  return mm(*args, **kwargs)
 
 
-def get_bernoulli_mask(pianoroll_shape, separate_instruments=True, 
-                       blankout_ratio=0.5, **kwargs):
-  """
-  Returns:
-    A 3D binary mask.
-  """
-  if len(pianoroll_shape) != 3:
-    raise ValueError(
-        'Shape needs to of 3 dimensional, time, pitch, and instrument.')
-  T, P, I = pianoroll_shape
-  if separate_instruments:
-    mask = np.random.random([T, 1, I]) < blankout_ratio
-    mask = mask.astype(np.float32)
-    mask = np.tile(mask, [1, pianoroll_shape[1], 1])
-  else:
-    mask = np.random.random([T, P, I]) < blankout_ratio
-    mask = mask.astype(np.float32)
-  return mask
+class BernoulliMaskoutMethod(MaskoutMethod):
+  key = "bernoulli"
+
+  def __call__(pianoroll_shape, separate_instruments=True,
+               blankout_ratio=0.5, **kwargs):
+    if len(pianoroll_shape) != 3:
+      raise ValueError(
+          'Shape needs to of 3 dimensional, time, pitch, and instrument.')
+    T, P, I = pianoroll_shape
+    if separate_instruments:
+      mask = np.random.random([T, 1, I]) < blankout_ratio
+      mask = mask.astype(np.float32)
+      mask = np.tile(mask, [1, pianoroll_shape[1], 1])
+    else:
+      mask = np.random.random([T, P, I]) < blankout_ratio
+      mask = mask.astype(np.float32)
+    return mask
 
 
-def get_balanced_by_scaling_mask(pianoroll_shape, separate_instruments=True, **kwargs):
-  T, P, I = pianoroll_shape
+class OrderlessMaskoutMethod(MaskoutMethod):
+  key = "orderless"
 
-  if separate_instruments:
-    d = T * I
-  else:
-    assert I == 1
-    d = T * P 
-  # sample a mask size
-  k = np.random.choice(d) + 1
-  # sample a mask of size k
-  i = np.random.choice(d, size=k, replace=False)
- 
-  mask = np.zeros(d, dtype=np.float32)
-  mask[i] = 1.
-  if separate_instruments:
-    mask = mask.reshape((T, 1, I))
-    mask = np.tile(mask, [1, P, 1])
-  else:
-    mask = mask.reshape((T, P, 1))
-  return mask
+  def __call__(pianoroll_shape, separate_instruments=True, **kwargs):
+    T, P, I = pianoroll_shape
+
+    if separate_instruments:
+      d = T * I
+    else:
+      assert I == 1
+      d = T * P
+    # sample a mask size
+    k = np.random.choice(d) + 1
+    # sample a mask of size k
+    i = np.random.choice(d, size=k, replace=False)
+
+    mask = np.zeros(d, dtype=np.float32)
+    mask[i] = 1.
+    if separate_instruments:
+      mask = mask.reshape((T, 1, I))
+      mask = np.tile(mask, [1, P, 1])
+    else:
+      mask = mask.reshape((T, P, 1))
+    return mask
