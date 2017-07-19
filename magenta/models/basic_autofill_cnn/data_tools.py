@@ -39,8 +39,7 @@ def random_double_or_halftime_pianoroll_from_note_sequence(
 
 def random_crop_pianoroll(pianoroll,
                           crop_len,
-                          start_crop_index=None,
-                          augment_by_transposing=False):
+                          start_crop_index=None):
   """Return a random crop in time of a pianoroll.
 
   Args:
@@ -53,8 +52,6 @@ def random_crop_pianoroll(pianoroll,
   Raises:
     DataProcessingError: If the pianoroll shorter than the desired crop_len.
   """
-  #print '\ncrop_len', crop_len
-  #print pianoroll.shape
   if len(pianoroll) < crop_len:
     # TODO(annahuang): Pad pianoroll when too short, and add mask to loss.
     raise DataProcessingError(
@@ -66,33 +63,24 @@ def random_crop_pianoroll(pianoroll,
     start_time_idx = start_crop_index
   else:
     start_time_idx = np.random.randint(len(pianoroll) - crop_len)
+  return pianoroll = pianoroll[start_time_idx:start_time_idx + crop_len]
 
-  cropped_pianoroll = pianoroll[start_time_idx:start_time_idx + crop_len]
-  if not augment_by_transposing:
-    return cropped_pianoroll
 
+def augment_by_transposing(pianoroll):
   # High exclusive, also it's asymmetic.
   random_shift = np.random.randint(-5, 7)
-  #print 'cropped_pianoroll', cropped_pianoroll.shape
-  #print 'sum of crop', np.sum(cropped_pianoroll)
-  #print 'random_shift', random_shift
   if random_shift == 0:
-    return cropped_pianoroll
+    return pianoroll
 
-  pitch_sum = np.sum(cropped_pianoroll, axis=(0, 2))
-  #print np.max(np.where(pitch_sum)), np.min(np.where(pitch_sum))
-
-  shifted_pianoroll = np.roll(cropped_pianoroll, random_shift, axis=2)
+  shifted_pianoroll = np.roll(pianoroll, random_shift, axis=2)
   # Check that there's actually no roll over.
   if random_shift > 0:
     # Even though high range here is exclusive, since checking if high rolled into low.
     num_events = np.sum(shifted_pianoroll[:, :random_shift - 1, :])
-    #print 'num_events', num_events
     assert num_events == 0
   else:
     # random_shift is negative, hence don't need to add negative sign to random_shift.
     num_events = np.sum(shifted_pianoroll[:, random_shift - 1:, :])
-    #print 'num_events', num_events
     assert num_events == 0
   return shifted_pianoroll
 
@@ -131,7 +119,6 @@ def make_data_feature_maps(sequences, hparams, encoder, start_crop_index=None):
     DataProcessingError: If pianoroll is shorter than the desired crop_len, or
         if the inputs and targets have the wrong number of dimensions.
   """
-  maskout_method = hparams.maskout_method
   input_data = []
   targets = []
   lengths = []
@@ -152,8 +139,9 @@ def make_data_feature_maps(sequences, hparams, encoder, start_crop_index=None):
         #  print length, 'padded to', cropped_pianoroll.shape[0]
       else:  
         cropped_pianoroll = random_crop_pianoroll(
-            pianoroll, hparams.crop_piece_len, start_crop_index,
-            hparams.augment_by_transposing)
+            pianoroll, hparams.crop_piece_len, start_crop_index)
+        if hparams.augment_by_transposing:
+          cropped_pianoroll = augment_by_transposing(cropped_pianoroll)
         length = hparams.crop_piece_len
     except DataProcessingError:
       tf.logging.warning('Piece shorter than requested crop length.')
@@ -190,8 +178,6 @@ def make_data_feature_maps(sequences, hparams, encoder, start_crop_index=None):
     print input_data.ndim, targets.ndim
     raise DataProcessingError('Input data or target dimensions incorrect.')
   return input_data, targets, lengths
-
-
 
 
 def get_data_as_pianorolls(basepath, hparams, fold):
