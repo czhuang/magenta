@@ -23,10 +23,11 @@ tf.app.flags.DEFINE_string(
 tf.app.flags.DEFINE_string(
     "prime_midi_melody_fpath", None,
     "Path to midi melody to be harmonized.")
+tf.app.flags.DEFINE_string('checkpoint_dir', None, 'Path to checkpoint directory.')
 
 
 def main(unused_argv):
-  wmodel = retrieve_model_tools.retrieve_model(model_name=FLAGS.model_name)
+  wmodel = retrieve_model_tools.retrieve_model(FLAGS.checkpoint_dir)
   hparams = wmodel.hparams
   Globals.separate_instruments = hparams.separate_instruments
 

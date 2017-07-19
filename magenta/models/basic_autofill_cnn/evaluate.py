@@ -14,9 +14,10 @@ tf.app.flags.DEFINE_string('fold_index', None, 'optionally, index of particular 
 tf.app.flags.DEFINE_string('unit', None, 'note or frame or example')
 tf.app.flags.DEFINE_integer('ensemble_size', 5, 'number of ensemble members to average')
 tf.app.flags.DEFINE_bool('chronological', False, 'indicates evaluation should proceed in chronological order')
+tf.app.flags.DEFINE_string('checkpoint_dir', None, 'Path to checkpoint directory.')
 
 def main(argv):
-  wmodel = retrieve_model_tools.retrieve_model(model_name=FLAGS.model_name)
+  wmodel = retrieve_model_tools.retrieve_model(FLAGS.checkpoint_dir)
 
   evaluator = evaluation.BaseEvaluator.make(FLAGS.unit, wmodel=wmodel,
                                             chronological=FLAGS.chronological)

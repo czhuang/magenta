@@ -345,8 +345,3 @@ def build_graph(is_training, hparams, placeholders=None):
                                   **placeholders)
   return placeholders, graph
 
-
-def build_wrapped_model(is_training, hparams, placeholders=None):
-  """Build BasicAutofillCNNGraph, input output placeholders, and initializer."""
-  _, model = build_graph(is_training, hparams, placeholders=placeholders)
-  return tfutil.WrappedModel(model, model.loss.graph, hparams)
