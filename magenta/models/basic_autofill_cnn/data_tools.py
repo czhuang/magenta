@@ -22,20 +22,10 @@ DATASET_PARAMS = {
 }
 
 
-class DataProcessingError(Exception):
-  """Exception for when data does not meet the expected requirements."""
-  pass
-
-
-def random_crop_pianoroll(pianoroll,
-                          crop_len,
-                          start_crop_index=None):
-  length = len(pianoroll)
-  if start_crop_index is not None:
-    start_time_idx = start_crop_index
-  else:
-    start_time_idx = np.random.randint(1 + max(0, len(pianoroll) - crop_len))
-  pianoroll = pianoroll[start_time_idx:start_time_idx + crop_len]
+def random_crop_pianoroll(pianoroll, length):
+  leeway = len(pianoroll) - length
+  start = np.random.randint(1 + max(0, leeway))
+  pianoroll = pianoroll[start:start + length]
   return pianoroll
 
 
@@ -68,7 +58,7 @@ def pad_and_stack(*xss):
   return yss, np.asarray(lengths)
 
 
-def make_data_feature_maps(sequences, hparams, encoder, start_crop_index=None):
+def make_data_feature_maps(sequences, hparams, encoder):
   """Return input and output pairs of masked out and full pianorolls.
 
   Args:
@@ -89,23 +79,20 @@ def make_data_feature_maps(sequences, hparams, encoder, start_crop_index=None):
   targets = []
   for sequence in sequences:
     pianoroll = encoder.encode(sequence)
-    cropped_pianoroll = random_crop_pianoroll(
-        pianoroll, hparams.crop_piece_len, start_crop_index)
+    pianoroll = random_crop_pianoroll(pianoroll, hparams.crop_piece_len)
     mask_fn = getattr(mask_tools, 'get_%s_mask' % hparams.maskout_method)
-    mask = mask_fn(cropped_pianoroll.shape,
+    mask = mask_fn(pianoroll.shape,
                    separate_instruments=hparams.separate_instruments,
                    blankout_ratio=hparams.corrupt_ratio)
     if hparams.denoise_mode:
-      masked_pianoroll = mask_tools.perturb_and_stack(cropped_pianoroll, mask)
+      masked_pianoroll = mask_tools.perturb_and_stack(pianoroll, mask)
     else:
-      masked_pianoroll = mask_tools.apply_mask_and_stack(cropped_pianoroll, mask)
+      masked_pianoroll = mask_tools.apply_mask_and_stack(pianoroll, mask)
     input_data.append(masked_pianoroll)
-    targets.append(cropped_pianoroll)
+    targets.append(pianoroll)
 
   (input_data, targets), lengths = pad_and_stack(input_data, targets)
-  if not (input_data.ndim == 4 and targets.ndim == 4):
-    print input_data.ndim, targets.ndim
-    raise DataProcessingError('Input data or target dimensions incorrect.')
+  assert input_data.ndim == 4 and targets.ndim == 4
   return input_data, targets, lengths
 
 
