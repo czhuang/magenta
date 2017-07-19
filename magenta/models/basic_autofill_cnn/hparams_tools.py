@@ -33,7 +33,6 @@ class Hyperparameters(object):
       model_name=None,
       num_layers=28,
       num_filters=256,
-      start_filter_size=3, 
       use_residual=True,
       checkpoint_name=None,
       # Loss setup.
@@ -141,7 +140,6 @@ class Hyperparameters(object):
         batch_norm_variance_epsilon batch_norm init_scale optimize_mask_only
         conv_arch mask_indicates_context run_dir num_epochs log_process
         save_model_secs batch_size input_depth num_instruments num_pitches
-        start_filter_size
     """.split()
     lastlist = """maskout_method corrupt_ratio'""".split()
     shorthand = dict(
@@ -167,8 +165,7 @@ class Hyperparameters(object):
     try:
       return globals()[self.model_name](
           self.input_depth, self.num_layers, self.num_filters, 
-          self.num_pitches, output_depth=self.output_depth, 
-          start_filter_size=self.start_filter_size)
+          self.num_pitches, output_depth=self.output_depth)
     except ValueError:
       raise ModelMisspecificationError('Model name %s does not exist.' % self.model_name)
 
@@ -188,11 +185,7 @@ class ConvArchitecture(object):
     """Expand the expanded convnet architeciture."""
     conv_specs_expanded = []
     for layer in self.condensed_specs:
-      if isinstance(layer, tuple):
-        for _ in range(layer[0]):
-          conv_specs_expanded.append(layer[1])
-      else:
-        conv_specs_expanded.append(layer)
+      conv_specs_expanded.append(layer)
     return conv_specs_expanded
 
 
@@ -201,39 +194,30 @@ class DeepStraightConvSpecs(ConvArchitecture):
   model_name = 'DeepStraightConvSpecs'
 
   def __init__(self, input_depth, num_layers, num_filters, num_pitches, 
-               output_depth, start_filter_size=None, **kwargs):
+               output_depth, **kwargs):
     print self.model_name, input_depth, output_depth
-    if start_filter_size is None:
-      assert False
     if num_layers < 4:
       raise ModelMisspecificationError(
           'The network needs to be at least 4 layers deep, %d given.' %
           num_layers)
     super(DeepStraightConvSpecs, self).__init__()
-    self.condensed_specs = [
-        dict(
-            filters=[start_filter_size, start_filter_size, 
-                     input_depth, num_filters],
-            conv_stride=1, conv_pad='SAME'), 
-        (num_layers - 3, dict(
-                filters=[3, 3, num_filters, num_filters],
-                conv_stride=1,
-                conv_pad='SAME')), dict(
-                    filters=[2, 2, num_filters, num_filters],
-                    conv_stride=1,
-                    conv_pad='SAME'), dict(
-                        filters=[2, 2, num_filters, output_depth],
-                        conv_stride=1,
-                        conv_pad='SAME',
-           #             activation=lambda x: x)
-                        activation=ReturnIdentity())
-    ]
+
+    layers = []
+    def _add(**kwargs):
+      layers.append(kwargs)
+
+    _add(filters=[3, 3, input_depth, num_filters])
+    for _ in range(num_layers - 3):
+      _add(filters=[3, 3, num_filters, num_filters])
+    _add(filters=[2, 2, num_filters, num_filters])
+    _add(filters=[2, 2, num_filters, output_depth],
+        activation=util.identity)
+
+    self.condensed_specs = layers
     self.specs = self.get_spec()
     assert self.specs
-    self.name = '%s-%d-%d-start_fs=%d' % (
-        self.model_name, len(self.specs), num_filters, start_filter_size)
+    self.name = '%s-%d-%d' % (self.model_name, len(self.specs), num_filters)
   
   def __str__(self):
     #FIXME: a hack.
     return self.name
-

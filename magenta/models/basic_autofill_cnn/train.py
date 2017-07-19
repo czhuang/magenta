@@ -50,7 +50,6 @@ tf.app.flags.DEFINE_integer('num_layers', 64,
 tf.app.flags.DEFINE_integer('num_filters', 128,
                             'The number of filters for each convolutional '
                             'layer.')
-tf.app.flags.DEFINE_integer('start_filter_size', 3, 'The filter size for the first layer of convoluation')
 # TODO: Some are meant to be booleans.
 tf.app.flags.DEFINE_integer('use_residual', 1,
                             '1 specifies use residual, while 0 specifies not '
@@ -316,10 +315,9 @@ def _print_popstat_info(tfpopstats, nppopstats)
 def _hparams_from_flags():
   keys = ("""
       dataset quantization_level num_instruments separate_instruments
-      crop_piece_len model_name num_layers num_filters start_filter_size
-      use_residual batch_size maskout_method
-      mask_indicates_context optimize_mask_only rescale_loss patience
-      corrupt_ratio eval_freq run_id
+      crop_piece_len model_name num_layers num_filters use_residual
+      batch_size maskout_method mask_indicates_context optimize_mask_only
+      rescale_loss patience corrupt_ratio eval_freq run_id
       """.split())
   hparams = Hyperparameters(**dict((key, getattr(FLAGS, key))
                                    for key in keys))

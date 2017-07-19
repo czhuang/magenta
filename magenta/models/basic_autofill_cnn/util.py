@@ -239,3 +239,5 @@ def pad_and_stack(*xss):
     yss.append(ys)
   return yss, np.asarray(lengths)
 
+def identity(x):
+  return x
