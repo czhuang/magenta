@@ -1,7 +1,7 @@
 """Tools for masking out pianorolls in different ways, such as by instrument."""
  
 import numpy as np
-import lib.util as util
+import lib.util
 
 
 class MaskUseError(Exception):
@@ -52,7 +52,7 @@ def print_mask(mask):
   print "\n".join("".join(str({True: 1, False: 0}[z]) for z in y) for y in mask)
 
 
-class MaskoutMethod(util.Factory):
+class MaskoutMethod(lib.util.Factory):
   pass
 
 

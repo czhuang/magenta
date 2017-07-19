@@ -5,8 +5,9 @@ import os
 import numpy as np
 import tensorflow as tf
 
-import mask_tools
-from pianorolls_lib import PianorollEncoderDecoder
+import lib.mask
+import lib.pianoroll
+import lib.util
 
 DATASET_PARAMS = {
     'Nottingham': {
@@ -43,16 +44,16 @@ def make_data_feature_maps(sequences, hparams, encoder):
   targets = []
   for sequence in sequences:
     pianoroll = encoder.encode(sequence)
-    pianoroll = util.random_crop(pianoroll, hparams.crop_piece_len)
-    mask = mask_tools.get_mask(
+    pianoroll = lib.util.random_crop(pianoroll, hparams.crop_piece_len)
+    mask = lib.mask.get_mask(
         hparams.maskout_method, pianoroll.shape,
         separate_instruments=hparams.separate_instruments,
         blankout_ratio=hparams.corrupt_ratio)
-    masked_pianoroll = mask_tools.apply_mask_and_stack(pianoroll, mask)
+    masked_pianoroll = lib.mask.apply_mask_and_stack(pianoroll, mask)
     input_data.append(masked_pianoroll)
     targets.append(pianoroll)
 
-  (input_data, targets), lengths = util.pad_and_stack(input_data, targets)
+  (input_data, targets), lengths = lib.util.pad_and_stack(input_data, targets)
   assert input_data.ndim == 4 and targets.ndim == 4
   return input_data, targets, lengths
 
@@ -86,7 +87,7 @@ def get_data_and_update_hparams(basepath, hparams, fold,
                      'duration=%r, requested=%r' %
                      (params['shortest_duration'], hparams.quantization_level))
 
-  encoder = PianorollEncoderDecoder(
+  encoder = lib.pianoroll.PianorollEncoderDecoder(
       shortest_duration=params['shortest_duration'],
       min_pitch=pitch_range[0],
       max_pitch=pitch_range[1],

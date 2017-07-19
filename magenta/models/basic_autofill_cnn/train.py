@@ -7,10 +7,10 @@ import yaml
 import numpy as np
 import tensorflow as tf
 
-import data_tools
-import util
-import lib.graph as graph
-from hparams_tools import Hyperparameters
+import lib.data
+import lib.util
+import lib.graph
+import lib.hparams
 
 
 FLAGS = tf.app.flags.FLAGS
@@ -88,11 +88,11 @@ def estimate_popstats(sv, sess, m, raw_data, encoder, hparams):
   tfbatchstats, tfpopstats = list(zip(*m.popstats_by_batchstat.items()))
 
   nepochs = 3
-  nppopstats = [util.AggregateMean("") for _ in tfpopstats]
+  nppopstats = [lib.util.AggregateMean("") for _ in tfpopstats]
   for _ in range(nepochs):
-    xs, ys, lengths = data_tools.make_data_feature_maps(
+    xs, ys, lengths = lib.data.make_data_feature_maps(
         raw_data, hparams, encoder)
-    batches = util.batches(xs, ys, lengths, size=m.batch_size, shuffle=True)
+    batches = lib.util.batches(xs, ys, lengths, size=m.batch_size, shuffle=True)
     for step, (x, y, length) in enumerate(batches):
       feed_dict = {m.input_data: x,
                    m.targets: y,
@@ -120,16 +120,16 @@ def run_epoch(supervisor,
   """Runs an epoch of training or evaluate the model on given data."""
   # reduce variance in validation loss by fixing the seed
   data_seed = 123 if experiment_type == "valid" else None
-  with util.numpy_seed(data_seed):
-    xs, ys, lengths = data_tools.make_data_feature_maps(
+  with lib.util.numpy_seed(data_seed):
+    xs, ys, lengths = lib.data.make_data_feature_maps(
         raw_data, hparams, encoder)
-    batches = util.batches(xs, ys, lengths, size=m.batch_size,
+    batches = lib.util.batches(xs, ys, lengths, size=m.batch_size,
                            shuffle=True, shuffle_rng=data_seed)
 
-  losses = util.AggregateMean('losses')
-  losses_total = util.AggregateMean('losses_total')
-  losses_mask = util.AggregateMean('losses_mask')
-  losses_unmask = util.AggregateMean('losses_unmask')
+  losses = lib.util.AggregateMean('losses')
+  losses_total = lib.util.AggregateMean('losses_total')
+  losses_mask = lib.util.AggregateMean('losses_mask')
+  losses_unmask = lib.util.AggregateMean('losses_unmask')
 
   start_time = time.time()
   for step, (x, y, length) in batches:
@@ -208,9 +208,9 @@ def main(unused_argv):
     yaml.dump(hparams, p)
 
   # Get data.
-  train_data, pianoroll_encoder = data_tools.get_data_and_update_hparams(
+  train_data, pianoroll_encoder = lib.data.get_data_and_update_hparams(
       FLAGS.data_dir, hparams, 'train', return_encoder=True)
-  valid_data = data_tools.get_data_and_update_hparams(
+  valid_data = lib.data.get_data_and_update_hparams(
       FLAGS.data_dir, hparams, 'valid', return_encoder=False)
   print '# of train_data:', len(train_data)
   print '# of valid_data:', len(valid_data)
@@ -220,9 +220,9 @@ def main(unused_argv):
     no_op = tf.no_op()
 
     # Build placeholders and training graph, and validation graph with reuse.
-    m = graph.build_graph(is_training=True, hparams=hparams)
+    m = lib.graph.build_graph(is_training=True, hparams=hparams)
     tf.get_variable_scope().reuse_variables()
-    mvalid = graph.build_graph(is_training=False, hparams=hparams)
+    mvalid = lib.graph.build_graph(is_training=False, hparams=hparams)
 
     tracker = Tracker(label="validation loss",
                       patience=FLAGS.patience,
@@ -319,8 +319,8 @@ def _hparams_from_flags():
       batch_size maskout_method mask_indicates_context optimize_mask_only
       rescale_loss patience corrupt_ratio eval_freq run_id
       """.split())
-  hparams = Hyperparameters(**dict((key, getattr(FLAGS, key))
-                                   for key in keys))
+  hparams = lib.hparams.Hyperparameters(**dict((key, getattr(FLAGS, key))
+                                               for key in keys))
   return hparams
 
 if __name__ == '__main__':

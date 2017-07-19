@@ -1,6 +1,8 @@
 """Classes for defining hypermaters and model architectures."""
 import itertools as it
 
+import lib.util
+
 class ModelMisspecificationError(Exception):
   """Exception for specifying a model that is not currently supported."""
   pass
@@ -168,7 +170,7 @@ class Hyperparameters(object):
         self.num_pitches, output_depth=self.output_depth)
 
 
-class Architecture(util.Factory):
+class Architecture(lib.util.Factory):
   pass
 
 
@@ -190,7 +192,7 @@ class Straight(Architecture):
       _add(filters=[3, 3, num_filters, num_filters])
     _add(filters=[2, 2, num_filters, num_filters])
     _add(filters=[2, 2, num_filters, output_depth],
-        activation=util.identity)
+         activation=lib.util.identity)
 
     self.name = '%s-%d-%d' % (self.key, len(self.layers), num_filters)
   

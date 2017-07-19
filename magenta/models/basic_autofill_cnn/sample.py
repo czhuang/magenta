@@ -1,16 +1,16 @@
-import os, sys, time, contextlib, cPickle as pkl, gzip
+import os, sys, time, cPickle as pkl, gzip
 import re
-from collections import defaultdict
 import numpy as np
 import tensorflow as tf
 
 import pretty_midi
 
-import mask_tools
-import lib.graph as graph
-import data_tools
-from npz_to_midi import pianoroll_to_midi
-import util
+import lib.mask
+import lib.graph
+import lib.data
+import lib.util
+
+# FIXME this file uses pianoroll_to_midi from npz_to_midi. use something appropriate from lib.pianoroll instead.
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_integer("gen_batch_size", 100, "num of samples to generate in a batch.")
@@ -41,7 +41,7 @@ def main(unused_argv):
 
   # Instantiates generation strategy.
   strategy = BaseStrategy.make(FLAGS.strategy, wmodel)
-  Globals.bamboo = util.Bamboo()
+  Globals.bamboo = lib.util.Bamboo()
 
   # Generates.
   start_time = time.time()
@@ -54,14 +54,14 @@ def main(unused_argv):
   Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=pianorolls)
 
   # Creates a folder for storing the process of the sampling.
-  label = "sample_%s_%s_%s_T%g_l%i_%.2fmin" % (util.timestamp(), FLAGS.strategy, 
+  label = "sample_%s_%s_%s_T%g_l%i_%.2fmin" % (lib.util.timestamp(), FLAGS.strategy, 
     hparams.architecture, FLAGS.temperature, FLAGS.piece_length, time_taken)
   basepath = os.path.join(FLAGS.generation_output_dir, label)
   os.makedirs(basepath)
   
   # Stores all the (intermediate) steps.
   path = os.path.join(basepath, 'intermediate_steps.npz')
-  with util.timing('writing_out_sample_npz'):
+  with lib.util.timing('writing_out_sample_npz'):
     print "Writing to", path
     Globals.bamboo.dump(path)
   
@@ -100,7 +100,7 @@ def main(unused_argv):
 def instrument(label, printon=True, subsample_factor=None):
   def decorator(fn):
     def wrapped_fn(*args, **kwargs):
-      with util.timing(label, printon=printon):
+      with lib.util.timing(label, printon=printon):
         with Globals.bamboo.scope(label, subsample_factor=subsample_factor):
           return fn(*args, **kwargs)
     return wrapped_fn
@@ -112,7 +112,7 @@ def instrument(label, printon=True, subsample_factor=None):
 ##################
 # Commonly used compositions of samplers, user-selectable through FLAGS.strategy
 
-class BaseStrategy(util.Factory):
+class BaseStrategy(lib.util.Factory):
   def __init__(self, wmodel):
     self.wmodel = wmodel
 
@@ -179,7 +179,7 @@ class HarmonizeMidiMelodyStrategy(BaseStrategy):
                          schedule=YaoSchedule(pmin=0.1, pmax=0.9, alpha=0.7))
 
     with Globals.bamboo.scope("context"):
-      context = np.array([mask_tools.apply_mask(pianoroll, mask)
+      context = np.array([lib.mask.apply_mask(pianoroll, mask)
                           for pianoroll, mask in zip(pianorolls, masks)])
       Globals.bamboo.log(pianorolls=context, masks=masks, predictions=context)
     pianorolls = gibbs(pianorolls, masks)
@@ -232,7 +232,7 @@ class RevoiceStrategy(BaseStrategy):
     for i in range(pianorolls.shape[-1]):
       masks = InstrumentMasker(instrument=i)(masks.shape)
       with Globals.bamboo.scope("context"):
-        context = np.array([mask_tools.apply_mask(pianoroll, mask)
+        context = np.array([lib.mask.apply_mask(pianoroll, mask)
                             for pianoroll, mask in zip(pianorolls, masks)])
         Globals.bamboo.log(pianorolls=context, masks=masks, predictions=context)
       pianorolls = sampler(pianorolls, masks)
@@ -254,7 +254,7 @@ class HarmonizationStrategy(BaseStrategy):
                          schedule=YaoSchedule(pmin=0.1, pmax=0.9, alpha=0.7))
 
     with Globals.bamboo.scope("context"):
-      context = np.array([mask_tools.apply_mask(pianoroll, mask)
+      context = np.array([lib.mask.apply_mask(pianoroll, mask)
                           for pianoroll, mask in zip(pianorolls, masks)])
       Globals.bamboo.log(pianorolls=context, masks=masks, predictions=context)
     pianorolls = gibbs(pianorolls, masks)
@@ -279,7 +279,7 @@ class TransitionStrategy(BaseStrategy):
                          schedule=YaoSchedule(pmin=0.1, pmax=0.9, alpha=0.7))
 
     with Globals.bamboo.scope("context"):
-      context = np.array([mask_tools.apply_mask(pianoroll, mask)
+      context = np.array([lib.mask.apply_mask(pianoroll, mask)
                           for pianoroll, mask in zip(pianorolls, masks)])
       Globals.bamboo.log(pianorolls=context, masks=masks, predictions=context)
     pianorolls = gibbs(pianorolls, masks)
@@ -421,7 +421,7 @@ class Cgibbs50Strategy(BaseStrategy):
 ################
 # Composable strategies for filling in a masked-out block
 
-class BaseSampler(util.Factory):
+class BaseSampler(lib.util.Factory):
   def __init__(self, wmodel, temperature=1, **kwargs):
     self.wmodel = wmodel
     self.temperature = temperature
@@ -429,7 +429,7 @@ class BaseSampler(util.Factory):
   def predict(self, pianorolls, masks):
     # TODO: wrap in RobustPredictor from evaluation_tools
     input_data = np.asarray([
-      mask_tools.apply_mask_and_stack(pianoroll, mask)
+      lib.mask.apply_mask_and_stack(pianoroll, mask)
       for pianoroll, mask in zip(pianorolls, masks)])
     predictions = self.wmodel.sess.run(self.wmodel.model.predictions,
                                        {self.wmodel.model.input_data: input_data})
@@ -445,7 +445,7 @@ class BachSampler(BaseSampler):
   @instrument(key)
   def __call__(self, pianorolls, masks):
     print "Loading validation pieces from %s..." % self.wmodel.hparams.dataset
-    bach_pianorolls = data_tools.get_data_as_pianorolls(FLAGS.data_dir, self.wmodel.hparams, 'valid')
+    bach_pianorolls = lib.data.get_data_as_pianorolls(FLAGS.data_dir, self.wmodel.hparams, 'valid')
     shape = pianorolls.shape
     pianorolls = np.array([pianoroll[:shape[1]] for pianoroll in bach_pianorolls])[:shape[0]]
     Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=pianorolls)
@@ -467,10 +467,10 @@ class UniformRandomSampler(BaseSampler):
   def __call__(self, pianorolls, masks):
     predictions = np.ones(pianorolls.shape)
     if Globals.separate_instruments:
-      samples = util.sample_onehot(predictions, axis=2, temperature=1)
+      samples = lib.util.sample_onehot(predictions, axis=2, temperature=1)
       assert (samples * masks).sum() == masks.max(axis=2).sum()
     else:
-      samples = util.sample_bernoulli(0.5 * predictions, temperature=1)
+      samples = lib.util.sample_bernoulli(0.5 * predictions, temperature=1)
     pianorolls = np.where(masks, samples, pianorolls)
     Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=predictions)
     return pianorolls
@@ -482,11 +482,11 @@ class IndependentSampler(BaseSampler):
   def __call__(self, pianorolls, masks):
     predictions = self.predict(pianorolls, masks)
     if Globals.separate_instruments:
-      samples = util.sample_onehot(predictions, axis=2,
+      samples = lib.util.sample_onehot(predictions, axis=2,
                                    temperature=self.temperature)
       assert (samples * masks).sum() == masks.max(axis=2).sum()
     else:
-      samples = util.sample_bernoulli(predictions, self.temperature)
+      samples = lib.util.sample_bernoulli(predictions, self.temperature)
     pianorolls = np.where(masks, samples, pianorolls)
     Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=predictions)
     return pianorolls
@@ -511,10 +511,10 @@ class AncestralSampler(BaseSampler):
       for _ in range(mask_size):
         predictions = self.predict(pianorolls, masks)
         if Globals.separate_instruments:
-          samples = util.sample_onehot(predictions, axis=2, temperature=self.temperature)
+          samples = lib.util.sample_onehot(predictions, axis=2, temperature=self.temperature)
           assert np.allclose(samples.max(axis=2), 1)
         else:
-          samples = util.sample_bernoulli(predictions, self.temperature)
+          samples = lib.util.sample_bernoulli(predictions, self.temperature)
         selection = self.selector(predictions, masks)
         pianorolls = np.where(selection, samples, pianorolls)
         Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=predictions)
@@ -576,7 +576,7 @@ class UpsamplingSampler(BaseSampler):
         masks[:, 1::2] = 1
 
         with Globals.bamboo.scope("context"):
-          context = np.array([mask_tools.apply_mask(pianoroll, mask)
+          context = np.array([lib.mask.apply_mask(pianoroll, mask)
                               for pianoroll, mask in zip(pianorolls, masks)])
           Globals.bamboo.log(pianorolls=context, masks=masks, predictions=context)
 
@@ -590,7 +590,7 @@ class UpsamplingSampler(BaseSampler):
 ###############
 # Strategies for generating masks (possibly within masks).
 
-class BaseMasker(util.Factory):
+class BaseMasker(lib.util.Factory):
   @classmethod
   def __repr__(cls, self):
     return "maskers.%s" % cls.key
@@ -678,7 +678,7 @@ class ConstantSchedule(object):
 ### Selectors ###
 #################
 # Used in ancestral sampling to determine which variable to sample next.
-class BaseSelector(util.Factory):
+class BaseSelector(lib.util.Factory):
   pass
 
 class ChronologicalSelector(BaseSelector):
@@ -709,11 +709,11 @@ class OrderlessSelector(BaseSelector):
       # select one variable to sample. sample according to normalized mask;
       # is uniform as all masked out variables have equal positive weight.
       selection = masks.max(axis=2).reshape([B, T * I])
-      selection = util.sample_onehot(selection, axis=1)
+      selection = lib.util.sample_onehot(selection, axis=1)
       selection = selection.reshape([B, T, 1, I])
     else:
       selection = masks.reshape([B, T * P])
-      selection = util.sample_onehot(selection, axis=1)
+      selection = lib.util.sample_onehot(selection, axis=1)
       selection = selection.reshape([B, T, P, I])
     # Intersect with mask to avoid selecting outside of the mask, e.g. in case some masks[b] is zero
     # everywhere. This can happen inside blocked Gibbs, where different examples have different

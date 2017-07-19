@@ -1,8 +1,9 @@
 """Defines the graph for a convolutional net designed for music autofill."""
 import tensorflow as tf, numpy as np
 from collections import OrderedDict
-import lib.tfutil as tfutil
-import lib.util as util
+
+import lib.tfutil
+import lib.util
 
 
 class CoconetGraph(object):
@@ -285,11 +286,11 @@ def load_checkpoint(path):
   """Builds graph, loads checkpoint, and returns wrapped model.
 
   Returns:
-    wrapped_model: tfutil.WrappedModel
+    wrapped_model: lib.tfutil.WrappedModel
   """
-  hparams = util.load_hparams(path)
+  hparams = lib.util.load_hparams(path)
   model = build_graph(is_training=False, hparams=hparams)
-  wmodel = tfutil.WrappedModel(model, model.loss.graph, hparams)
+  wmodel = lib.tfutil.WrappedModel(model, model.loss.graph, hparams)
   with wmodel.graph.as_default():
     wmodel.sess = tf.Session()
     saver = tf.train.Saver()

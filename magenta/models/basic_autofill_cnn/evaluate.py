@@ -3,10 +3,10 @@ import os
 import numpy as np
 import tensorflow as tf
 
-import lib.evaluation as evaluation
-import lib.graph as graph
-import data_tools
-import util
+import lib.evaluation
+import lib.graph
+import lib.data
+import lib.util
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('fold', None, 'data fold on which to evaluate (valid or test)')
@@ -17,11 +17,11 @@ tf.app.flags.DEFINE_bool('chronological', False, 'indicates evaluation should pr
 tf.app.flags.DEFINE_string('checkpoint', None, 'path to checkpoint file')
 
 def main(argv):
-  wmodel = graph.load_checkpoint(FLAGS.checkpoint)
+  wmodel = lib.graph.load_checkpoint(FLAGS.checkpoint)
 
-  evaluator = evaluation.BaseEvaluator.make(FLAGS.unit, wmodel=wmodel,
+  evaluator = lib.evaluation.BaseEvaluator.make(FLAGS.unit, wmodel=wmodel,
                                             chronological=FLAGS.chronological)
-  evaluator = evaluation.EnsemblingEvaluator(evaluator, FLAGS.ensemble_size)
+  evaluator = lib.evaluation.EnsemblingEvaluator(evaluator, FLAGS.ensemble_size)
 
   paths = argv[1:]
   if bool(paths) == bool(FLAGS.fold is not None):
@@ -33,26 +33,26 @@ def main(argv):
 
 def evaluate_fold(fold, evaluator, hparams):
   name = "eval_%s_%s%s_%s_ensemble%s_chrono%s" % (
-    util.timestamp(), fold, FLAGS.fold_index if FLAGS.fold_index is not None else "",
+    lib.util.timestamp(), fold, FLAGS.fold_index if FLAGS.fold_index is not None else "",
     FLAGS.unit, FLAGS.ensemble_size, FLAGS.chronological)
   save_path = "%s__%s" % (FLAGS.checkpoint, name)
 
   pianorolls = get_fold_pianorolls(fold, hparams)
-  rval = evaluation.evaluate(evaluator, pianorolls)
+  rval = lib.evaluation.evaluate(evaluator, pianorolls)
   np.savez_compressed("%s.npz" % save_path, **rval)
 
 def evaluate_paths(paths, evaluator, hparams):
   for path in paths:
     name = "eval_%s_%s_ensemble%s_chrono%s" % (
-      util.timestamp(), FLAGS.unit, FLAGS.ensemble_size, FLAGS.chronological)
+      lib.util.timestamp(), FLAGS.unit, FLAGS.ensemble_size, FLAGS.chronological)
     save_path = "%s__%s" % (path, name)
 
     pianorolls = get_path_pianoroll(path)
-    rval = evaluation.evaluate(evaluator, pianorolls)
+    rval = lib.evaluation.evaluate(evaluator, pianorolls)
     np.savez_compressed("%s.npz" % save_path, **rval)
 
 def get_fold_pianorolls(fold, hparams):
-  pianorolls = data_tools.get_data_as_pianorolls(FLAGS.data_dir, hparams, fold)
+  pianorolls = lib.data.get_data_as_pianorolls(FLAGS.data_dir, hparams, fold)
   print '\nRetrieving pianorolls from %s set of %s dataset.\n' % (
       fold, hparams.dataset)
   print_statistics(pianorolls)

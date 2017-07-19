@@ -4,9 +4,9 @@ import numpy as np
 import tensorflow as tf
 from scipy.misc import logsumexp
 
-import mask_tools
-import tfutil
-import util
+import lib.mask
+import lib.tfutil
+import lib.util
 
 def evaluate(evaluator, pianorolls):
   example_losses = []
@@ -50,17 +50,17 @@ def statstr(x):
 def flatcat(xs):
   return np.concatenate([x.flatten() for x in xs])
 
-class BaseEvaluator(util.Factory):
+class BaseEvaluator(lib.util.Factory):
   def __init__(self, wmodel, chronological):
     self.wmodel = wmodel
     self.chronological = chronological
 
     def predictor(xs, masks):
-      input_data = [mask_tools.apply_mask_and_stack(x, mask) for x, mask in zip(xs, masks)]
+      input_data = [lib.mask.apply_mask_and_stack(x, mask) for x, mask in zip(xs, masks)]
       p = self.wmodel.sess.run(self.wmodel.model.predictions,
                                feed_dict={self.wmodel.model.input_data: input_data})
       return p
-    self.predictor = tfutil.RobustPredictor(predictor)
+    self.predictor = lib.tfutil.RobustPredictor(predictor)
 
   @property
   def hparams(self):
