@@ -37,9 +37,6 @@ def evaluate_fold(fold, evaluator, hparams):
     FLAGS.unit, FLAGS.ensemble_size, FLAGS.chronological)
   save_path = os.path.join(FLAGS.checkpoint_dir, name)
 
-  print 'model_name', hparams.model_name
-  print hparams.checkpoint_fpath
-
   pianorolls = get_fold_pianorolls(fold, hparams)
   rval = evaluation.evaluate(evaluator, pianorolls)
   np.savez_compressed("%s.npz" % save_path, **rval)

@@ -8,40 +8,30 @@ import graph
 import lib.tfutil as tfutil
 
 
+# TODO actually, the user will want to specify the path to a particular checkpoint file, not the
+# directory.
 def retrieve_model(checkpoint_dir):
+  return load_checkpoint(os.path.join(checkpoint_dir, "best_model.ckpt"))
+
+def load_checkpoint(path):
   """Builds graph, retrieves checkpoint, and returns wrapped model.
 
-  This function either takes a tfutil.WrappedModel object
-  that already has the model graph or calls
-  graph.build_wrapped_model to return one. It then retrieves its
-  weights from the checkpoint file specified in the
-  hparams_tools.CHECKPOINT_HPARAMS dictionary.
+  Obtains hyperparameters from checkpoint_dir, constructs the graph
+  and loads parameters from checkpoint file.
 
   Returns:
     wrapped_model: A tfutil.WrappedModel object that
         consists of the model, graph, session and hparams.
   """
-  hparams = get_checkpoint_hparams(checkpoint_dir)
+  hparams_fpath = os.path.join(os.path.dirname(path), 'config')
+  with open(hparams_fpath, 'r') as p:
+    hparams = yaml.load(p)
   placeholders, model = graph.build_graph(is_training=False, hparams=hparams)
   wmodel = tfutil.WrappedModel(model, model.loss.graph, hparams)
   with wmodel.graph.as_default():
-    saver = tf.train.Saver()
-    sess = tf.Session()
-    checkpoint_fpath = hparams.checkpoint_fpath
-    print 'checkpoint_fpath', checkpoint_fpath
-    tf.logging.info('Checkpoint used: %s', checkpoint_fpath)
-    try:
-      saver.restore(sess, checkpoint_fpath)
-    except IOError:
-      tf.logging.fatal('No such file or directory: %s' % checkpoint_fpath)
-    wmodel.sess = sess
     wmodel.placeholders = placeholders
+    wmodel.sess = tf.Session()
+    saver = tf.train.Saver()
+    tf.logging.info('loading checkpoint %s', path)
+    saver.restore(wmodel.sess, path)
   return wmodel
-
-def get_checkpoint_hparams(checkpoint_dir):
-  hparams_fpath = os.path.join(checkpoint_dir, 'config')
-  with open(hparams_fpath, 'r') as p:
-    hparams = yaml.load(p)
-  hparams.checkpoint_fpath = os.path.join(checkpoint_dir, 'best_model.ckpt')
-  print 'Will load checkpoint from ', hparams.checkpoint_fpath
-  return hparams
