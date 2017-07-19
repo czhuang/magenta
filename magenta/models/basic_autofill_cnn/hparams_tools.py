@@ -136,36 +136,30 @@ class Hyperparameters(object):
     # Filter out some parameters so that string repr won't be too long for
     # directory name.
     # Want to show 'dataset', input_depth', and use_softmax_loss, learning rate, 'batch_size'
-    keys_to_filter_out = [
-        'num_layers', 'num_filters', 'eval_freq',
-        'output_depth', 'model_name', 'checkpoint_name',
-        'batch_norm_variance_epsilon', 'batch_norm',
-        'init_scale', 'optimize_mask_only', 'conv_arch',
-        'mask_indicates_context',
-        'run_dir', 'num_epochs', 'log_process', 'save_model_secs', 
-        '_num_pitches', 'batch_size', 'input_depth', 'num_instruments', 
-        'num_pitches', 'start_filter_size',
-    ]
-    keys_to_include_last = ['maskout_method', 'corrupt_ratio']
-    key_to_shorthand = {
-        'batch_size': 'bs', 'learning_rate': 'lr', 'optimize_mask_only': 'mask_only',
-        'corrupt_ratio': 'corrupt', 'input_depth': 'in', 'crop_piece_len': 'len',
-        'use_softmax_loss': 'soft', 'num_instruments': 'num_i', 'num_pitches': 'n_pch',
-        'quantization_level': 'quant', 
-        'use_residual': 'res',
-        'separate_instruments': 'sep', 'rescale_loss': 'rescale', 
-        'maskout_method': 'mm'}
-
-
-    def _repr(key):
-      return key if key not in key_to_shorthand else key_to_shorthand[key]
+    blacklist = """
+        num_layers num_filters eval_freq output_depth model_name checkpoint_name
+        batch_norm_variance_epsilon batch_norm init_scale optimize_mask_only
+        conv_arch mask_indicates_context run_dir num_epochs log_process
+        save_model_secs batch_size input_depth num_instruments num_pitches
+        start_filter_size
+    """.split()
+    lastlist = """maskout_method corrupt_ratio'""".split()
+    shorthand = dict(
+        batch_size='bs', learning_rate='lr', optimize_mask_only='mask_only',
+        corrupt_ratio='corrupt', input_depth='in', crop_piece_len='len',
+        use_softmax_loss='soft', num_instruments='num_i', num_pitches='n_pch',
+        quantization_level='quant', use_residual='res',
+        separate_instruments='sep', rescale_loss='rescale', 
+        maskout_method='mm')
 
     def show_first(key):
-      return key not in keys_to_filter_out and key not in keys_to_include_last
+      return (key not in blacklist and
+              key not in lastlist)
 
-    line = ','.join('%s=%s' % (_repr(key), getattr(self, key)) for key in sorted_keys if show_first(key))
-    line += ','
-    line += ','.join('%s=%s' % (_repr(key), getattr(self, key)) for key in sorted_keys if key in keys_to_include_last)
+    first_keys = [key for key in sorted_keys if show_first(key)]
+    last_keys = [key for key in sorted_keys if key in lastlist]
+    line = ','.join('%s=%s' % (shorthand.get(key, key), getattr(self, key))
+                    for key in it.chain.from_iterable(first_keys + last_keys))
     return line
 
   def get_conv_arch(self):
