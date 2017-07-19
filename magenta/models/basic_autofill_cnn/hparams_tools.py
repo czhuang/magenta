@@ -12,8 +12,6 @@ class Hyperparameters(object):
       quantization_level=0.125,
       shortest_Duration=0.125,
       qpm=60,
-      augment_by_transposing=0,
-      augment_by_halfing_doubling_durations=0,
       corrupt_ratio=0.25,
       # Input dimensions.
       batch_size=20,
@@ -113,16 +111,6 @@ class Hyperparameters(object):
     return 0   
   
   @property
-  def num_pitches(self):
-    if self.augment_by_transposing:
-      return self._num_pitches + 11  
-    return self._num_pitches
- 
-  @num_pitches.setter
-  def num_pitches(self, num):
-    self._num_pitches = num
- 
-  @property
   def conv_arch(self):
     return self.get_conv_arch()
   
@@ -180,7 +168,6 @@ class Hyperparameters(object):
         'output_depth', 'model_name', 'checkpoint_name',
         'batch_norm_variance_epsilon', 'batch_norm_gamma', 'batch_norm',
         'init_scale', 'optimize_mask_only', 'conv_arch',
-        'augment_by_halfing_doubling_durations', 'augment_by_transposing',
         'mask_indicates_context', 'denoise_mode', 
         'run_dir', 'num_epochs', 'log_process', 'save_model_secs', 
         '_num_pitches', 'batch_size', 'input_depth', 'num_instruments', 

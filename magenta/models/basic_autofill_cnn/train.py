@@ -76,15 +76,6 @@ tf.app.flags.DEFINE_bool('optimize_mask_only', False, 'optimize masked predictio
 tf.app.flags.DEFINE_bool('rescale_loss', True, 'Rescale loss based on context size.')
 tf.app.flags.DEFINE_integer('patience', 5, 'Number of epochs to wait for improvement before decaying the learning rate.')
 
-# Data Augmentation.
-tf.app.flags.DEFINE_integer('augment_by_transposing', 0, 'If true during '
-                            'training shifts each data point by a random '
-                            'interval between -5 and 6 ')
-tf.app.flags.DEFINE_integer('augment_by_halfing_doubling_durations', 0, 'If '
-                            'true during training randomly chooses to double '
-                            'or halve durations or stay the same.  The former '
-                            'two options are only available if they do not '
-                            'go outside of the original set of durations.')
 # Denoise mode.
 tf.app.flags.DEFINE_bool('denoise_mode', False, 'Instead of blankout, randomly add perturb noise.  Hence instead of inpainting, model learns to denoise.')
 tf.app.flags.DEFINE_float('corrupt_ratio', 0.5, 'Ratio to blankout (or perturb in case of denoising).')
@@ -213,7 +204,6 @@ def main(unused_argv):
     tf.logging.fatal('No input directory was provided.')
 
   print FLAGS.maskout_method, 'seperate', FLAGS.separate_instruments
-  print 'Augmentation', FLAGS.augment_by_transposing, FLAGS.augment_by_halfing_doubling_durations
 
   hparams = _hparams_from_flags()
   
@@ -337,7 +327,6 @@ def _hparams_from_flags():
       crop_piece_len pad model_name num_layers num_filters start_filter_size
       encode_silences use_residual batch_size maskout_method
       mask_indicates_context optimize_mask_only rescale_loss patience
-      augment_by_transposing augment_by_halfing_doubling_durations
       denoise_mode corrupt_ratio eval_freq run_id
       """.split())
   hparams = Hyperparameters(**dict((key, getattr(FLAGS, key))

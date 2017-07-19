@@ -8,9 +8,6 @@ import tensorflow as tf
 import mask_tools
 from pianorolls_lib import PianorollEncoderDecoder
 
-# Enumerations for data augmentation for durations.
-KEEP_ORIGINAL_DURATIONS, HALF_TIME, DOUBLE_TIME = range(3)
-
 DATASET_PARAMS = {
     'Nottingham': {
         'pitch_ranges': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 9}, 
@@ -28,13 +25,6 @@ DATASET_PARAMS = {
 class DataProcessingError(Exception):
   """Exception for when data does not meet the expected requirements."""
   pass
-
-
-def random_double_or_halftime_pianoroll_from_note_sequence(
-    sequence, augment_by_halfing_doubling_durations, encoder):
-  if not augment_by_halfing_doubling_durations:
-    return encoder.encode(sequence)
-  assert False, 'Not yet supported in this version.'
 
 
 def random_crop_pianoroll(pianoroll,
@@ -64,25 +54,6 @@ def random_crop_pianoroll(pianoroll,
   else:
     start_time_idx = np.random.randint(len(pianoroll) - crop_len)
   return pianoroll = pianoroll[start_time_idx:start_time_idx + crop_len]
-
-
-def augment_by_transposing(pianoroll):
-  # High exclusive, also it's asymmetic.
-  random_shift = np.random.randint(-5, 7)
-  if random_shift == 0:
-    return pianoroll
-
-  shifted_pianoroll = np.roll(pianoroll, random_shift, axis=2)
-  # Check that there's actually no roll over.
-  if random_shift > 0:
-    # Even though high range here is exclusive, since checking if high rolled into low.
-    num_events = np.sum(shifted_pianoroll[:, :random_shift - 1, :])
-    assert num_events == 0
-  else:
-    # random_shift is negative, hence don't need to add negative sign to random_shift.
-    num_events = np.sum(shifted_pianoroll[:, random_shift - 1:, :])
-    assert num_events == 0
-  return shifted_pianoroll
 
 
 def random_crop_pianoroll_pad(pianoroll,
@@ -125,23 +96,17 @@ def make_data_feature_maps(sequences, hparams, encoder, start_crop_index=None):
   seq_count = 0
   for sequence in sequences:
     if encoder is not None:
-      pianoroll = random_double_or_halftime_pianoroll_from_note_sequence(
-          sequence, hparams.augment_by_halfing_doubling_durations, encoder)
+      pianoroll = encoder.encode(sequence)
     else:
       # For images, no encoder, already in pianoroll-like form.
       pianoroll = sequence
     try:
       if hparams.pad:
-        # TODO: Padding function does not support augment_by_transposing yet.
         cropped_pianoroll, length = random_crop_pianoroll_pad(
             pianoroll, hparams.crop_piece_len, start_crop_index)
-        #if length != cropped_pianoroll.shape[0]:
-        #  print length, 'padded to', cropped_pianoroll.shape[0]
       else:  
         cropped_pianoroll = random_crop_pianoroll(
             pianoroll, hparams.crop_piece_len, start_crop_index)
-        if hparams.augment_by_transposing:
-          cropped_pianoroll = augment_by_transposing(cropped_pianoroll)
         length = hparams.crop_piece_len
     except DataProcessingError:
       tf.logging.warning('Piece shorter than requested crop length.')

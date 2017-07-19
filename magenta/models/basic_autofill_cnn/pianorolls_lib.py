@@ -107,7 +107,6 @@ class PianorollEncoderDecoder(object):
                max_pitch=88,
                sequence_iterator=None,
                separate_instruments=True,
-               augment_by_transposing=False,
                num_instruments=None,
                encode_silences=None,
                quantization_level=None):
@@ -122,9 +121,6 @@ class PianorollEncoderDecoder(object):
       self.shortest_duration = find_shortest_duration(sequences)
       self.min_pitch, self.max_pitch = find_pitch_range(sequences)
 
-    if augment_by_transposing:
-      self.min_pitch = self.min_pitch - 5
-      self.max_pitch = self.max_pitch + 6
     self.shortest_duration = float(self.shortest_duration)
     self.separate_instruments = separate_instruments
     self.num_instruments = num_instruments
