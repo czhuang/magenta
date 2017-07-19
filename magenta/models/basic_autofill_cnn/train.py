@@ -76,8 +76,7 @@ tf.app.flags.DEFINE_bool('rescale_loss', True, 'Rescale loss based on context si
 tf.app.flags.DEFINE_integer('patience', 5, 'Number of epochs to wait for improvement before decaying the learning rate.')
 
 # Denoise mode.
-tf.app.flags.DEFINE_bool('denoise_mode', False, 'Instead of blankout, randomly add perturb noise.  Hence instead of inpainting, model learns to denoise.')
-tf.app.flags.DEFINE_float('corrupt_ratio', 0.5, 'Ratio to blankout (or perturb in case of denoising).')
+tf.app.flags.DEFINE_float('corrupt_ratio', 0.5, 'Fraction of variables to mask out.')
 # Run parameters.
 tf.app.flags.DEFINE_integer('num_epochs', 0,
                             'The number of epochs to train the model. Default '
@@ -326,7 +325,7 @@ def _hparams_from_flags():
       crop_piece_len model_name num_layers num_filters start_filter_size
       encode_silences use_residual batch_size maskout_method
       mask_indicates_context optimize_mask_only rescale_loss patience
-      denoise_mode corrupt_ratio eval_freq run_id
+      corrupt_ratio eval_freq run_id
       """.split())
   hparams = Hyperparameters(**dict((key, getattr(FLAGS, key))
                                    for key in keys))

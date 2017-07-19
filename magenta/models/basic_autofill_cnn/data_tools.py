@@ -48,10 +48,7 @@ def make_data_feature_maps(sequences, hparams, encoder):
         hparams.maskout_method, pianoroll.shape,
         separate_instruments=hparams.separate_instruments,
         blankout_ratio=hparams.corrupt_ratio)
-    if hparams.denoise_mode:
-      masked_pianoroll = mask_tools.perturb_and_stack(pianoroll, mask)
-    else:
-      masked_pianoroll = mask_tools.apply_mask_and_stack(pianoroll, mask)
+    masked_pianoroll = mask_tools.apply_mask_and_stack(pianoroll, mask)
     input_data.append(masked_pianoroll)
     targets.append(pianoroll)
 

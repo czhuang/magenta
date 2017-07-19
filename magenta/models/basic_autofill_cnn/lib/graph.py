@@ -60,11 +60,6 @@ class CoconetGraph(object):
         stuff, mask = tf.split(input, 2, axis=3)
         return tf.concat([stuff, 1 - mask], axis=3)
       input_data = flip_mask(input_data)
-
-    # For denoising case, don't use masks in model
-    if self.hparams.denoise_mode:
-      input_data, _ = tf.split(input_data, 2, axis=3)
-
     return input_data
 
   def setup_optimizer(self):

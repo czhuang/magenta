@@ -37,7 +37,6 @@ class Hyperparameters(object):
       num_filters=256,
       start_filter_size=3, 
       use_residual=True,
-      denoise_mode=False,
       checkpoint_name=None,
       # Loss setup.
       # TODO: currently maskout_method here is not functional, still need to go through config_tools.
@@ -86,20 +85,11 @@ class Hyperparameters(object):
 
   @property
   def input_depth(self):
-    if self.separate_instruments:
-      input_depth = self.num_instruments * 2
-    else:
-      input_depth = 1 * 2
-    if self.denoise_mode:
-      input_depth //= 2
-    return input_depth
+    return 2 * (self.num_instruments if self.separate_instruments else 1)
   
   @property
   def output_depth(self):
-    if not self.denoise_mode:
-      return self.input_depth // 2    
-    else:
-      return self.input_depth
+    return self.num_instruments if self.separate_instruments else 1
   
   @property
   def num_extra_encodings(self):
@@ -165,7 +155,7 @@ class Hyperparameters(object):
         'output_depth', 'model_name', 'checkpoint_name',
         'batch_norm_variance_epsilon', 'batch_norm_gamma', 'batch_norm',
         'init_scale', 'optimize_mask_only', 'conv_arch',
-        'mask_indicates_context', 'denoise_mode', 
+        'mask_indicates_context',
         'run_dir', 'num_epochs', 'log_process', 'save_model_secs', 
         '_num_pitches', 'batch_size', 'input_depth', 'num_instruments', 
         'num_pitches', 'start_filter_size',
