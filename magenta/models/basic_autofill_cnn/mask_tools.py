@@ -49,13 +49,6 @@ def apply_mask_and_stack(pianoroll, mask):
   """
   if pianoroll.shape[1:] != mask.shape[1:]: 
     raise MaskUseError('Shape mismatch in pianoroll and mask.')
-
-  # FIXME is this really the right place to pad?
-  T, P, I = pianoroll.shape
-  pad_length = T - mask.shape[0]
-  assert np.sum(pianoroll[(T-pad_length):, :, :]) == 0
-  mask = np.pad(mask, [(0, pad_length)] + [(0, 0)] * (pianoroll.ndim - 1), 
-                mode="constant", constant_values=1)
   masked_pianoroll = pianoroll * (1 - mask)
   return np.concatenate([masked_pianoroll, mask], 2)
 
