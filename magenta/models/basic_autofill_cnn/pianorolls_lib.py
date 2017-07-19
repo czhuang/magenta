@@ -159,22 +159,6 @@ class PianorollEncoderDecoder(object):
     #  return int(onsetq), int(closest_offbeat) + 1
     return int(onsetq), int(closest_offbeat)
 
-  def get_quantized_on_off_timesteps_may_overlap_with_other_notes(self, onset, offset):
-    onsetq = self.quantize(onset)
-    offsetq = self.quantize(offset)
-    # The closest current or future beat on quantized grid
-    closest_onbeat = np.ceil(onsetq)
-    if closest_onbeat > offsetq:
-      closest_onbeat = None
-    # The closest previous or current beat on quantized grid
-    closest_offbeat = np.floor(offsetq)
-    if closest_offbeat < onsetq:
-      closest_offbeat = None
-    if closest_onbeat is None or closest_offbeat is None:
-      return None, None
-    else:
-      return int(closest_onbeat), int(closest_offbeat)
-
   def encode(self,
              sequence,
              duration_ratio=1,
