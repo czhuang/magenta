@@ -42,15 +42,14 @@ class CoconetGraph(object):
         self.hiddens.append(output)
 
     self.logits = output
-    self.predictions = self.compute_predictions(logits=self.logits,
-                                                labels=self.targets)
+    self.predictions = self.compute_predictions(logits=self.logits)
     self.cross_entropy = self.compute_cross_entropy(logits=self.logits,
                                                     labels=self.targets)
 
     self.compute_loss(self.cross_entropy)
     self.setup_optimizer()
 
-  def preprocess_input(input_data):
+  def preprocess_input(self, input_data):
     if self.hparams.mask_indicates_context:
       # flip meaning of mask for convnet purposes: after flipping, mask is hot
       # where values are known. this makes more sense in light of padding done
@@ -91,9 +90,9 @@ class CoconetGraph(object):
                                  self.lengths[:, None, None, None])
 
     # construct mask and its complement, respecting pad mask
-    self.mask = tf.split(self.input_data, 2, axis=3)[1]
-    self.mask = self.mask * self.pad_mask
-    self.unmask = (1 - self.mask) * self.pad_mask
+    mask = tf.split(self.input_data, 2, axis=3)[1]
+    self.mask   = self.pad_mask * mask
+    self.unmask = self.pad_mask * (1 - mask)
 
     # Compute numbers of variables
     # #timesteps * #variables per timestep
@@ -129,7 +128,7 @@ class CoconetGraph(object):
                          / self.reduced_unmask_size)
 
     assert_partition_op = tf.group(
-        tf.assert_equal(tf.reduce_sum(self.mask * self.unmask), 0),
+        tf.assert_equal(tf.reduce_sum(self.mask * self.unmask), 0.),
         tf.assert_equal(self.reduced_mask_size + self.reduced_unmask_size,
                         reduced_D))
     with tf.control_dependencies([assert_partition_op]):
@@ -189,7 +188,7 @@ class CoconetGraph(object):
                         padding=layer.get('conv_pad', 'SAME'))
 
     # Compute batch normalization or add biases.
-    if hparams.batch_norm:
+    if self.hparams.batch_norm:
       y = self.apply_batchnorm(conv)
     else:
       biases = tf.get_variable('bias', [conv.get_shape()[-1]],
@@ -212,7 +211,7 @@ class CoconetGraph(object):
         "popvariance", shape=[1, 1, 1, output_dim], trainable=False,
         collections=[tf.GraphKeys.MODEL_VARIABLES, tf.GraphKeys.GLOBAL_VARIABLES],
         initializer=tf.constant_initializer(1.0))
-    batchmean, batchvariance = tf.nn.moments(conv, [0, 1, 2], keep_dims=True)
+    batchmean, batchvariance = tf.nn.moments(x, [0, 1, 2], keep_dims=True)
 
     decay = 0.01
     if self.is_training:
@@ -255,7 +254,7 @@ class CoconetGraph(object):
   def compute_cross_entropy(self, logits, labels):
       return (tf.nn.softmax_cross_entropy_with_logits(logits=logits,
                                                       labels=labels,
-                                                      dim=2)
+                                                      dim=2)[:, :, None]
               if self.hparams.use_softmax_loss else
               tf.nn.sigmoid_cross_entropy_with_logits(logits=logits,
                                                       labels=labels))

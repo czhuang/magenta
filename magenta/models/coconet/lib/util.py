@@ -167,20 +167,6 @@ class AggregateMean(object):
 def timestamp():
   return datetime.now().strftime("%Y%m%d%H%M%S")
 
-def batches(*xss, size=1, discard_remainder=True, shuffle=False, shuffle_rng=None):
-  shuffle_rng = get_rng(shuffle_rng)
-  n = int(np.unique(list(map(len, xss))))
-  assert all(len(xs) == len(xss[0]) for xs in xss)
-  indices = np.arange(len(xss[0]))
-  if shuffle:
-    np.random.shuffle(indices)
-  for start in range(0, n, size):
-    batch_indices = indices[start:start + size]
-    if len(batch_indices) < size and discard_remainder:
-      break
-    batch_xss = [xs[batch_indices] for xs in xss]
-    yield batch_xss
-
 def get_rng(rng=None):
   if rng is None:
     return np.random
@@ -210,6 +196,40 @@ def random_crop(x, length):
   x = x[start:start + length]
   return x
 
+
+def batches(*xss, **kwargs):
+  """Iterate over subsets of lists of examples
+
+  Yields batches of the form `[xs[indices] for xs in xss]` where at each
+  iteration `indices` selects a subset. Each index is only selected once.
+
+  Args:
+    *xss: lists of elements to batch
+    size: number of elements per batch
+    discard_remainder: if true, discard final short batch
+    shuffle: if true, yield examples in randomly determined order
+    shuffle_rng: seed or rng to determine random order
+
+  Yields:
+    A batch of the same structure as `xss`, but with `size` examples.
+  """
+  size = kwargs.get("size", 1)
+  discard_remainder = kwargs.get("discard_remainder", True)
+  shuffle = kwargs.get("shuffle", False)
+  shuffle_rng = kwargs.get("shuffle_rng", None)
+
+  shuffle_rng = get_rng(shuffle_rng)
+  n = int(np.unique(list(map(len, xss))))
+  assert all(len(xs) == len(xss[0]) for xs in xss)
+  indices = np.arange(len(xss[0]))
+  if shuffle:
+    np.random.shuffle(indices)
+  for start in range(0, n, size):
+    batch_indices = indices[start:start + size]
+    if len(batch_indices) < size and discard_remainder:
+      break
+    batch_xss = [xs[batch_indices] for xs in xss]
+    yield batch_xss
 
 def pad_and_stack(*xss):
   """Pad and stack lists of examples.

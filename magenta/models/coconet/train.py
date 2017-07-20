@@ -58,24 +58,23 @@ tf.app.flags.DEFINE_integer('batch_size', 20,
                             'The batch size training and validation the model.')
 
 # Mask related.
-tf.app.flags.DEFINE_string('maskout_method', 'balanced_by_scaling', 
+tf.app.flags.DEFINE_string('maskout_method', 'orderless', 
                            "The choices include: 'bernoulli' "
-                           'and balanced_by_scaling (which '
-                           'invokes gradient rescaling as per NADE).')
+                           "and 'orderless' (which "
+                           "invokes gradient rescaling as per NADE).")
 tf.app.flags.DEFINE_bool('mask_indicates_context', True, 
                          'Feed inverted mask into convnet so that zero-padding makes sense')
 tf.app.flags.DEFINE_bool('optimize_mask_only', False, 'optimize masked predictions only')
 tf.app.flags.DEFINE_bool('rescale_loss', True, 'Rescale loss based on context size.')
 tf.app.flags.DEFINE_integer('patience', 5, 'Number of epochs to wait for improvement before decaying the learning rate.')
 
-# Denoise mode.
 tf.app.flags.DEFINE_float('corrupt_ratio', 0.5, 'Fraction of variables to mask out.')
 # Run parameters.
 tf.app.flags.DEFINE_integer('num_epochs', 0,
                             'The number of epochs to train the model. Default '
                             'is 0, which means to run until terminated '
                             'manually.')
-tf.app.flags.DEFINE_integer('save_model_secs', 30,
+tf.app.flags.DEFINE_integer('save_model_secs', 60,
                             'The number of seconds between saving each '
                             'checkpoint.')
 tf.app.flags.DEFINE_integer('eval_freq', 5,
@@ -132,14 +131,14 @@ def run_epoch(supervisor,
   losses_unmask = lib.util.AggregateMean('losses_unmask')
 
   start_time = time.time()
-  for step, (x, y, length) in batches:
+  for step, (x, y, length) in enumerate(batches):
     # Evaluate the graph and run back propagation.
     fetches = [m.loss, m.loss_total, m.loss_mask, m.loss_unmask,
                m.reduced_mask_size, m.reduced_unmask_size,
                m.learning_rate, eval_op]
     feed_dict = {m.input_data: x,
                  m.targets: y,
-                 m.lengths: lens}
+                 m.lengths: length}
     (loss, loss_total, loss_mask, loss_unmask,
      reduced_mask_size, reduced_unmask_size, 
      learning_rate, _) = sess.run(fetches, feed_dict=feed_dict)
@@ -229,12 +228,12 @@ def main(unused_argv):
                       decay_op=m.decay_op,
                       save_path=os.path.join(FLAGS.log_dir,
                                              hparams.log_subdir_str,
-                                             'best_model.ckpt' % hparams.name))
+                                             'best_model.ckpt'))
 
     # Graph will be finalized after instantiating supervisor.
     sv = tf.train.Supervisor(
         logdir=logdir,
-        saver=tf.USE_DEFAULT if FLAGS.log_progress else None,
+        saver=tf.train.Supervisor.USE_DEFAULT if FLAGS.log_progress else None,
         summary_op=None,
         save_model_secs=FLAGS.save_model_secs)
     with sv.PrepareSession() as sess:
@@ -254,6 +253,8 @@ def main(unused_argv):
               sv, sess, mvalid, valid_data, pianoroll_encoder, hparams,
               no_op, 'valid', epoch_count)
           tracker(loss, sess)
+          if tracker.should_stop():
+            break
 
         epoch_count += 1
 
@@ -275,10 +276,11 @@ class Tracker(object):
     self.true_age = 0
     self.decay_op = decay_op
 
-  def __call__(self, x, sess):
-    if self.sign * x > self.sign * self.best:
+  def __call__(self, loss, sess):
+    if self.sign * loss > self.sign * self.best:
       if FLAGS.log_progress:
         tf.logging.info('Previous best %s: %.4f.', self.label, self.best)
+        tf.gfile.MakeDirs(os.path.dirname(self.save_path))
         self.saver.save(sess, self.save_path)
         tf.logging.info('Storing best model so far with loss %.4f at %s.' %
                         (loss, self.save_path))
@@ -291,11 +293,12 @@ class Tracker(object):
       if self.age > self.patience:
         sess.run([self.decay_op])
         self.age = 0
-      if self.true_age > 5 * self.patience:
-        break
+
+  def should_stop(self):
+    return self.true_age > 5 * self.patience
 
 
-def _print_popstat_info(tfpopstats, nppopstats)
+def _print_popstat_info(tfpopstats, nppopstats):
   mean_errors = []
   stdev_errors = []
   for j, (tfpopstat, nppopstat) in enumerate(zip(tfpopstats, nppopstats)):

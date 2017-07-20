@@ -39,7 +39,7 @@ class Hyperparameters(object):
       checkpoint_name=None,
       # Loss setup.
       # TODO: currently maskout_method here is not functional, still need to go through config_tools.
-      maskout_method='balanced_by_scaling',
+      maskout_method='orderless',
       optimize_mask_only=False,
       #use_softmax_loss=True,
       rescale_loss=True,
@@ -91,10 +91,6 @@ class Hyperparameters(object):
     return self.num_instruments if self.separate_instruments else 1
   
   @property
-  def conv_arch(self):
-    return self.get_conv_arch()
-  
-  @property
   def log_subdir_str(self):
     return '%s_%s' % (self.conv_arch.name, self.__str__())
   
@@ -130,44 +126,30 @@ class Hyperparameters(object):
 
   def __str__(self):
     """Get all hyperparameters as a string."""
-    param_keys = self.__dict__.keys() + ["use_softmax_loss", "num_pitches", "input_depth"]
-    #param_keys = [key for key in dir(self) if '__' not in key and key != '_defaults']
-    #print param_keys
-    sorted_keys = sorted(param_keys)
-    # Filter out some parameters so that string repr won't be too long for
-    # directory name.
-    # Want to show 'dataset', input_depth', and use_softmax_loss, learning rate, 'batch_size'
-    blacklist = """
-        num_layers num_filters eval_freq output_depth architecture checkpoint_name
-        batch_norm_variance_epsilon batch_norm init_scale optimize_mask_only
-        conv_arch mask_indicates_context run_dir num_epochs log_process
-        save_model_secs batch_size input_depth num_instruments num_pitches
-    """.split()
-    lastlist = """maskout_method corrupt_ratio'""".split()
+    # include whitelisted keys only
     shorthand = dict(
         batch_size='bs', learning_rate='lr', optimize_mask_only='mask_only',
-        corrupt_ratio='corrupt', input_depth='in', crop_piece_len='len',
+        corrupt_ratio='corrupt', crop_piece_len='len',
         use_softmax_loss='soft', num_instruments='num_i', num_pitches='n_pch',
         quantization_level='quant', use_residual='res',
         separate_instruments='sep', rescale_loss='rescale', 
         maskout_method='mm')
-
-    def show_first(key):
-      return (key not in blacklist and
-              key not in lastlist)
-
-    first_keys = [key for key in sorted_keys if show_first(key)]
-    last_keys = [key for key in sorted_keys if key in lastlist]
-    line = ','.join('%s=%s' % (shorthand.get(key, key), getattr(self, key))
-                    for key in it.chain.from_iterable(first_keys + last_keys))
+    sorted_keys = sorted(shorthand.keys())
+    line = ','.join('%s=%s' % (shorthand[key], getattr(self, key))
+                    for key in sorted_keys)
     return line
 
-  def get_conv_arch(self):
+  @property
+  def conv_arch(self):
     """Returns the model architecture."""
-    return Architecture.make(
+    try:
+      return self._conv_arch
+    except AttributeError:
+      self._conv_arch = Architecture.make(
         self.architecture, 
         self.input_depth, self.num_layers, self.num_filters, 
         self.num_pitches, output_depth=self.output_depth)
+      return self._conv_arch
 
 
 class Architecture(lib.util.Factory):

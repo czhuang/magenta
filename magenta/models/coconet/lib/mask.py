@@ -64,7 +64,7 @@ def get_mask(maskout_method, *args, **kwargs):
 class BernoulliMaskoutMethod(MaskoutMethod):
   key = "bernoulli"
 
-  def __call__(pianoroll_shape, separate_instruments=True,
+  def __call__(self, pianoroll_shape, separate_instruments=True,
                blankout_ratio=0.5, **kwargs):
     if len(pianoroll_shape) != 3:
       raise ValueError(
@@ -83,7 +83,7 @@ class BernoulliMaskoutMethod(MaskoutMethod):
 class OrderlessMaskoutMethod(MaskoutMethod):
   key = "orderless"
 
-  def __call__(pianoroll_shape, separate_instruments=True, **kwargs):
+  def __call__(self, pianoroll_shape, separate_instruments=True, **kwargs):
     T, P, I = pianoroll_shape
 
     if separate_instruments:
