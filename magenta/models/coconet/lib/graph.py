@@ -45,6 +45,10 @@ class CoconetGraph(object):
     self.predictions = self.compute_predictions(logits=self.logits)
     self.cross_entropy = self.compute_cross_entropy(logits=self.logits,
                                                     labels=self.targets)
+    if self.hparams.use_softmax_loss:
+      # FIXME this gives a very different result than tf.softmax_cross[..]with_logits,
+      # find out why
+      self.cross_entropy = -tf.log(self.predictions) * self.targets
 
     self.compute_loss(self.cross_entropy)
     self.setup_optimizer()
@@ -247,17 +251,17 @@ class CoconetGraph(object):
         padding=layer['pool_pad'])
 
   def compute_predictions(self, logits):
-      return (tf.nn.softmax(logits, dim=2)
-              if self.hparams.use_softmax_loss else
-              tf.nn.sigmoid(logits))
+    return (tf.nn.softmax(logits, dim=2)
+            if self.hparams.use_softmax_loss else
+            tf.nn.sigmoid(logits))
 
   def compute_cross_entropy(self, logits, labels):
-      return (tf.nn.softmax_cross_entropy_with_logits(logits=logits,
-                                                      labels=labels,
-                                                      dim=2)[:, :, None]
-              if self.hparams.use_softmax_loss else
-              tf.nn.sigmoid_cross_entropy_with_logits(logits=logits,
-                                                      labels=labels))
+    return (tf.nn.softmax_cross_entropy_with_logits(logits=logits,
+                                                    labels=labels,
+                                                    dim=2)[:, :, None]
+            if self.hparams.use_softmax_loss else
+            tf.nn.sigmoid_cross_entropy_with_logits(logits=logits,
+                                                    labels=labels))
 
 
 def get_placeholders(hparams):
