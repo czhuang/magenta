@@ -88,12 +88,11 @@ def estimate_popstats(sv, sess, m, dataset, hparams):
   nepochs = 3
   nppopstats = [lib.util.AggregateMean("") for _ in tfpopstats]
   for _ in range(nepochs):
-    xs, ys, lengths = dataset.get_featuremaps()
-    batches = lib.util.batches(xs, ys, lengths, size=m.batch_size, shuffle=True)
-    for step, (x, y, length) in enumerate(batches):
-      feed_dict = {m.input_data: x,
-                   m.targets: y,
-                   m.lengths: length}
+    batches = (dataset
+               .get_featuremaps()
+               .batches(size=m.batch_size, shuffle=True, shuffle_rng=data_seed))
+    for step, batch in enumerate(batches):
+      feed_dict = batch.get_feed_dict(m.placeholders)
       npbatchstats = sess.run(tfbatchstats, feed_dict=feed_dict)
       for nppopstat, npbatchstat in zip(nppopstats, npbatchstats):
         nppopstat.add(npbatchstat)
@@ -117,9 +116,9 @@ def run_epoch(supervisor,
   # reduce variance in validation loss by fixing the seed
   data_seed = 123 if experiment_type == "valid" else None
   with lib.util.numpy_seed(data_seed):
-    xs, ys, lengths = dataset.get_featuremaps()
-    batches = lib.util.batches(xs, ys, lengths, size=m.batch_size,
-                           shuffle=True, shuffle_rng=data_seed)
+    batches = (dataset
+               .get_featuremaps()
+               .batches(size=m.batch_size, shuffle=True, shuffle_rng=data_seed))
 
   losses = lib.util.AggregateMean('losses')
   losses_total = lib.util.AggregateMean('losses_total')
@@ -127,14 +126,12 @@ def run_epoch(supervisor,
   losses_unmask = lib.util.AggregateMean('losses_unmask')
 
   start_time = time.time()
-  for step, (x, y, length) in enumerate(batches):
+  for step, batch in enumerate(batches):
     # Evaluate the graph and run back propagation.
     fetches = [m.loss, m.loss_total, m.loss_mask, m.loss_unmask,
                m.reduced_mask_size, m.reduced_unmask_size,
                m.learning_rate, eval_op]
-    feed_dict = {m.input_data: x,
-                 m.targets: y,
-                 m.lengths: length}
+    feed_dict = batch.get_feed_dict(m.placeholders)
     (loss, loss_total, loss_mask, loss_unmask,
      reduced_mask_size, reduced_unmask_size, 
      learning_rate, _) = sess.run(fetches, feed_dict=feed_dict)

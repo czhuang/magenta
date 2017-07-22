@@ -9,22 +9,26 @@ import lib.util
 class CoconetGraph(object):
   """Model for predicting autofills given context."""
 
-  def __init__(self, is_training, hparams, input_data,
-               targets, lengths):
+  def __init__(self, is_training, hparams, placeholders):
     self.hparams = hparams
     self.batch_size = hparams.batch_size
     self.num_pitches = hparams.num_pitches
     self.num_instruments = hparams.num_instruments
     self.is_training = is_training
-    self.input_data = input_data
-    self.targets = targets
-    self.lengths = lengths
+    self.placeholders = placeholders
     self.hiddens = []
     self.popstats_by_batchstat = OrderedDict()
     self.build()
 
+  @property
+  def pianorolls(self): return self.placeholders["pianorolls"]
+  @property
+  def masks(self): return self.placeholders["masks"]
+  @property
+  def lengths(self): return self.placeholders["lengths"]
+
   def build(self):
-    output = self.preprocess_input(self.input_data)
+    featuremaps = self.get_convnet_input()
     self.residual_init()
 
     layers = self.hparams.conv_arch.layers
@@ -32,38 +36,39 @@ class CoconetGraph(object):
     for i, layer in enumerate(layers):
       with tf.variable_scope('conv%d' % i):
         self.residual_counter += 1
-        self.residual_save(output)
+        self.residual_save(featuremaps)
 
-        output = self.apply_convolution(output, layer)
-        output = self.apply_residual(output, is_first=i == 0, is_last=i == n - 1)
-        output = self.apply_activation(output, layer)
-        output = self.apply_pooling(output, layer)
+        featuremaps = self.apply_convolution(featuremaps, layer)
+        featuremaps = self.apply_residual(featuremaps,
+                                          is_first=i == 0, is_last=i == n - 1)
+        featuremaps = self.apply_activation(featuremaps, layer)
+        featuremaps = self.apply_pooling(featuremaps, layer)
 
-        self.hiddens.append(output)
+        self.hiddens.append(featuremaps)
 
-    self.logits = output
+    self.logits = featuremaps
     self.predictions = self.compute_predictions(logits=self.logits)
     self.cross_entropy = self.compute_cross_entropy(logits=self.logits,
-                                                    labels=self.targets)
+                                                    labels=self.pianorolls)
     if self.hparams.use_softmax_loss:
       # FIXME this gives a very different result than tf.softmax_cross[..]with_logits,
       # find out why
-      self.cross_entropy = -tf.log(self.predictions) * self.targets
+      self.cross_entropy = -tf.log(self.predictions) * self.pianorolls
+      # it's because later multiplication with mask (which is replicated across pitch)
+      # cause it to broadcast, introducing a factor P
 
     self.compute_loss(self.cross_entropy)
     self.setup_optimizer()
 
-  def preprocess_input(self, input_data):
+  def get_convnet_input(self):
+    pianorolls, masks = self.placeholders["pianorolls"], self.placeholders["masks"]
     if self.hparams.mask_indicates_context:
       # flip meaning of mask for convnet purposes: after flipping, mask is hot
       # where values are known. this makes more sense in light of padding done
       # by convolution operations: the padded area will have zero mask,
       # indicating no information to rely on.
-      def flip_mask(input):
-        stuff, mask = tf.split(input, 2, axis=3)
-        return tf.concat([stuff, 1 - mask], axis=3)
-      input_data = flip_mask(input_data)
-    return input_data
+      masks = 1 - masks
+    return tf.concat([pianorolls, masks], axis=3)
 
   def setup_optimizer(self):
     self.learning_rate = tf.Variable(self.hparams.learning_rate,
@@ -85,58 +90,65 @@ class CoconetGraph(object):
             self.loss, var_list=tf.trainable_variables())
     ]
 
+  def compute_predictions(self, logits):
+    return (tf.nn.softmax(logits, dim=2)
+            if self.hparams.use_softmax_loss else
+            tf.nn.sigmoid(logits))
+
+  def compute_cross_entropy(self, logits, labels):
+    return (tf.nn.softmax_cross_entropy_with_logits(logits=logits,
+                                                    labels=labels,
+                                                    dim=2)[:, :, None]
+            if self.hparams.use_softmax_loss else
+            tf.nn.sigmoid_cross_entropy_with_logits(logits=logits,
+                                                    labels=labels))
+
   def compute_loss(self, unreduced_loss):
     # construct mask to identify zero padding that was introduced to
     # make the batch rectangular
-    batch_duration = tf.shape(self.targets)[1]
+    batch_duration = tf.shape(self.pianorolls)[1]
     indices = tf.to_float(tf.range(batch_duration))
-    self.pad_mask = tf.to_float(indices[None, :, None, None] <
-                                 self.lengths[:, None, None, None])
+    pad_mask = tf.to_float(indices[None, :, None, None] <
+                           self.lengths[:, None, None, None])
 
     # construct mask and its complement, respecting pad mask
-    mask = tf.split(self.input_data, 2, axis=3)[1]
-    self.mask   = self.pad_mask * mask
-    self.unmask = self.pad_mask * (1 - mask)
+    mask   = pad_mask * self.masks
+    unmask = pad_mask * (1 - self.masks)
 
     # Compute numbers of variables
     # #timesteps * #variables per timestep
     variable_axis = 3 if self.hparams.use_softmax_loss else 2
     D = (self.lengths[:, None, None, None] *
-         tf.to_float(tf.shape(self.targets)[variable_axis]))
+         tf.to_float(tf.shape(self.pianorolls)[variable_axis]))
     reduced_D = tf.reduce_sum(D)
 
     # Compute numbers of variables to be predicted/conditioned on
-    self.mask_size = tf.reduce_sum(
-        self.mask, axis=[1, variable_axis], keep_dims=True)
-    self.unmask_size = tf.reduce_sum(
-        self.unmask, axis=[1, variable_axis], keep_dims=True)
+    mask_size = tf.reduce_sum(mask, axis=[1, variable_axis], keep_dims=True)
+    unmask_size = tf.reduce_sum(unmask, axis=[1, variable_axis], keep_dims=True)
 
-    self.unreduced_loss = unreduced_loss * self.pad_mask
+    unreduced_loss = unreduced_loss * pad_mask
     if self.hparams.rescale_loss:
-      self.unreduced_loss *= D / self.mask_size
+      unreduced_loss *= D / mask_size
 
     # Compute average loss over entire set of variables
-    self.loss_total = tf.reduce_sum(self.unreduced_loss) / reduced_D
+    self.loss_total = tf.reduce_sum(unreduced_loss) / reduced_D
 
     # Compute separate losses for masked/unmasked variables
     # NOTE: indexing the pitch dimension with 0 because the mask is constant
     # across pitch. Except in the sigmoid case, but then the pitch dimension
     # will have been reduced over.
-    self.reduced_mask_size = tf.reduce_sum(self.mask_size[:, :, 0, :])
-    self.reduced_unmask_size = tf.reduce_sum(self.unmask_size[:, :, 0, :])
-
-    self.loss_mask = (tf.reduce_sum(self.mask * self.unreduced_loss)
-                      / self.reduced_mask_size)
-    self.loss_unmask = (tf.reduce_sum(self.unmask * self.unreduced_loss)
-                        / self.reduced_unmask_size)
+    reduced_mask_size = tf.reduce_sum(mask_size[:, :, 0, :])
+    reduced_unmask_size = tf.reduce_sum(unmask_size[:, :, 0, :])
 
     assert_partition_op = tf.group(
-        tf.assert_equal(tf.reduce_sum(self.mask * self.unmask), 0.),
-        tf.assert_equal(self.reduced_mask_size + self.reduced_unmask_size,
+        tf.assert_equal(tf.reduce_sum(mask * unmask), 0.),
+        tf.assert_equal(reduced_mask_size + reduced_unmask_size,
                         reduced_D))
     with tf.control_dependencies([assert_partition_op]):
-      self.loss_mask = tf.identity(self.loss_mask)
-      self.loss_unmask = tf.identity(self.loss_unmask)
+      self.loss_mask = (tf.reduce_sum(mask * unreduced_loss)
+                        / reduced_mask_size)
+      self.loss_unmask = (tf.reduce_sum(unmask * unreduced_loss)
+                          / reduced_unmask_size)
 
     # Check which loss to use as objective function.
     self.loss = (self.loss_mask if self.hparams.optimize_mask_only else
@@ -249,26 +261,13 @@ class CoconetGraph(object):
         strides=[1, pooling[0], pooling[1], 1],
         padding=layer['pool_pad'])
 
-  def compute_predictions(self, logits):
-    return (tf.nn.softmax(logits, dim=2)
-            if self.hparams.use_softmax_loss else
-            tf.nn.sigmoid(logits))
-
-  def compute_cross_entropy(self, logits, labels):
-    return (tf.nn.softmax_cross_entropy_with_logits(logits=logits,
-                                                    labels=labels,
-                                                    dim=2)[:, :, None]
-            if self.hparams.use_softmax_loss else
-            tf.nn.sigmoid_cross_entropy_with_logits(logits=logits,
-                                                    labels=labels))
-
 
 def get_placeholders(hparams):
   return dict(
-      input_data=tf.placeholder(tf.float32,
-                                [None, None] + hparams.input_shape[-2:]),
-      targets=tf.placeholder(tf.float32,
-                             [None, None] + hparams.output_shape[-2:]),
+      pianoroll=tf.placeholder(tf.float32,
+                               [None, None] + hparams.input_shape[-2:]),
+      mask=tf.placeholder(tf.float32,
+                          [None, None] + hparams.input_shape[-2:]),
       lengths=tf.placeholder(tf.float32, [None]))
 
 
@@ -280,7 +279,7 @@ def build_graph(is_training, hparams, placeholders=None):
   with tf.variable_scope('model', reuse=None, initializer=initializer):
     graph = CoconetGraph(is_training=is_training,
                          hparams=hparams,
-                         **placeholders)
+                         placeholders=placeholders)
   return graph
 
 def load_checkpoint(path):

@@ -425,11 +425,9 @@ class BaseSampler(lib.util.Factory):
 
   def predict(self, pianorolls, masks):
     # TODO: wrap in RobustPredictor from evaluation_tools
-    input_data = np.asarray([
-      lib.mask.apply_mask_and_stack(pianoroll, mask)
-      for pianoroll, mask in zip(pianorolls, masks)])
     predictions = self.wmodel.sess.run(self.wmodel.model.predictions,
-                                       {self.wmodel.model.input_data: input_data})
+                                       {self.wmodel.model.pianorolls: pianorolls,
+                                        self.wmodel.model.masks: masks})
     return predictions
 
   @classmethod

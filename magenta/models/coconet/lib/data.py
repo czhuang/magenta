@@ -54,24 +54,11 @@ class Dataset(lib.util.Factory):
     return list(map(encoder.encode, sequences))
 
   def get_featuremaps(self, sequences=None):
-    """Return input and output pairs of masked out and full pianorolls.
-  
-    Args:
-      sequences: A list of NoteSequences. If not given, the full dataset
-          is used.
-  
-    Returns:
-      input_data: A 4D matrix with dimensions named
-          (batch, time, pitch, masked_or_mask), interleaved with maskout
-          pianorolls and masks.
-      target: A 4D matrix of the original pianorolls with dimensions named
-          (batch, time, pitch).
-    """
     if sequences is None:
       sequences = self.get_sequences()
 
-    input_data = []
-    targets = []
+    pianorolls = []
+    masks = []
 
     for sequence in sequences:
       pianoroll = self.encoder.encode(sequence)
@@ -80,13 +67,13 @@ class Dataset(lib.util.Factory):
           self.hparams.maskout_method, pianoroll.shape,
           separate_instruments=self.hparams.separate_instruments,
           blankout_ratio=self.hparams.corrupt_ratio)
-      masked_pianoroll = lib.mask.apply_mask_and_stack(pianoroll, mask)
-      input_data.append(masked_pianoroll)
-      targets.append(pianoroll)
+      pianorolls.append(pianoroll)
+      masks.append(mask)
   
-    (input_data, targets), lengths = lib.util.pad_and_stack(input_data, targets)
-    assert input_data.ndim == 4 and targets.ndim == 4
-    return input_data, targets, lengths
+    (pianorolls, masks), lengths = lib.util.pad_and_stack(pianorolls, masks)
+    assert pianorolls.ndim == 4 and masks.ndim == 4
+    assert pianorolls.shape == masks.shape
+    return Batch(pianorolls=pianorolls, masks=masks, lengths=lengths)
 
   def update_hparams(self, hparams):
     for key in "num_instruments num_pitches min_pitch max_pitch qpm".split():
@@ -123,3 +110,20 @@ class Jsb16thSeparated(Dataset):
   shortest_duration = 0.125
   num_instruments = 4
   qpm = 60
+
+class Batch(object):
+  keys = set("pianorolls masks lengths".split())
+
+  def __init__(self, **kwargs):
+    assert set(kwargs.keys()) == self.keys
+    self.features = kwargs
+
+  def get_feed_dict(self, placeholders):
+    assert set(placeholders.keys()) == self.keys
+    return dict((placeholders[key], self.features[key])
+                for key in self.keys)
+
+  def batches(self, **batches_kwargs):
+    keys, values = list(zip(*list(self.features.items())))
+    for batch in util.batches(values, **batches_kwargs):
+      yield dict(zip(keys, batch))

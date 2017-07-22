@@ -55,10 +55,10 @@ class BaseEvaluator(lib.util.Factory):
     self.wmodel = wmodel
     self.chronological = chronological
 
-    def predictor(xs, masks):
-      input_data = [lib.mask.apply_mask_and_stack(x, mask) for x, mask in zip(xs, masks)]
+    def predictor(pianorolls, masks):
       p = self.wmodel.sess.run(self.wmodel.model.predictions,
-                               feed_dict={self.wmodel.model.input_data: input_data})
+                               feed_dict={self.wmodel.model.pianorolls: pianorolls,
+                                          self.wmodel.model.masks: masks})
       return p
     self.predictor = lib.tfutil.RobustPredictor(predictor)
 

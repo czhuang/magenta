@@ -8,23 +8,6 @@ class MaskUseError(Exception):
   pass
 
 
-def apply_mask_and_stack(pianoroll, mask):
-  """Stack pianorolls and masks on the last dimension.
-
-  Args:
-    pianoroll: A 3D binary matrix with 2D slices of pianorolls. This is not
-        modified.
-    mask: A 3D binary matrix with 2D slices of masks, one per each pianoroll.
-
-  Returns:
-    A 3D binary matrix with masked pianoroll and mask stacked.
-
-  Raises:
-    MaskUseError: If the shape of pianoroll and mask do not match.
-  """
-  return np.concatenate([apply_mask(pianoroll, mask), mask], 2)
-
-
 def apply_mask(pianoroll, mask):
   """Apply mask to pianoroll.
 
