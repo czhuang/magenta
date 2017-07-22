@@ -9,34 +9,21 @@ import lib.mask
 import lib.pianoroll
 import lib.util
 
-DATASET_PARAMS = {
-    'Nottingham': {
-        'pitch_range': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 9},
-    'MuseData': {
-        'pitch_range': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 14},
-    'Piano-midi.de': {
-        'pitch_range': [21, 108], 'shortest_duration': 0.25, 'num_instruments': 12,
-        'batch_size': 12},
-    'jsb-chorales-16th-instrs_separated': {
-        'pitch_range': [36, 81], 'shortest_duration': 0.125,
-        'num_instruments': 4, 'qpm': 60},
-}
 
-
-class Dataset(object):
+class Dataset(lib.util.Factory):
   def __init__(self, basepath, hparams, fold):
     self.basepath = basepath
     self.hparams = hparams
     self.fold = fold
 
-    if self.params['shortest_duration'] != self.hparams.quantization_level:
+    if self.shortest_duration != self.hparams.quantization_level:
       raise ValueError('The data has a temporal resolution of shortest '
                        'duration=%r, requested=%r' %
-                       (self.params['shortest_duration'],
+                       (self.shortest_duration,
                         self.hparams.quantization_level))
 
     self.encoder = lib.pianoroll.PianorollEncoderDecoder(
-        shortest_duration=self.params['shortest_duration'],
+        shortest_duration=self.shortest_duration,
         min_pitch=self.min_pitch,
         max_pitch=self.max_pitch,
         separate_instruments=self.hparams.separate_instruments,
@@ -47,7 +34,7 @@ class Dataset(object):
 
   @property
   def name(self):
-    return self.hparams.dataset_name
+    return self.hparams.dataset
 
   @property
   def num_examples(self):
@@ -56,18 +43,6 @@ class Dataset(object):
   @property
   def num_pitches(self):
     return self.max_pitch + 1 - self.min_pitch
-
-  @property
-  def max_pitch(self):
-    return self.params["pitch_range"][1]
-
-  @property
-  def min_pitch(self):
-    return self.params["pitch_range"][0]
-
-  @property
-  def params(self):
-    return DATASET_PARAMS[self.name]
 
   def get_sequences(self):
     return self.data
@@ -91,10 +66,6 @@ class Dataset(object):
           pianorolls and masks.
       target: A 4D matrix of the original pianorolls with dimensions named
           (batch, time, pitch).
-  
-    Raises:
-      DataProcessingError: If pianoroll is shorter than the desired crop_len, or
-          if the inputs and targets have the wrong number of dimensions.
     """
     if sequences is None:
       sequences = self.get_sequences()
@@ -116,3 +87,39 @@ class Dataset(object):
     (input_data, targets), lengths = lib.util.pad_and_stack(input_data, targets)
     assert input_data.ndim == 4 and targets.ndim == 4
     return input_data, targets, lengths
+
+  def update_hparams(self, hparams):
+    for key in "num_instruments num_pitches min_pitch max_pitch qpm".split():
+      setattr(hparams, key, getattr(self, key))
+
+def get_dataset(basepath, hparams, fold):
+  return Dataset.make(hparams.dataset, basepath, hparams, fold)
+
+class Nottingham(Dataset):
+  key = "Nottingham"
+  min_pitch = 21
+  max_pitch = 108
+  shortest_duration = 0.25
+  num_instruments = 9
+
+class MuseData(Dataset):
+  key = "MuseData"
+  min_pitch = 21
+  max_pitch = 108
+  shortest_duration = 0.25
+  num_instruments = 14
+
+class PianoMidiDe(Dataset):
+  key = "PianoMidiDe"
+  min_pitch = 21
+  max_pitch = 108
+  shortest_duration = 0.25
+  num_instruments = 12
+
+class Jsb16thSeparated(Dataset):
+  key = "Jsb16thSeparated"
+  min_pitch = 36
+  max_pitch = 81
+  shortest_duration = 0.125
+  num_instruments = 4
+  qpm = 60

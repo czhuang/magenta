@@ -6,7 +6,7 @@ code_dir=$(dirname $0)
 log_dir="logs"
 # Change this to where data is loaded from.
 data_dir="$code_dir/data"
-dataset=jsb-chorales-16th-instrs_separated
+dataset=Jsb16thSeparated
 
 # Data preprocessing.
 crop_piece_len=64

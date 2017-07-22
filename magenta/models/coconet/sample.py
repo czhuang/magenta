@@ -71,7 +71,7 @@ def main(unused_argv):
       midi_fpath = os.path.join(midi_path, "%s_%i.midi" % (label, i))
       midi_data = pianoroll_to_midi(
           pianoroll, qpm=hparams.qpm, quantization_level=hparams.quantization_level, 
-          pitch_offset=hparams.pitch_ranges[0])
+          pitch_offset=hparams.min_pitch)
       print midi_fpath
       midi_data.write(midi_fpath)
 
@@ -147,29 +147,26 @@ class HarmonizeMidiMelodyStrategy(BaseStrategy):
     roll = roll.T
     return roll
   
-  def make_pianoroll_from_melody_roll(self, mroll, pitch_ranges,
-                                      requested_shape):
+  def make_pianoroll_from_melody_roll(self, mroll, requested_shape):
     # mroll shape: time, pitch
     # requested_shape: batch, time, pitch, instrument
     B, T, P, I = requested_shape
     print 'requested_shape', requested_shape
     assert mroll.ndim == 2
     assert mroll.shape[1] == 128
-    low, high = pitch_ranges
-    requested_range = high - low + 1
-    assert P == requested_range, '%r != %r' % (P, requested_range) 
+    hparams = self.wmodel.hparams
+    assert P == hparams.num_pitches, '%r != %r' % (P, hparams.num_pitches)
     if T != mroll.shape[0]:
       print 'WARNING: requested T %r != prime T %r' % (T, mroll.shape[0])
     rolls = np.zeros((B, mroll.shape[0], P, I), dtype=np.float32)
-    rolls[:, :, :, 0] = mroll[None, :, low:high+1]
+    rolls[:, :, :, 0] = mroll[None, :, hparams.min_pitch:hparams.max_pitch + 1]
     print 'resulting shape', rolls.shape
     return rolls
 
   @instrument(key + "_strategy")
   def __call__(self, pianorolls, masks):
     mroll = self.load_midi_melody()
-    pianorolls = self.make_pianoroll_from_melody_roll(
-        mroll, self.wmodel.hparams.pitch_ranges, pianorolls.shape)
+    pianorolls = self.make_pianoroll_from_melody_roll(mroll, pianorolls.shape)
     masks = HarmonizationMasker()(pianorolls.shape)
     num_steps = np.max(numbers_of_masked_variables(masks))
     print 'num_steps', num_steps

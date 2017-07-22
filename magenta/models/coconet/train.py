@@ -194,13 +194,15 @@ def main(unused_argv):
   hparams = _hparams_from_flags()
   
   # Get data.
-  train_data = lib.data.Dataset(FLAGS.data_dir, hparams, "train")
-  valid_date = lib.data.Dataset(FLAGS.data_dir, hparams, "valid")
+  train_data = lib.data.get_dataset(FLAGS.data_dir, hparams, "train")
+  valid_data = lib.data.get_dataset(FLAGS.data_dir, hparams, "valid")
   print '# of train_data:', train_data.num_examples
   print '# of valid_data:', valid_data.num_examples
+  if train_data.num_examples < hparams.batch_size:
+    print "reducing batch_size to %i" % train_data.num_examples
+    hparams.batch_size = train_data.num_examples
 
-  for key in "num_pitches min_pitch max_pitch".split():
-    setattr(hparams, key) = getattr(train_data, key)
+  train_data.update_hparams(hparams)
 
   # Save hparam configs.
   logdir = os.path.join(FLAGS.log_dir, hparams.log_subdir_str)
