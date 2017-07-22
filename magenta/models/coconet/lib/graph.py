@@ -118,18 +118,17 @@ class CoconetGraph(object):
     # Compute average loss over entire set of variables
     self.loss_total = tf.reduce_sum(self.unreduced_loss) / reduced_D
 
-    # Compute loss for masked variables
+    # Compute separate losses for masked/unmasked variables
     # NOTE: indexing the pitch dimension with 0 because the mask is constant
     # across pitch. Except in the sigmoid case, but then the pitch dimension
     # will have been reduced over.
     self.reduced_mask_size = tf.reduce_sum(self.mask_size[:, :, 0, :])
-    self.loss_mask = (tf.reduce_sum(self.mask * self.unreduced_loss)
-                       / self.reduced_mask_size)
-
-    # Compute loss for out-of-mask (unmask) portion.
     self.reduced_unmask_size = tf.reduce_sum(self.unmask_size[:, :, 0, :])
+
+    self.loss_mask = (tf.reduce_sum(self.mask * self.unreduced_loss)
+                      / self.reduced_mask_size)
     self.loss_unmask = (tf.reduce_sum(self.unmask * self.unreduced_loss)
-                         / self.reduced_unmask_size)
+                        / self.reduced_unmask_size)
 
     assert_partition_op = tf.group(
         tf.assert_equal(tf.reduce_sum(self.mask * self.unmask), 0.),
@@ -141,7 +140,7 @@ class CoconetGraph(object):
 
     # Check which loss to use as objective function.
     self.loss = (self.loss_mask if self.hparams.optimize_mask_only else
-                  self.loss_total)
+                 self.loss_total)
 
   def residual_init(self):
     if not self.hparams.use_residual:

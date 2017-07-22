@@ -23,75 +23,96 @@ DATASET_PARAMS = {
 }
 
 
-def make_data_feature_maps(sequences, hparams, encoder):
-  """Return input and output pairs of masked out and full pianorolls.
+class Dataset(object):
+  def __init__(self, basepath, hparams, fold):
+    self.basepath = basepath
+    self.hparams = hparams
+    self.fold = fold
 
-  Args:
-    sequences: A list of NoteSequences.
+    if self.params['shortest_duration'] != self.hparams.quantization_level:
+      raise ValueError('The data has a temporal resolution of shortest '
+                       'duration=%r, requested=%r' %
+                       (self.params['shortest_duration'],
+                        self.hparams.quantization_level))
 
-  Returns:
-    input_data: A 4D matrix with dimensions named
-        (batch, time, pitch, masked_or_mask), interleaved with maskout
-        pianorolls and masks.
-    target: A 4D matrix of the original pianorolls with dimensions named
-        (batch, time, pitch).
+    self.encoder = lib.pianoroll.PianorollEncoderDecoder(
+        shortest_duration=self.params['shortest_duration'],
+        min_pitch=self.min_pitch,
+        max_pitch=self.max_pitch,
+        separate_instruments=self.hparams.separate_instruments,
+        num_instruments=self.hparams.num_instruments,
+        quantization_level=self.hparams.quantization_level)
 
-  Raises:
-    DataProcessingError: If pianoroll is shorter than the desired crop_len, or
-        if the inputs and targets have the wrong number of dimensions.
-  """
-  input_data = []
-  targets = []
-  for sequence in sequences:
-    pianoroll = encoder.encode(sequence)
-    pianoroll = lib.util.random_crop(pianoroll, hparams.crop_piece_len)
-    mask = lib.mask.get_mask(
-        hparams.maskout_method, pianoroll.shape,
-        separate_instruments=hparams.separate_instruments,
-        blankout_ratio=hparams.corrupt_ratio)
-    masked_pianoroll = lib.mask.apply_mask_and_stack(pianoroll, mask)
-    input_data.append(masked_pianoroll)
-    targets.append(pianoroll)
+    self.data = np.load(os.path.join(self.basepath, "%s.npz" % self.name))[fold]
 
-  (input_data, targets), lengths = lib.util.pad_and_stack(input_data, targets)
-  assert input_data.ndim == 4 and targets.ndim == 4
-  return input_data, targets, lengths
+  @property
+  def name(self):
+    return self.hparams.dataset_name
 
+  @property
+  def num_examples(self):
+    return len(self.data)
 
-def get_data_as_pianorolls(basepath, hparams, fold):
-  seqs, encoder = get_data_and_update_hparams(
-      basepath, hparams, fold, update_hparams=False, return_encoder=True)
-  assert encoder.quantization_level == hparams.quantization_level
-  return [encoder.encode(seq) for seq in seqs]
+  @property
+  def num_pitches(self):
+    return self.max_pitch + 1 - self.min_pitch
 
+  @property
+  def max_pitch(self):
+    return self.params["pitch_range"][1]
 
-def get_data_and_update_hparams(basepath, hparams, fold, 
-                                update_hparams=True, 
-                                return_encoder=False):
-  dataset_name = hparams.dataset
-  params = DATASET_PARAMS[dataset_name]
-  fpath = os.path.join(basepath, dataset_name+'.npz')
-  data = np.load(fpath)
-  seqs = data[fold]
-  pitch_range = params['pitch_range']
+  @property
+  def min_pitch(self):
+    return self.params["pitch_range"][0]
 
-  if update_hparams:
-    hparams.num_pitches = pitch_range[1] - pitch_range[0] + 1
-    hparams.update(params)
+  @property
+  def params(self):
+    return DATASET_PARAMS[self.name]
 
-  if not return_encoder:
-    return seqs
+  def get_sequences(self):
+    return self.data
 
-  if params['shortest_duration'] != hparams.quantization_level:
-    raise ValueError('The data has a temporal resolution of shortest '
-                     'duration=%r, requested=%r' %
-                     (params['shortest_duration'], hparams.quantization_level))
+  def get_pianorolls(self, sequences=None):
+    if sequences is None:
+      sequences = self.get_sequences()
+    encoder = self.get_encoder()
+    return list(map(encoder.encode, sequences))
 
-  encoder = lib.pianoroll.PianorollEncoderDecoder(
-      shortest_duration=params['shortest_duration'],
-      min_pitch=pitch_range[0],
-      max_pitch=pitch_range[1],
-      separate_instruments=hparams.separate_instruments,
-      num_instruments=hparams.num_instruments,
-      quantization_level=hparams.quantization_level)
-  return seqs, encoder
+  def get_featuremaps(self, sequences=None):
+    """Return input and output pairs of masked out and full pianorolls.
+  
+    Args:
+      sequences: A list of NoteSequences. If not given, the full dataset
+          is used.
+  
+    Returns:
+      input_data: A 4D matrix with dimensions named
+          (batch, time, pitch, masked_or_mask), interleaved with maskout
+          pianorolls and masks.
+      target: A 4D matrix of the original pianorolls with dimensions named
+          (batch, time, pitch).
+  
+    Raises:
+      DataProcessingError: If pianoroll is shorter than the desired crop_len, or
+          if the inputs and targets have the wrong number of dimensions.
+    """
+    if sequences is None:
+      sequences = self.get_sequences()
+
+    input_data = []
+    targets = []
+
+    for sequence in sequences:
+      pianoroll = self.encoder.encode(sequence)
+      pianoroll = lib.util.random_crop(pianoroll, self.hparams.crop_piece_len)
+      mask = lib.mask.get_mask(
+          self.hparams.maskout_method, pianoroll.shape,
+          separate_instruments=self.hparams.separate_instruments,
+          blankout_ratio=self.hparams.corrupt_ratio)
+      masked_pianoroll = lib.mask.apply_mask_and_stack(pianoroll, mask)
+      input_data.append(masked_pianoroll)
+      targets.append(pianoroll)
+  
+    (input_data, targets), lengths = lib.util.pad_and_stack(input_data, targets)
+    assert input_data.ndim == 4 and targets.ndim == 4
+    return input_data, targets, lengths

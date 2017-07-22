@@ -14,9 +14,8 @@ import lib.hparams
 
 
 FLAGS = tf.app.flags.FLAGS
-tf.app.flags.DEFINE_string(
-    'data_dir', None,
-    'Path to the base directory for different datasets.')
+tf.app.flags.DEFINE_string('data_dir', None,
+                           'Path to the base directory for different datasets.')
 tf.app.flags.DEFINE_string('log_dir', None,
                            'Path to the directory where checkpoints and '
                            'summary events will be saved during training and '
@@ -82,15 +81,14 @@ tf.app.flags.DEFINE_integer('eval_freq', 5,
 tf.app.flags.DEFINE_string('run_id', '', 'A run_id to add to directory names to avoid accidentally overwriting when testing same setups.') 
 
 
-def estimate_popstats(sv, sess, m, raw_data, encoder, hparams):
+def estimate_popstats(sv, sess, m, dataset, hparams):
   print 'Estimating population statistics...'
   tfbatchstats, tfpopstats = list(zip(*m.popstats_by_batchstat.items()))
 
   nepochs = 3
   nppopstats = [lib.util.AggregateMean("") for _ in tfpopstats]
   for _ in range(nepochs):
-    xs, ys, lengths = lib.data.make_data_feature_maps(
-        raw_data, hparams, encoder)
+    xs, ys, lengths = dataset.get_featuremaps()
     batches = lib.util.batches(xs, ys, lengths, size=m.batch_size, shuffle=True)
     for step, (x, y, length) in enumerate(batches):
       feed_dict = {m.input_data: x,
@@ -110,8 +108,7 @@ def estimate_popstats(sv, sess, m, raw_data, encoder, hparams):
 def run_epoch(supervisor,
               sess,
               m,
-              raw_data,
-              encoder,
+              dataset,
               hparams,
               eval_op,
               experiment_type,
@@ -120,8 +117,7 @@ def run_epoch(supervisor,
   # reduce variance in validation loss by fixing the seed
   data_seed = 123 if experiment_type == "valid" else None
   with lib.util.numpy_seed(data_seed):
-    xs, ys, lengths = lib.data.make_data_feature_maps(
-        raw_data, hparams, encoder)
+    xs, ys, lengths = dataset.get_featuremaps()
     batches = lib.util.batches(xs, ys, lengths, size=m.batch_size,
                            shuffle=True, shuffle_rng=data_seed)
 
@@ -197,6 +193,15 @@ def main(unused_argv):
 
   hparams = _hparams_from_flags()
   
+  # Get data.
+  train_data = lib.data.Dataset(FLAGS.data_dir, hparams, "train")
+  valid_date = lib.data.Dataset(FLAGS.data_dir, hparams, "valid")
+  print '# of train_data:', train_data.num_examples
+  print '# of valid_data:', valid_data.num_examples
+
+  for key in "num_pitches min_pitch max_pitch".split():
+    setattr(hparams, key) = getattr(train_data, key)
+
   # Save hparam configs.
   logdir = os.path.join(FLAGS.log_dir, hparams.log_subdir_str)
   if not os.path.exists(logdir):
@@ -205,14 +210,6 @@ def main(unused_argv):
   print 'Writing to', config_fpath
   with open(config_fpath, 'w') as p:
     yaml.dump(hparams, p)
-
-  # Get data.
-  train_data, pianoroll_encoder = lib.data.get_data_and_update_hparams(
-      FLAGS.data_dir, hparams, 'train', return_encoder=True)
-  valid_data = lib.data.get_data_and_update_hparams(
-      FLAGS.data_dir, hparams, 'valid', return_encoder=False)
-  print '# of train_data:', len(train_data)
-  print '# of valid_data:', len(valid_data)
 
   # Build the graph and subsequently running it for train and validation.
   with tf.Graph().as_default():
@@ -243,14 +240,14 @@ def main(unused_argv):
           break
 
         # Run training.
-        run_epoch(sv, sess, m, train_data, pianoroll_encoder, hparams,
+        run_epoch(sv, sess, m, train_data, hparams,
                   m.train_op, 'train', epoch_count)
 
         # Run validation.
         if epoch_count % hparams.eval_freq == 0:
-          estimate_popstats(sv, sess, m, train_data, pianoroll_encoder, hparams)
+          estimate_popstats(sv, sess, m, train_data, hparams)
           loss = run_epoch(
-              sv, sess, mvalid, valid_data, pianoroll_encoder, hparams,
+              sv, sess, mvalid, valid_data, hparams,
               no_op, 'valid', epoch_count)
           tracker(loss, sess)
           if tracker.should_stop():

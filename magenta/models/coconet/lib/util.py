@@ -1,4 +1,5 @@
-import contextlib, time, os, datetime, numbers, yaml
+import contextlib, time, os, numbers, yaml
+from datetime import datetime
 import numpy as np
 
 

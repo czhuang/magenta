@@ -445,7 +445,8 @@ class BachSampler(BaseSampler):
   @instrument(key)
   def __call__(self, pianorolls, masks):
     print "Loading validation pieces from %s..." % self.wmodel.hparams.dataset
-    bach_pianorolls = lib.data.get_data_as_pianorolls(FLAGS.data_dir, self.wmodel.hparams, 'valid')
+    dataset = lib.data.Dataset(FLAGS.data_dir, self.wmodel.hparams, 'valid')
+    bach_pianorolls = dataset.get_pianorolls()
     shape = pianorolls.shape
     pianorolls = np.array([pianoroll[:shape[1]] for pianoroll in bach_pianorolls])[:shape[0]]
     Globals.bamboo.log(pianorolls=pianorolls, masks=masks, predictions=pianorolls)

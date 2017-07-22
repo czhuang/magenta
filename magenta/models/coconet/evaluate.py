@@ -9,6 +9,8 @@ import lib.data
 import lib.util
 
 FLAGS = tf.app.flags.FLAGS
+tf.app.flags.DEFINE_string('data_dir', None,
+                           'Path to the base directory for different datasets.')
 tf.app.flags.DEFINE_string('fold', None, 'data fold on which to evaluate (valid or test)')
 tf.app.flags.DEFINE_string('fold_index', None, 'optionally, index of particular data point in fold to evaluate')
 tf.app.flags.DEFINE_string('unit', None, 'note or frame or example')
@@ -20,12 +22,19 @@ def main(argv):
   wmodel = lib.graph.load_checkpoint(FLAGS.checkpoint)
 
   evaluator = lib.evaluation.BaseEvaluator.make(FLAGS.unit, wmodel=wmodel,
-                                            chronological=FLAGS.chronological)
+                                                chronological=FLAGS.chronological)
   evaluator = lib.evaluation.EnsemblingEvaluator(evaluator, FLAGS.ensemble_size)
+
+  # tf.app.flags parses known flags but passes unknown flags on. unfortunately
+  # this gives us no way to tell whether the leftovers were meant to be flags
+  # or positional arguments, as tf.app.flags might have consumed a `--` arg.
+  for arg in argv[1:]:
+    if arg.startswith("-"):
+      raise ValueError("unknown flag: %s" % arg)
 
   paths = argv[1:]
   if bool(paths) == bool(FLAGS.fold is not None):
-    raise ValueError("Either --fold must be specified, or paths of npz files to load must be given.")
+    raise ValueError("Either --fold must be specified, or paths of npz files to load must be given, but not both.")
   if FLAGS.fold is not None:
     evaluate_fold(FLAGS.fold, evaluator, wmodel.hparams)
   if paths:
@@ -52,7 +61,8 @@ def evaluate_paths(paths, evaluator, hparams):
     np.savez_compressed("%s.npz" % save_path, **rval)
 
 def get_fold_pianorolls(fold, hparams):
-  pianorolls = lib.data.get_data_as_pianorolls(FLAGS.data_dir, hparams, fold)
+  dataset = lib.data.Dataset(FLAGS.data_dir, hparams, fold)
+  pianorolls = dataset.get_pianorolls()
   print '\nRetrieving pianorolls from %s set of %s dataset.\n' % (
       fold, hparams.dataset)
   print_statistics(pianorolls)
