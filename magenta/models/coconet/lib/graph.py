@@ -50,12 +50,6 @@ class CoconetGraph(object):
     self.predictions = self.compute_predictions(logits=self.logits)
     self.cross_entropy = self.compute_cross_entropy(logits=self.logits,
                                                     labels=self.pianorolls)
-    if self.hparams.use_softmax_loss:
-      # FIXME this gives a very different result than tf.softmax_cross[..]with_logits,
-      # find out why
-      self.cross_entropy = -tf.log(self.predictions) * self.pianorolls
-      # it's because later multiplication with mask (which is replicated across pitch)
-      # cause it to broadcast, introducing a factor P
 
     self.compute_loss(self.cross_entropy)
     self.setup_optimizer()
@@ -96,12 +90,13 @@ class CoconetGraph(object):
             tf.nn.sigmoid(logits))
 
   def compute_cross_entropy(self, logits, labels):
-    return (tf.nn.softmax_cross_entropy_with_logits(logits=logits,
-                                                    labels=labels,
-                                                    dim=2)[:, :, None]
-            if self.hparams.use_softmax_loss else
-            tf.nn.sigmoid_cross_entropy_with_logits(logits=logits,
-                                                    labels=labels))
+    if self.hparams.use_softmax_loss:
+      # don't use tf.nn.softmax_cross_entropy because we need the shape to
+      # remain constant
+      return -tf.log(self.predictions) * self.pianorolls
+    else:
+      return tf.nn.sigmoid_cross_entropy_with_logits(logits=logits,
+                                                     labels=labels)
 
   def compute_loss(self, unreduced_loss):
     # construct mask to identify zero padding that was introduced to
