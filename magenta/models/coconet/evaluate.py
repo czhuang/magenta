@@ -61,7 +61,7 @@ def evaluate_paths(paths, evaluator, hparams):
     np.savez_compressed("%s.npz" % save_path, **rval)
 
 def get_fold_pianorolls(fold, hparams):
-  dataset = lib.data.Dataset(FLAGS.data_dir, hparams, fold)
+  dataset = lib.data.get_dataset(FLAGS.data_dir, hparams, fold)
   pianorolls = dataset.get_pianorolls()
   print '\nRetrieving pianorolls from %s set of %s dataset.\n' % (
       fold, hparams.dataset)

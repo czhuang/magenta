@@ -209,7 +209,7 @@ class CoconetGraph(object):
   def apply_batchnorm(self, x):
     output_dim = x.get_shape()[-1]
     gammas = tf.get_variable('gamma', [1, 1, 1, output_dim],
-                             initializer=tf.constant_initializer(1.))
+                             initializer=tf.constant_initializer(0.1))
     betas = tf.get_variable('beta', [output_dim],
                             initializer=tf.constant_initializer(0.))
 
@@ -259,10 +259,12 @@ class CoconetGraph(object):
 
 def get_placeholders(hparams):
   return dict(
-      pianoroll=tf.placeholder(tf.float32,
-                               [None, None] + hparams.input_shape[-2:]),
-      mask=tf.placeholder(tf.float32,
-                          [None, None] + hparams.input_shape[-2:]),
+      pianorolls=tf.placeholder(
+          tf.float32,
+          [None, None, hparams.num_pitches, hparams.num_instruments]),
+      masks=tf.placeholder(
+          tf.float32,
+          [None, None, hparams.num_pitches, hparams.num_instruments]),
       lengths=tf.placeholder(tf.float32, [None]))
 
 

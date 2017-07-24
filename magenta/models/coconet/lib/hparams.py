@@ -23,7 +23,6 @@ class Hyperparameters(object):
       crop_piece_len=64, #128, #64, #32,
       num_instruments=4,
       separate_instruments=False,
-      #input_depth=None, #8,
       #output_depth=None, #4,
       # Batch norm parameters.
       batch_norm=True,
@@ -82,10 +81,6 @@ class Hyperparameters(object):
       setattr(self, key, value)
 
   @property
-  def input_depth(self):
-    return 2 * (self.num_instruments if self.separate_instruments else 1)
-  
-  @property
   def output_depth(self):
     return self.num_instruments if self.separate_instruments else 1
   
@@ -98,18 +93,7 @@ class Hyperparameters(object):
     return self.conv_arch.name
 
   @property
-  def input_shape(self):
-    """Returns the shape of input data."""
-    return [self.crop_piece_len, self.num_pitches, self.input_depth]
-
-  @property
-  def output_shape(self):
-    """Returns the shape of output data."""
-    return [self.crop_piece_len, self.num_pitches, self.output_depth]
-  
-  @property
-  def raw_pianoroll_shape(self):
-    """Returns the shape of raw pianorolls."""
+  def pianoroll_shape(self):
     if self.separate_instruments:
       return [self.crop_piece_len, self.num_pitches, self.num_instruments]
     else:
@@ -146,7 +130,7 @@ class Hyperparameters(object):
     except AttributeError:
       self._conv_arch = Architecture.make(
         self.architecture, 
-        self.input_depth, self.num_layers, self.num_filters, 
+        self.num_instruments, self.num_layers, self.num_filters, 
         self.num_pitches, output_depth=self.output_depth)
       return self._conv_arch
 

@@ -1,4 +1,5 @@
 """Utilities that depend on Tensorflow"""
+import numpy as np
 import tensorflow as tf
 
 # adapts batch size in response to ResourceExhaustedErrors

@@ -17,7 +17,7 @@ quantization_level=0.125  # 16th notes
 maskout_method=orderless
 num_layers=64
 num_filters=128
-batch_size=20
+batch_size=10
 
 # Run command.
 python "$code_dir"/train.py \

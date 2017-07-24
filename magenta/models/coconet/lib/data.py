@@ -50,8 +50,7 @@ class Dataset(lib.util.Factory):
   def get_pianorolls(self, sequences=None):
     if sequences is None:
       sequences = self.get_sequences()
-    encoder = self.get_encoder()
-    return list(map(encoder.encode, sequences))
+    return list(map(self.encoder.encode, sequences))
 
   def get_featuremaps(self, sequences=None):
     if sequences is None:
