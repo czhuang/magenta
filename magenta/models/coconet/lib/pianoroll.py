@@ -107,12 +107,9 @@ class PianorollEncoderDecoder(object):
                max_pitch=88,
                sequence_iterator=None,
                separate_instruments=True,
-               augment_by_transposing=False,
                num_instruments=None,
-               encode_silences=None,
                quantization_level=None):
     assert num_instruments is not None
-    assert encode_silences is not None
     self.shortest_duration = shortest_duration
     self.min_pitch = min_pitch
     self.max_pitch = max_pitch
@@ -122,13 +119,9 @@ class PianorollEncoderDecoder(object):
       self.shortest_duration = find_shortest_duration(sequences)
       self.min_pitch, self.max_pitch = find_pitch_range(sequences)
 
-    if augment_by_transposing:
-      self.min_pitch = self.min_pitch - 5
-      self.max_pitch = self.max_pitch + 6
     self.shortest_duration = float(self.shortest_duration)
     self.separate_instruments = separate_instruments
     self.num_instruments = num_instruments
-    self.encode_silences = encode_silences
 
     self.quantization_level = quantization_level
     if quantization_level is None:
@@ -165,22 +158,6 @@ class PianorollEncoderDecoder(object):
     #if closest_offbeat == onsetq:
     #  return int(onsetq), int(closest_offbeat) + 1
     return int(onsetq), int(closest_offbeat)
-
-  def get_quantized_on_off_timesteps_may_overlap_with_other_notes(self, onset, offset):
-    onsetq = self.quantize(onset)
-    offsetq = self.quantize(offset)
-    # The closest current or future beat on quantized grid
-    closest_onbeat = np.ceil(onsetq)
-    if closest_onbeat > offsetq:
-      closest_onbeat = None
-    # The closest previous or current beat on quantized grid
-    closest_offbeat = np.floor(offsetq)
-    if closest_offbeat < onsetq:
-      closest_offbeat = None
-    if closest_onbeat is None or closest_offbeat is None:
-      return None, None
-    else:
-      return int(closest_onbeat), int(closest_offbeat)
 
   def encode(self,
              sequence,
@@ -410,3 +387,43 @@ class PianorollEncoderDecoder(object):
     out_mask_note_sequence.notes.extend(aggregated_notes)
     out_mask_note_sequence.total_time = sorted_notes_by_endtime[-1].end_time
     return out_mask_note_sequence
+
+
+# TODO fix/generalize the below
+
+# NOTE: assumes four separate instruments ordered high to low
+def pianoroll_to_midi(x):
+  import pretty_midi
+  midi_data = pretty_midi.PrettyMIDI()
+  programs = [69, 70, 72, 71]
+  pitch_offset = 36
+  bpm = 120.
+  duration = bpm / 60 / 16.
+  T, P, I = x.shape
+  for i in range(I):
+    notes = []
+    for p in range(P):
+      for t in range(T):
+        if x[t, p, i]:
+          notes.append(pretty_midi.Note(velocity=100,
+                                        pitch=pitch_offset + p,
+                                        start=t * duration,
+                                        end=(t + 1) * duration))
+    notes = merge_held(notes)
+
+    instrument = pretty_midi.Instrument(program=programs[i] - 1)
+    instrument.notes.extend(notes)
+    midi_data.instruments.append(instrument)
+  return midi_data
+
+def merge_held(notes):
+  notes = list(notes)
+  i = 1
+  while i < len(notes):
+    if (notes[i].pitch == notes[i - 1].pitch and
+        notes[i].start == notes[i - 1].end):
+      notes[i - 1].end = notes[i].end
+      del notes[i]
+    else:
+      i += 1
+  return notes
