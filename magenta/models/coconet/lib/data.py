@@ -22,13 +22,9 @@ class Dataset(lib.util.Factory):
                        (self.shortest_duration,
                         self.hparams.quantization_level))
 
-    self.encoder = lib.pianoroll.PianorollEncoderDecoder(
-        shortest_duration=self.shortest_duration,
-        min_pitch=self.min_pitch,
-        max_pitch=self.max_pitch,
-        separate_instruments=self.hparams.separate_instruments,
-        num_instruments=self.hparams.num_instruments,
-        quantization_level=self.hparams.quantization_level)
+    # Update the default pitch ranges in hparams to reflect that of dataset.
+    hparams.pitch_ranges = [self.min_pitch, self.max_pitch]
+    self.encoder = lib.pianoroll.get_pianoroll_encoder_decoder(hparams)
 
     self.data = np.load(os.path.join(self.basepath, "%s.npz" % self.name))[fold]
 

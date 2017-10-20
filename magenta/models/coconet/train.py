@@ -29,16 +29,20 @@ tf.app.flags.DEFINE_bool('log_progress', True,
 
 # Dataset.
 tf.app.flags.DEFINE_string('dataset', None,
-                           "Choices: Jsb16thSeparated, MuseData, Nottingham, PianoMidiDe")
+                           'Choices: Jsb16thSeparated, MuseData, Nottingham, '
+                           'PianoMidiDe')
 tf.app.flags.DEFINE_float('quantization_level', 0.125, 'Quantization duration.'
                           'For qpm=120, notated quarter note equals 0.5.')
 
-tf.app.flags.DEFINE_integer('num_instruments', 4, 
-                        'Maximum number of instruments that appear in this dataset.  Use 0 if not separating instruments and hence does not matter how many there are.')
+tf.app.flags.DEFINE_integer('num_instruments', 4,
+                            'Maximum number of instruments that appear in this '
+                            'dataset.  Use 0 if not separating instruments and '
+                            'hence does not matter how many there are.')
 tf.app.flags.DEFINE_bool('separate_instruments', True,
                          'Separate instruments into different input feature'
                          'maps or not.')
-tf.app.flags.DEFINE_integer('crop_piece_len', 64, 'The number of time steps included in a crop')
+tf.app.flags.DEFINE_integer('crop_piece_len', 64, 'The number of time steps '
+                            'included in a crop')
 
 # Model architecture.
 tf.app.flags.DEFINE_string('architecture', 'straight',
@@ -49,8 +53,8 @@ tf.app.flags.DEFINE_integer('num_filters', 128,
                             'The number of filters for each convolutional '
                             'layer.')
 # TODO: Some are meant to be booleans.
-tf.app.flags.DEFINE_integer('use_residual', 1,
-                            '1 specifies use residual, while 0 specifies not '
+tf.app.flags.DEFINE_bool('use_residual', True,
+                          '1 specifies use residual, while 0 specifies not '
                             'to.')
 tf.app.flags.DEFINE_integer('batch_size', 20,
                             'The batch size training and validation the model.')
