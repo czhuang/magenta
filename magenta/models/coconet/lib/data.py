@@ -25,7 +25,6 @@ class Dataset(lib.util.Factory):
     # Update the default pitch ranges in hparams to reflect that of dataset.
     hparams.pitch_ranges = [self.min_pitch, self.max_pitch]
     self.encoder = lib.pianoroll.get_pianoroll_encoder_decoder(hparams)
-
     self.data = np.load(os.path.join(self.basepath, "%s.npz" % self.name))[fold]
 
   @property

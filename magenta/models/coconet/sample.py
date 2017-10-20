@@ -66,10 +66,17 @@ def main(unused_argv):
     logger.dump(path)
   
   # Makes function to save midi from pianorolls.
+<<<<<<< HEAD
   def save_midi_from_pianorolls(rolls, label, midi_path, decoder):
     for i, pianoroll in enumerate(rolls):
       midi_fpath = os.path.join(midi_path, "%s_%i.midi" % (label, i))
       midi_data = decoder.decode_to_midi(pianoroll)
+=======
+  def save_midi_from_pianorolls(rolls, label, midi_path):
+    for i, pianoroll in enumerate(rolls):
+      midi_fpath = os.path.join(midi_path, "%s_%i.midi" % (label, i))
+      midi_data = lib.pianoroll.pianoroll_to_midi(pianoroll)
+>>>>>>> cd14dc0b8356f2e162fee9fcca200e6685b79b24
       #pianoroll, qpm=hparams.qpm, quantization_level=hparams.quantization_level, 
       #    pitch_offset=hparams.min_pitch)
       print midi_fpath
@@ -78,7 +85,11 @@ def main(unused_argv):
   # Saves the results as midi and npy.    
   midi_path = os.path.join(basepath, "midi")
   os.makedirs(midi_path)
+<<<<<<< HEAD
   save_midi_from_pianorolls(pianorolls, label, midi_path, hparams)
+=======
+  save_midi_from_pianorolls(pianorolls, label, midi_path)
+>>>>>>> cd14dc0b8356f2e162fee9fcca200e6685b79b24
   np.save(os.path.join(basepath, "generated_result.npy"), pianorolls)
 
   # Save the prime as midi and npy if in harmonization mode.

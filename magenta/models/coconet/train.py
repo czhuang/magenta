@@ -55,8 +55,6 @@ tf.app.flags.DEFINE_integer('num_filters', 128,
 # TODO: Some are meant to be booleans.
 tf.app.flags.DEFINE_bool('use_residual', True,
                           '1 specifies use residual, while 0 specifies not '
-                            'to.')
-tf.app.flags.DEFINE_integer('batch_size', 20,
                             'The batch size training and validation the model.')
 
 # Mask related.
