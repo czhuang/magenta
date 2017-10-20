@@ -1,4 +1,9 @@
 """Classes for defining hypermaters and model architectures."""
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+
 import itertools as it
 
 import lib.util
@@ -69,7 +74,7 @@ class Hyperparameters(object):
       **init_hparams: Keyword arguments for setting hyperparameters.
 
     """
-    print 'Instantiating hparams:'
+    print('Instantiating hparams:')
     unknown_params = set(init_hparams) - set(Hyperparameters._defaults)
     if unknown_params:
       raise ValueError('Unknown hyperparameters: %s', unknown_params)
@@ -81,13 +86,17 @@ class Hyperparameters(object):
       setattr(self, key, value)
 
   @property
+  def input_depth(self):
+    return self.num_instruments * 2
+
+  @property
   def output_depth(self):
     return self.num_instruments if self.separate_instruments else 1
-  
+
   @property
   def log_subdir_str(self):
     return '%s_%s' % (self.conv_arch.name, self.__str__())
-  
+
   @property
   def name(self):
     return self.conv_arch.name
@@ -130,7 +139,7 @@ class Hyperparameters(object):
     except AttributeError:
       self._conv_arch = Architecture.make(
         self.architecture, 
-        self.num_instruments, self.num_layers, self.num_filters, 
+        self.input_depth, self.num_layers, self.num_filters, 
         self.num_pitches, output_depth=self.output_depth)
       return self._conv_arch
 
@@ -145,7 +154,7 @@ class Straight(Architecture):
 
   def __init__(self, input_depth, num_layers, num_filters, num_pitches, 
                output_depth, **kwargs):
-    print self.key, input_depth, output_depth
+    print(self.key, input_depth, output_depth)
     assert num_layers >= 4
 
     self.layers = []

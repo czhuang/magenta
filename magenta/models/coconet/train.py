@@ -1,3 +1,8 @@
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import os
 import time
 import sys
@@ -54,8 +59,9 @@ tf.app.flags.DEFINE_integer('num_filters', 128,
                             'layer.')
 # TODO: Some are meant to be booleans.
 tf.app.flags.DEFINE_bool('use_residual', True,
-                          '1 specifies use residual, while 0 specifies not '
-                            'The batch size training and validation the model.')
+                         'Add residual connections or not.')
+tf.app.flags.DEFINE_integer('batch_size', 20,
+                            'The batch size for training and validating the model.')
 
 # Mask related.
 tf.app.flags.DEFINE_string('maskout_method', 'orderless', 
@@ -83,7 +89,7 @@ tf.app.flags.DEFINE_string('run_id', '', 'A run_id to add to directory names to 
 
 
 def estimate_popstats(sv, sess, m, dataset, hparams):
-  print 'Estimating population statistics...'
+  print('Estimating population statistics...')
   tfbatchstats, tfpopstats = list(zip(*m.popstats_by_batchstat.items()))
 
   nepochs = 3
@@ -134,7 +140,7 @@ def run_epoch(supervisor,
                m.learning_rate, eval_op]
     feed_dict = batch.get_feed_dict(m.placeholders)
     (loss, loss_total, loss_mask, loss_unmask,
-     reduced_mask_size, reduced_unmask_size, 
+     reduced_mask_size, reduced_unmask_size,
      learning_rate, _) = sess.run(fetches, feed_dict=feed_dict)
 
     # Aggregate performances.
@@ -180,24 +186,24 @@ def run_epoch(supervisor,
 
 def main(unused_argv):
   """Builds the graph and then runs training and validation."""
-  print 'TensorFlow version:', tf.__version__
+  print('TensorFlow version:', tf.__version__)
 
   tf.logging.set_verbosity(tf.logging.INFO)
 
   if FLAGS.data_dir is None:
     tf.logging.fatal('No input directory was provided.')
 
-  print FLAGS.maskout_method, 'seperate', FLAGS.separate_instruments
+  print(FLAGS.maskout_method, 'seperate', FLAGS.separate_instruments)
 
   hparams = _hparams_from_flags()
   
   # Get data.
   train_data = lib.data.get_dataset(FLAGS.data_dir, hparams, "train")
   valid_data = lib.data.get_dataset(FLAGS.data_dir, hparams, "valid")
-  print '# of train_data:', train_data.num_examples
-  print '# of valid_data:', valid_data.num_examples
+  print('# of train_data:', train_data.num_examples)
+  print('# of valid_data:', valid_data.num_examples)
   if train_data.num_examples < hparams.batch_size:
-    print "reducing batch_size to %i" % train_data.num_examples
+    print("reducing batch_size to %i" % train_data.num_examples)
     hparams.batch_size = train_data.num_examples
 
   train_data.update_hparams(hparams)
@@ -207,7 +213,7 @@ def main(unused_argv):
   if not os.path.exists(logdir):
     os.makedirs(logdir)
   config_fpath = os.path.join(logdir, 'config')
-  print 'Writing to', config_fpath
+  print('Writing to', config_fpath)
   with open(config_fpath, 'w') as p:
     yaml.dump(hparams, p)
 
@@ -255,8 +261,8 @@ def main(unused_argv):
 
         epoch_count += 1
 
-    print "best", tracker.label, tracker.best
-    print "Done."
+    print("best", tracker.label, tracker.best)
+    print("Done.")
     return tracker.best
 
 

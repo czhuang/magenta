@@ -1,3 +1,8 @@
+  
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import contextlib, time, os, numbers, yaml
 from datetime import datetime
 import numpy as np
@@ -20,7 +25,7 @@ def sample_bernoulli(p, temperature):
     p = np.exp(logpp)
     p /= p.sum(axis=axis, keepdims=True)
     p = p[:, :, :, :1]
-    print "%.5f < %.5f < %.5f < %.5f < %.5g" % (np.min(p), np.percentile(p, 25), np.percentile(p, 50), np.percentile(p, 75), np.max(p))
+    print("%.5f < %.5f < %.5f < %.5f < %.5g" % (np.min(p), np.percentile(p, 25), np.percentile(p, 50), np.percentile(p, 75), np.max(p)))
 
     sampled = np.random.random(p.shape) < p
   return sampled
@@ -91,12 +96,12 @@ class Factory(object):
 @contextlib.contextmanager
 def timing(label, printon=True):
   if printon:
-    print "enter %s" % label
+    print("enter %s" % label)
   start_time = time.time()
   yield
   time_taken = (time.time() - start_time) / 60.0
   if printon:
-    print "exit %s (%.2fmin)" % (label, time_taken)
+    print("exit %s (%.2fmin)" % (label, time_taken))
 
 
 class AggregateMean(object):
@@ -181,6 +186,7 @@ def batches(*xss, **kwargs):
     batch_indices = indices[start:start + size]
     if len(batch_indices) < size and discard_remainder:
       break
+    import pdb; pdb.set_trace()
     batch_xss = [xs[batch_indices] for xs in xss]
     yield batch_xss
 

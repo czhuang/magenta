@@ -1,4 +1,9 @@
 """Defines the graph for a convolutional net designed for music autofill."""
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+
 import tensorflow as tf, numpy as np
 from collections import OrderedDict
 

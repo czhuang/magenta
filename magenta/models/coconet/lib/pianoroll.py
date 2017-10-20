@@ -1,5 +1,10 @@
 """Utilities for converting between NoteSequences and pianorolls."""
 
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+
 import copy
 from collections import defaultdict
 from collections import OrderedDict
@@ -15,11 +20,13 @@ class PitchOutOfEncodeRangeError(Exception):
 
 
 def get_pianoroll_encoder_decoder(hparams):
-  min_pitch, max_pitch = hparams.pitch_range
+  min_pitch, max_pitch = hparams.pitch_ranges
   encoder_decoder = PianorollEncoderDecoder(
       shortest_duration=hparams.shortest_duration,
-      min_pitch=min_pitch, max_pitch=max_pitch,
+      min_pitch=min_pitch,
+      max_pitch=max_pitch,
       separate_instruments=hparams.separate_instruments,
+      num_instruments=hparams.num_instruments,
       quantization_level=hparams.quantization_level)
   return encoder_decoder
 
@@ -89,7 +96,7 @@ class PianorollEncoderDecoder(object):
       if raw_t % step_size != 0:
         continue
       t = int(raw_t / step_size)
-      for i in self.num_instruments:
+      for i in range(self.num_instruments):
         if i > len(chord):
           # Some instruments are silence in this time step.
           if self.separate_instruments:
@@ -105,7 +112,7 @@ class PianorollEncoderDecoder(object):
               '%r is out of specified range [%r, %r].' % (
                   pitch, self.min_pitch, self.max_pitch))
         p = pitch - self.min_pitch
-        if not p.is_integer():
+        if not float(p).is_integer():
           raise ValueError('Non integer pitches not yet supported.')
         p = int(p)
         if self.separate_instruments:

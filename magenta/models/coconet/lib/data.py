@@ -1,5 +1,9 @@
 """Prepares data for basic_autofill_cnn model by blanking out pianorolls."""
 
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import os
 
 import numpy as np
@@ -24,6 +28,7 @@ class Dataset(lib.util.Factory):
 
     # Update the default pitch ranges in hparams to reflect that of dataset.
     hparams.pitch_ranges = [self.min_pitch, self.max_pitch]
+    hparams.shortest_duration = self.shortest_duration
     self.encoder = lib.pianoroll.get_pianoroll_encoder_decoder(hparams)
     self.data = np.load(os.path.join(self.basepath, "%s.npz" % self.name))[fold]
 
@@ -119,5 +124,5 @@ class Batch(object):
 
   def batches(self, **batches_kwargs):
     keys, values = list(zip(*list(self.features.items())))
-    for batch in util.batches(values, **batches_kwargs):
+    for batch in lib.util.batches(values, **batches_kwargs):
       yield dict(zip(keys, batch))

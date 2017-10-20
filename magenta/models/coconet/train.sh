@@ -5,7 +5,7 @@ code_dir=$(dirname $0)
 # Change this to dir for saving experiment logs. 
 log_dir="logs"
 # Change this to where data is loaded from.
-data_dir="$code_dir/data"
+data_dir="$code_dir/testdata"
 dataset=Jsb16thSeparated
 
 # Data preprocessing.
@@ -31,5 +31,5 @@ python "$code_dir"/train.py \
 --maskout_method $maskout_method \
 --num_layers $num_layers \
 --num_filters $num_filters \
---use_residual 1 \
+--use_residual True \
 --batch_size $batch_size \
