@@ -186,8 +186,7 @@ def batches(*xss, **kwargs):
     batch_indices = indices[start:start + size]
     if len(batch_indices) < size and discard_remainder:
       break
-    import pdb; pdb.set_trace()
-    batch_xss = [xs[batch_indices] for xs in xss]
+    batch_xss = [xs[bb] for bb in batch_indices for xs in xss]
     yield batch_xss
 
 def pad_and_stack(*xss):
