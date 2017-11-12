@@ -9,14 +9,13 @@ log_dir="$code_dir/logs"
 generation_output_dir="samples"
 
 # Path to trained model.
-checkpoint="logs/straight-64-128_bs=10,corrupt=0.5,len=64,lr=0.0625,mm=orderless,num_i=4,n_pch=46,mask_only=False,quant=0.125,rescale=True,sep=True,res=1,soft=True/best_model.ckpt"
+checkpoint="logs/straight-64-128_bs=2,corrupt=0.5,len=64,lr=0.0625,mm=orderless,num_i=4,n_pch=46,mask_only=False,quant=0.125,rescale=True,sep=True,res=True,soft=True/best_model.ckpt"
 
 # Generation parameters.
 # Number of samples to generate in a batch.
 gen_batch_size=32
 piece_length=32
 strategy=igibbs
-strategy=agibbs_p01
 
 # Run command.
 ipython --pdb -- "$code_dir"/sample.py \

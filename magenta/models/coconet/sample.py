@@ -72,30 +72,18 @@ def main(unused_argv):
     logger.dump(path)
   
   # Makes function to save midi from pianorolls.
-<<<<<<< HEAD
   def save_midi_from_pianorolls(rolls, label, midi_path, decoder):
     for i, pianoroll in enumerate(rolls):
       midi_fpath = os.path.join(midi_path, "%s_%i.midi" % (label, i))
       midi_data = decoder.decode_to_midi(pianoroll)
-=======
-  def save_midi_from_pianorolls(rolls, label, midi_path):
-    for i, pianoroll in enumerate(rolls):
-      midi_fpath = os.path.join(midi_path, "%s_%i.midi" % (label, i))
-      midi_data = lib.pianoroll.pianoroll_to_midi(pianoroll)
->>>>>>> cd14dc0b8356f2e162fee9fcca200e6685b79b24
-      #pianoroll, qpm=hparams.qpm, quantization_level=hparams.quantization_level, 
-      #    pitch_offset=hparams.min_pitch)
       print midi_fpath
       midi_data.write(midi_fpath)
 
   # Saves the results as midi and npy.    
   midi_path = os.path.join(basepath, "midi")
   os.makedirs(midi_path)
-<<<<<<< HEAD
-  save_midi_from_pianorolls(pianorolls, label, midi_path, hparams)
-=======
-  save_midi_from_pianorolls(pianorolls, label, midi_path)
->>>>>>> cd14dc0b8356f2e162fee9fcca200e6685b79b24
+  decoder = lib.pianoroll.get_pianoroll_encoder_decoder(hparams)
+  save_midi_from_pianorolls(pianorolls, label, midi_path, decoder)
   np.save(os.path.join(basepath, "generated_result.npy"), pianorolls)
 
   # Save the prime as midi and npy if in harmonization mode.
@@ -110,7 +98,7 @@ def main(unused_argv):
         primes = context_rolls
         if 'Melody' in FLAGS.strategy:
           primes = [context_rolls[0]]
-        save_midi_from_pianorolls(primes, label + '_prime', midi_path)
+        save_midi_from_pianorolls(primes, label + '_prime', midi_path, decoder)
       break
 
 
@@ -378,23 +366,6 @@ class AgibbsStrategy(BaseStrategy):
     return pianorolls
 
 
-class Cgibbs50Strategy(BaseStrategy):
-  key = "cgibbs50"
-
-  def run(self, shape):
-    pianorolls, masks = self.blank_slate(shape)
-    pm = 0.50
-    sampler = self.make_sampler(
-        "gibbs",
-        masker=lib.sampling.ContiguousMasker(),
-        sampler=self.make_sampler("ancestral",
-                                  selector=lib.sampling.OrderlessSelector(),
-                                  temperature=FLAGS.temperature),
-        schedule=lib.sampling.ConstantSchedule(pm))
-    pianorolls = sampler(pianorolls, masks)
-    return pianorolls
-
-
 # Variations from the convergence plot in the paper
 def _generate_convergence_strategies():
   strategies = []
@@ -408,7 +379,7 @@ def _generate_convergence_strategies():
         pm = self._maskout_percentage / 100.
         sampler = self.make_sampler(
             "gibbs",
-            masker=lib.sampling.ContiguousMasker(),
+            masker=lib.sampling.BernoulliMasker(),
             sampler=self.make_sampler(
                 "ancestral",
                 selector=lib.sampling.OrderlessSelector(),
