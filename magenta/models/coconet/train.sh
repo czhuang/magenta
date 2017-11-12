@@ -20,7 +20,7 @@ num_filters=128
 batch_size=10
 
 # Run command.
-python "$code_dir"/train.py \
+ipython --pdb -- "$code_dir"/train.py \
 --log_dir $log_dir \
 --log_process True \
 --data_dir $data_dir \
