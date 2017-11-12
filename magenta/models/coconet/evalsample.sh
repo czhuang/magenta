@@ -3,8 +3,8 @@
 # Assumes that this script is run from within the Coconet root directory.  Change the following line if this is not the case.
 code_dir=$(dirname $0)
 
-# Path to where generated samples were stored.
-sample_file="samples/sample_20171111212415_agibbs_p01_straight_T0.99_l32_0.01min/generated_result.npy"
+# First argument should be a path to a npy file containing piano rolls
+sample_file=$1
 
 # Path to trained model.
 checkpoint="logs/straight-64-128_bs=2,corrupt=0.5,len=64,lr=0.0625,mm=orderless,num_i=4,n_pch=46,mask_only=False,quant=0.125,rescale=True,sep=True,res=True,soft=True/best_model.ckpt"

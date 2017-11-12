@@ -366,23 +366,6 @@ class AgibbsStrategy(BaseStrategy):
     return pianorolls
 
 
-class Cgibbs50Strategy(BaseStrategy):
-  key = "cgibbs50"
-
-  def run(self, shape):
-    pianorolls, masks = self.blank_slate(shape)
-    pm = 0.50
-    sampler = self.make_sampler(
-        "gibbs",
-        masker=lib.sampling.ContiguousMasker(),
-        sampler=self.make_sampler("ancestral",
-                                  selector=lib.sampling.OrderlessSelector(),
-                                  temperature=FLAGS.temperature),
-        schedule=lib.sampling.ConstantSchedule(pm))
-    pianorolls = sampler(pianorolls, masks)
-    return pianorolls
-
-
 # Variations from the convergence plot in the paper
 def _generate_convergence_strategies():
   strategies = []
@@ -396,7 +379,7 @@ def _generate_convergence_strategies():
         pm = self._maskout_percentage / 100.
         sampler = self.make_sampler(
             "gibbs",
-            masker=lib.sampling.ContiguousMasker(),
+            masker=lib.sampling.BernoulliMasker(),
             sampler=self.make_sampler(
                 "ancestral",
                 selector=lib.sampling.OrderlessSelector(),
