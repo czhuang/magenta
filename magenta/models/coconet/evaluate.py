@@ -61,7 +61,7 @@ def evaluate_paths(paths, evaluator, hparams):
       lib.util.timestamp(), FLAGS.unit, FLAGS.ensemble_size, FLAGS.chronological)
     save_path = "%s__%s" % (path, name)
 
-    pianorolls = get_path_pianoroll(path)
+    pianorolls = get_path_pianorolls(path)
     rval = lib.evaluation.evaluate(evaluator, pianorolls)
     np.savez_compressed("%s.npz" % save_path, **rval)
 
@@ -76,7 +76,7 @@ def get_fold_pianorolls(fold, hparams):
   return pianorolls
 
 def get_path_pianorolls(path):
-  pianorolls = np.load(path)["pianorolls"]
+  pianorolls = np.load(path)
   if isinstance(pianorolls, np.ndarray):
     print pianorolls.shape
   print_statistics(pianorolls)
