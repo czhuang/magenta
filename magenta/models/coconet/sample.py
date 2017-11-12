@@ -41,10 +41,10 @@ def main(unused_argv):
 
   B = FLAGS.gen_batch_size
   T, P, I = hparams.pianoroll_shape
-  print B, T, P, I
+  print(B, T, P, I)
   hparams.crop_piece_len = FLAGS.piece_length
   T, P, I = hparams.pianoroll_shape
-  print B, T, P, I
+  print(B, T, P, I)
   shape = [B, T, P, I]
 
   # Instantiates generation strategy.
@@ -68,7 +68,7 @@ def main(unused_argv):
   # Stores all the (intermediate) steps.
   path = os.path.join(basepath, 'intermediate_steps.npz')
   with lib.util.timing('writing_out_sample_npz'):
-    print "Writing to", path
+    print("Writing to", path)
     logger.dump(path)
   
   # Makes function to save midi from pianorolls.

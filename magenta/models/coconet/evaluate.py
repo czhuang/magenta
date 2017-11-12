@@ -68,8 +68,8 @@ def evaluate_paths(paths, evaluator, hparams):
 def get_fold_pianorolls(fold, hparams):
   dataset = lib.data.get_dataset(FLAGS.data_dir, hparams, fold)
   pianorolls = dataset.get_pianorolls()
-  print '\nRetrieving pianorolls from %s set of %s dataset.\n' % (
-      fold, hparams.dataset)
+  print('\nRetrieving pianorolls from %s set of %s dataset.\n' % (
+      fold, hparams.dataset))
   print_statistics(pianorolls)
   if FLAGS.fold_index is not None:
     pianorolls = [pianorolls[int(FLAGS.fold_index)]]
@@ -78,20 +78,20 @@ def get_fold_pianorolls(fold, hparams):
 def get_path_pianorolls(path):
   pianorolls = np.load(path)["pianorolls"]
   if isinstance(pianorolls, np.ndarray):
-    print pianorolls.shape
+    print(pianorolls.shape)
   print_statistics(pianorolls)
   return pianorolls
 
 def print_statistics(pianorolls):
   if isinstance(pianorolls, np.ndarray):
-    print pianorolls.shape
-  print '# of total pieces in evaluation set:', len(pianorolls)
+    print(pianorolls.shape)
+  print('# of total pieces in evaluation set:', len(pianorolls))
   lengths = [len(roll) for roll in pianorolls]
   if len(np.unique(lengths)) > 1:
-    print 'lengths', np.sort(lengths)
-  print 'max_len', max(lengths)
-  print 'unique lengths', np.unique(sorted(pianoroll.shape[0] for pianoroll in pianorolls))
-  print 'shape', pianorolls[0].shape
+    print('lengths', np.sort(lengths))
+  print('max_len', max(lengths))
+  print('unique lengths', np.unique(sorted(pianoroll.shape[0] for pianoroll in pianorolls)))
+  print('shape', pianorolls[0].shape)
 
 if __name__ == '__main__':
   tf.app.run()

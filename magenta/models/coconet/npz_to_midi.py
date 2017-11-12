@@ -20,7 +20,7 @@ def main():
     for i, pianoroll in enumerate(d["pianorolls"]):
       midi_data = pianoroll_to_midi(pianoroll)
       midi_path = os.path.join(basepath, "%s_%i.midi" % (dirname, i))
-      print midi_path
+      print(midi_path)
       midi_data.write(midi_path)
 
 
