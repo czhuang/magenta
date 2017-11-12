@@ -186,7 +186,7 @@ def batches(*xss, **kwargs):
     batch_indices = indices[start:start + size]
     if len(batch_indices) < size and discard_remainder:
       break
-    batch_xss = [xs[bb] for bb in batch_indices for xs in xss]
+    batch_xss = [xs[batch_indices] for xs in xss]
     yield batch_xss
 
 def pad_and_stack(*xss):
@@ -211,11 +211,19 @@ def pad_and_stack(*xss):
     assert lengths == list(map(len, xs))
     max_length = max(lengths)
     rest_shape = xs[0].shape[1:]
-    ys = np.zeros((len(xs), max_length,) + rest_shape, dtype=xs[0].dtype)
+    ys = np.zeros((len(xs), max_length) + rest_shape, dtype=xs[0].dtype)
     for i in range(len(xs)):
       ys[i, :len(xs[i])] = xs[i]
     yss.append(ys)
-  return yss, np.asarray(lengths)
+  return list(map(np.asarray, yss)), np.asarray(lengths)
 
 def identity(x):
   return x
+
+def eqzip(*xss):
+  xss = list(map(list, xss))
+  lengths = list(map(len, xss))
+  if not all(length == lengths[0] for length in lengths):
+    raise ValueError("eqzip got iterables of unequal lengths %s" % lengths)
+  return zip(*xss)
+

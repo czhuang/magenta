@@ -97,7 +97,7 @@ def estimate_popstats(sv, sess, m, dataset, hparams):
   for _ in range(nepochs):
     batches = (dataset
                .get_featuremaps()
-               .batches(size=m.batch_size, shuffle=True, shuffle_rng=data_seed))
+               .batches(size=m.batch_size, shuffle=True))
     for step, batch in enumerate(batches):
       feed_dict = batch.get_feed_dict(m.placeholders)
       npbatchstats = sess.run(tfbatchstats, feed_dict=feed_dict)

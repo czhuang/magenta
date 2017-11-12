@@ -124,5 +124,5 @@ class Batch(object):
 
   def batches(self, **batches_kwargs):
     keys, values = list(zip(*list(self.features.items())))
-    for batch in lib.util.batches(values, **batches_kwargs):
-      yield dict(zip(keys, batch))
+    for batch in lib.util.batches(*values, **batches_kwargs):
+      yield Batch(**dict(lib.util.eqzip(keys, batch)))

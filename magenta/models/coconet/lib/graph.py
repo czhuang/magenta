@@ -137,18 +137,18 @@ class CoconetGraph(object):
     # NOTE: indexing the pitch dimension with 0 because the mask is constant
     # across pitch. Except in the sigmoid case, but then the pitch dimension
     # will have been reduced over.
-    reduced_mask_size = tf.reduce_sum(mask_size[:, :, 0, :])
-    reduced_unmask_size = tf.reduce_sum(unmask_size[:, :, 0, :])
+    self.reduced_mask_size = tf.reduce_sum(mask_size[:, :, 0, :])
+    self.reduced_unmask_size = tf.reduce_sum(unmask_size[:, :, 0, :])
 
     assert_partition_op = tf.group(
         tf.assert_equal(tf.reduce_sum(mask * unmask), 0.),
-        tf.assert_equal(reduced_mask_size + reduced_unmask_size,
+        tf.assert_equal(self.reduced_mask_size + self.reduced_unmask_size,
                         reduced_D))
     with tf.control_dependencies([assert_partition_op]):
       self.loss_mask = (tf.reduce_sum(mask * unreduced_loss)
-                        / reduced_mask_size)
+                        / self.reduced_mask_size)
       self.loss_unmask = (tf.reduce_sum(unmask * unreduced_loss)
-                          / reduced_unmask_size)
+                          / self.reduced_unmask_size)
 
     # Check which loss to use as objective function.
     self.loss = (self.loss_mask if self.hparams.optimize_mask_only else
