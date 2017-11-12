@@ -76,7 +76,7 @@ def main(unused_argv):
     for i, pianoroll in enumerate(rolls):
       midi_fpath = os.path.join(midi_path, "%s_%i.midi" % (label, i))
       midi_data = decoder.decode_to_midi(pianoroll)
-      print midi_fpath
+      print(midi_fpath)
       midi_data.write(midi_fpath)
 
   # Saves the results as midi and npy.    
@@ -154,7 +154,7 @@ class HarmonizeMidiMelodyStrategy(BaseStrategy):
     # Returns matrix of shape (128, time) with summed velocities.
     roll = midi.get_piano_roll(fs=fs)  # 16th notes
     roll = np.where(roll>0, 1, 0)
-    print roll.shape
+    print(roll.shape)
     roll = roll.T
     return roll
   
@@ -162,16 +162,16 @@ class HarmonizeMidiMelodyStrategy(BaseStrategy):
     # mroll shape: time, pitch
     # requested_shape: batch, time, pitch, instrument
     B, T, P, I = requested_shape
-    print 'requested_shape', requested_shape
+    print('requested_shape', requested_shape)
     assert mroll.ndim == 2
     assert mroll.shape[1] == 128
     hparams = self.wmodel.hparams
     assert P == hparams.num_pitches, '%r != %r' % (P, hparams.num_pitches)
     if T != mroll.shape[0]:
-      print 'WARNING: requested T %r != prime T %r' % (T, mroll.shape[0])
+      print('WARNING: requested T %r != prime T %r' % (T, mroll.shape[0]))
     rolls = np.zeros((B, mroll.shape[0], P, I), dtype=np.float32)
     rolls[:, :, :, 0] = mroll[None, :, hparams.min_pitch:hparams.max_pitch + 1]
-    print 'resulting shape', rolls.shape
+    print('resulting shape', rolls.shape)
     return rolls
 
   def run(self, shape):

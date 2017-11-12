@@ -42,7 +42,7 @@ def evaluate(evaluator, pianorolls):
   return rval
 
 def report(losses, prefix=""):
-  print "%s loss %s" % (prefix, statstr(flatcat(losses)))
+  print("%s loss %s" % (prefix, statstr(flatcat(losses))))
 
 def stats(x):
   return dict(mean=np.mean(x), sem=np.std(x) / np.sqrt(len(x)),

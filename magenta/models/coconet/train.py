@@ -313,9 +313,9 @@ def _print_popstat_info(tfpopstats, nppopstats):
       stdev_errors.append(abs(np.sqrt(moving_average) - np.sqrt(nppopstat)))
   def flatmean(xs):
     return np.mean(np.concatenate([x.flatten() for x in xs]))
-  print ("average of pop mean/stdev errors: %g %g"
+  print("average of pop mean/stdev errors: %g %g"
          % (flatmean(mean_errors), flatmean(stdev_errors)))
-  print ("average of batch mean/stdev: %g %g"
+  print("average of batch mean/stdev: %g %g"
          % (flatmean(nppopstats[0::2]),
             flatmean([np.sqrt(ugh) for ugh in nppopstats[1::2]])))
 

@@ -62,7 +62,7 @@ class BachSampler(BaseSampler):
   key = "bach"
 
   def run(self, pianorolls, masks):
-    print "Loading validation pieces from %s..." % self.wmodel.hparams.dataset
+    print("Loading validation pieces from %s..." % self.wmodel.hparams.dataset)
     dataset = lib.data.get_dataset(FLAGS.data_dir, self.wmodel.hparams, 'valid')
     bach_pianorolls = dataset.get_pianorolls()
     shape = pianorolls.shape
@@ -141,10 +141,10 @@ class GibbsSampler(BaseSampler):
 
   def run(self, pianorolls, masks):
     B, T, P, I = pianorolls.shape
-    print 'shape', pianorolls.shape
+    print('shape', pianorolls.shape)
     num_steps = (np.max(_numbers_of_masked_variables(masks))
                  if self.num_steps is None else self.num_steps)
-    print 'num_steps', num_steps
+    print('num_steps', num_steps)
 
     with self.logger.scope("sequence", subsample_factor=10):
       for s in range(num_steps):

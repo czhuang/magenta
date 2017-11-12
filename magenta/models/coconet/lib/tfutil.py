@@ -22,7 +22,7 @@ class RobustPredictor(object):
       if self.maxsize is None:
         self.maxsize = pianoroll.size
       self.maxsize = int(self.maxsize / self.factor)
-      print "ResourceExhaustedError on batch of %s elements, lowering max size to %s" % (pianoroll.size, self.maxsize)
+      print("ResourceExhaustedError on batch of %s elements, lowering max size to %s" % (pianoroll.size, self.maxsize))
       return self.bisect(pianoroll, mask)
 
   def bisect(self, pianoroll, mask):

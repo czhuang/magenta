@@ -35,7 +35,7 @@ def print_mask(mask):
   assert np.equal(mask, mask[:, 0, :][:, None, :]).all()
   # get rid of pitch dimension and transpose to get landscape orientation
   mask = mask[:, 0, :].T
-  print "\n".join("".join(str({True: 1, False: 0}[z]) for z in y) for y in mask)
+  print("\n".join("".join(str({True: 1, False: 0}[z]) for z in y) for y in mask))
 
 
 class MaskoutMethod(lib.util.Factory):
