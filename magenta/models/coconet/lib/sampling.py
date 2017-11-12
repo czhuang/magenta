@@ -253,39 +253,6 @@ class InstrumentMasker(BaseMasker):
     masks[:, :, :, self.instrument] = 1.
     return masks * outer_masks
 
-class ContiguousMasker(BaseMasker):
-  key = "contiguous"
-
-  def __call__(self, shape, pm=None, outer_masks=1., separate_instruments=True):
-    if not separate_instruments:
-      raise NotImplementedError()
-    # unclear how to make this work in the presence of outer_masks; in that case the masked-out
-    # variables may themselves be discontiguous.
-    if not np.all(outer_masks):
-      raise NotImplementedError()
-    B, T, P, I = shape
-    # (deterministically) determine how many 4-timestep chunks to mask out
-    chunk_size = 4
-    k = int(np.ceil(pm * T * I)) // chunk_size
-    masks = np.zeros(shape, dtype=np.float32)
-    for b in range(B):
-      ms = None
-      # m * chunk_size > T would cause overlap, which would cause the
-      # mask size to be smaller than desired, which breaks sequential
-      # sampling.
-      while ms is None or any(m * chunk_size > T for m in ms):
-        if ms is not None:
-          print "resampling mask to avoid overlap"
-        # assign chunks to instruments
-        ms = np.random.multinomial(k, pvals=[1./I] * I)
-      for i in range(I):
-        dt = ms[i] * chunk_size
-        t = np.random.choice(T)
-        t = np.arange(t, t + dt) % T
-        masks[b, t, :, i] = 1.
-    return masks * outer_masks
-
-
 #################
 ### Schedules ###
 #################
