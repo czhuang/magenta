@@ -1,4 +1,4 @@
-"""Prepares data for basic_autofill_cnn model by blanking out pianorolls."""
+"""Classes for datasets and batches."""
 
 from __future__ import absolute_import
 from __future__ import division

@@ -1,3 +1,9 @@
+"""Generate from a trained model from scratch or conditioned on a partial score."""
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import os, sys, time, cPickle as pkl, gzip
 import re
 import numpy as np
