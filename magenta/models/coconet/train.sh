@@ -5,7 +5,8 @@ code_dir=$(dirname $0)
 # Change this to dir for saving experiment logs. 
 log_dir="logs"
 # Change this to where data is loaded from.
-data_dir="$code_dir/testdata"
+#data_dir="$code_dir/testdata"
+data_dir="$code_dir/data"
 dataset=Jsb16thSeparated
 
 # Data preprocessing.
