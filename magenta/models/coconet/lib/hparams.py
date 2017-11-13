@@ -154,7 +154,8 @@ class Straight(Architecture):
 
   def __init__(self, input_depth, num_layers, num_filters, num_pitches, 
                output_depth, **kwargs):
-    print(self.key, input_depth, output_depth)
+    print('model_type=%s, input_depth=%d, output_depth=%d' % (
+          self.key, input_depth, output_depth))
     assert num_layers >= 4
 
     self.layers = []
@@ -168,6 +169,7 @@ class Straight(Architecture):
     _add(filters=[2, 2, num_filters, output_depth],
          activation=lib.util.identity)
 
+    print('num_layers=%d, num_filters=%d' % (len(self.layers), num_filters))
     self.name = '%s-%d-%d' % (self.key, len(self.layers), num_filters)
   
   def __str__(self):
