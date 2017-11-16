@@ -115,7 +115,7 @@ class BaseStrategy(lib.util.Factory):
   def __call__(self, shape):
     label = "%s_strategy" % self.key
     with lib.util.timing(label):
-      with self.logger.scope(label):
+      with self.logger.section(label):
         return self.run(shape)
 
   def blank_slate(self, shape):
@@ -184,7 +184,7 @@ class HarmonizeMidiMelodyStrategy(BaseStrategy):
                                   temperature=FLAGS.temperature),
         schedule=lib.sampling.YaoSchedule())
 
-    with self.logger.scope("context"):
+    with self.logger.section("context"):
       context = np.array([lib.mask.apply_mask(pianoroll, mask)
                           for pianoroll, mask in zip(pianorolls, masks)])
       self.logger.log(pianorolls=context, masks=masks, predictions=context)
@@ -253,7 +253,7 @@ class RevoiceStrategy(BaseStrategy):
 
     for i in range(shape[-1]):
       masks = lib.sampling.InstrumentMasker(instrument=i)(shape)
-      with self.logger.scope("context"):
+      with self.logger.section("context"):
         context = np.array([lib.mask.apply_mask(pianoroll, mask)
                             for pianoroll, mask in zip(pianorolls, masks)])
         self.logger.log(pianorolls=context, masks=masks, predictions=context)
@@ -278,12 +278,12 @@ class HarmonizationStrategy(BaseStrategy):
                                   temperature=FLAGS.temperature),
         schedule=lib.sampling.YaoSchedule())
 
-    with self.logger.scope("context"):
+    with self.logger.section("context"):
       context = np.array([lib.mask.apply_mask(pianoroll, mask)
                           for pianoroll, mask in zip(pianorolls, masks)])
       self.logger.log(pianorolls=context, masks=masks, predictions=context)
     pianorolls = gibbs(pianorolls, masks)
-    with self.logger.scope("result"):
+    with self.logger.section("result"):
       self.logger.log(pianorolls=pianorolls, masks=masks, predictions=pianorolls)
 
     return pianorolls
@@ -305,7 +305,7 @@ class TransitionStrategy(BaseStrategy):
                                   temperature=FLAGS.temperature),
         schedule=lib.sampling.YaoSchedule())
 
-    with self.logger.scope("context"):
+    with self.logger.section("context"):
       context = np.array([lib.mask.apply_mask(pianoroll, mask)
                           for pianoroll, mask in zip(pianorolls, masks)])
       self.logger.log(pianorolls=context, masks=masks, predictions=context)

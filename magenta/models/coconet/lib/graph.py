@@ -61,6 +61,7 @@ class CoconetGraph(object):
 
   def get_convnet_input(self):
     pianorolls, masks = self.placeholders["pianorolls"], self.placeholders["masks"]
+    pianorolls *= 1 - masks
     if self.hparams.mask_indicates_context:
       # flip meaning of mask for convnet purposes: after flipping, mask is hot
       # where values are known. this makes more sense in light of padding done
@@ -98,6 +99,8 @@ class CoconetGraph(object):
     if self.hparams.use_softmax_loss:
       # don't use tf.nn.softmax_cross_entropy because we need the shape to
       # remain constant
+      # also, don't use logits because we want normalized log probabilities :-/
+      # FIXME normalize them here, bypassing logits/labels is unacceptable
       return -tf.log(self.predictions) * self.pianorolls
     else:
       return tf.nn.sigmoid_cross_entropy_with_logits(logits=logits,
