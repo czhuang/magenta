@@ -67,6 +67,37 @@ py_library(
   ]
 )
 
+
+py_library(
+    name = "logging",
+    srcs = ["lib/logging.py"],
+)
+
+
+py_library(
+    name = "sampling",
+    srcs = ["lib/sampling.py"],
+    deps = [
+        ":mask",
+        ":data",
+        ":util",
+        ":tfutil",
+        ":logging",
+    ]
+)
+
+
+py_library(
+    name = "evaluation",
+    srcs = ["lib/evaluation.py"],
+    deps = [
+        ":mask",
+        ":util",
+        ":tfutil",
+    ]
+)
+
+
 py_binary(
     name = "train",
     srcs = ["train.py"],
