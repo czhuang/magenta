@@ -148,16 +148,17 @@ class GibbsSampler(BaseSampler):
 
     with self.logger.scope("sequence", subsample_factor=10):
       for s in range(num_steps):
-        pm = self.schedule(s, num_steps)
-        inner_masks = self.masker(pianorolls.shape, pm=pm, outer_masks=masks,
-                                  separate_instruments=self.separate_instruments)
-        pianorolls = self.sampler.run_nonverbose(pianorolls, inner_masks)
-        if self.separate_instruments:
-          # ensure the sampler did actually sample everything under inner_masks
-          assert np.all(np.where(inner_masks.max(axis=2),
-                                 np.isclose(pianorolls.max(axis=2), 1),
-                                 1))
-        self.logger.log(pianorolls=pianorolls, masks=inner_masks, predictions=pianorolls)
+        with lib.util.timing('gibbs step %d' %s):
+          pm = self.schedule(s, num_steps)
+          inner_masks = self.masker(pianorolls.shape, pm=pm, outer_masks=masks,
+                                    separate_instruments=self.separate_instruments)
+          pianorolls = self.sampler.run_nonverbose(pianorolls, inner_masks)
+          if self.separate_instruments:
+            # ensure the sampler did actually sample everything under inner_masks
+            assert np.all(np.where(inner_masks.max(axis=2),
+                                   np.isclose(pianorolls.max(axis=2), 1),
+                                   1))
+          self.logger.log(pianorolls=pianorolls, masks=inner_masks, predictions=pianorolls)
 
     self.logger.log(pianorolls=pianorolls, masks=masks, predictions=pianorolls)
     return pianorolls

@@ -18,6 +18,7 @@ def evaluate(evaluator, pianorolls):
   unit_losses = []
 
   for pi, pianoroll in enumerate(pianorolls):
+    print('evaluating piece %d' % pi)
     start_time = time.time()
 
     unit_loss = -evaluator(pianoroll)
@@ -117,6 +118,7 @@ class FrameEvaluator(BaseEvaluator):
     # instruments. Hence we outer loop over the instruments and parallelize across frames.
     xs_scratch = xs.copy()
     for d_idx in range(D):
+      print('voice %d' % d_idx)
       # call out to the model to get predictions for the first instrument at each time step
       pxhats = self.predictor(xs_scratch, mask)
 
@@ -213,6 +215,3 @@ class EnsemblingEvaluator(BaseEvaluator):
   def __call__(self, pianoroll):
     lls = [self.evaluator(pianoroll) for _ in range(self.ensemble_size)]
     return logsumexp(lls, b=1. / len(lls), axis=0)
-
-if __name__ == '__main__':
-  tf.app.run()

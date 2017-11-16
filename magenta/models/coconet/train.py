@@ -81,7 +81,7 @@ tf.app.flags.DEFINE_integer('num_epochs', 0,
                             'The number of epochs to train the model. Default '
                             'is 0, which means to run until terminated '
                             'manually.')
-tf.app.flags.DEFINE_integer('save_model_secs', 60,
+tf.app.flags.DEFINE_integer('save_model_secs', 360,
                             'The number of seconds between saving each '
                             'checkpoint.')
 tf.app.flags.DEFINE_integer('eval_freq', 5,
@@ -199,6 +199,8 @@ def main(unused_argv):
   hparams = _hparams_from_flags()
   
   # Get data.
+  print('dataset:', FLAGS.dataset, FLAGS.data_dir)
+  print('current dir:', os.path.curdir)
   train_data = lib.data.get_dataset(FLAGS.data_dir, hparams, "train")
   valid_data = lib.data.get_dataset(FLAGS.data_dir, hparams, "valid")
   print('# of train_data:', train_data.num_examples)

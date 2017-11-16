@@ -101,7 +101,7 @@ def timing(label, printon=True):
   yield
   time_taken = (time.time() - start_time) / 60.0
   if printon:
-    print("exit %s (%.2fmin)" % (label, time_taken))
+    print("exit  %s (%.3fmin)" % (label, time_taken))
 
 
 class AggregateMean(object):
