@@ -8,29 +8,51 @@ from datetime import datetime
 import numpy as np
 
 
-def sample_bernoulli(p, temperature):
-  B, T, P, I = p.shape
-  assert I == 1
+def sample_bernoulli(p, temperature=1):
+  """Sample an array of Bernoullis.
+
+  Args:
+    p: an array of Bernoulli probabilities.
+    temperature: if not 1, transform the distribution by dividing the log
+        probabilities and renormalizing. Values greater than 1 increase entropy,
+        values less than 1 decrease entropy. A value of 0 yields a deterministic
+        distribution that chooses the mode.
+
+  Returns:
+    A binary array of sampled values, the same shape as `p`.
+  """
   if temperature == 0.:
     sampled = p > 0.5
   else:
-    axis = 3
-    pp = np.concatenate((p, (1-p)), axis=3)
+    pp = np.stack([p, 1 - p])
     logpp = np.log(pp)
     logpp /= temperature
-    logpp -= logpp.max(axis=axis, keepdims=True)
+    logpp -= logpp.max(axis=0, keepdims=True)
     #p = np.where(logpp > 0, 
     #             1 / (1 + np.exp(-logpp)), 
     #             np.exp(logpp) / (np.exp(logpp) + 1))
     p = np.exp(logpp)
-    p /= p.sum(axis=axis, keepdims=True)
-    p = p[:, :, :, :1]
+    p /= p.sum(axis=0)
     print("%.5f < %.5f < %.5f < %.5f < %.5g" % (np.min(p), np.percentile(p, 25), np.percentile(p, 50), np.percentile(p, 75), np.max(p)))
 
     sampled = np.random.random(p.shape) < p
   return sampled
 
 def softmax(p, axis=None, temperature=1):
+  """Apply the softmax transform to an array of categorical distributions.
+
+  Args:
+    p: an array of categorical probability vectors, possibly unnormalized.
+    axis: the axis that spans the categories (default: -1).
+    temperature: if not 1, transform the distribution by dividing the log
+        probabilities and renormalizing. Values greater than 1 increase entropy,
+        values less than 1 decrease entropy. A value of 0 yields a deterministic
+        distribution that chooses the mode.
+
+  Returns:
+    An array of categorical probability vectors, like `p` but tempered and
+    normalized.
+  """
   if axis is None:
     axis = p.ndim - 1
   if temperature == 0.:
@@ -48,6 +70,23 @@ def softmax(p, axis=None, temperature=1):
   return p
 
 def sample(p, axis=None, temperature=1, onehot=False):
+  """Sample an array of categorical variables.
+
+  Args:
+    p: an array of categorical probability vectors, possibly unnormalized.
+    axis: the axis that spans the categories (default: -1).
+    temperature: if not 1, transform the distribution by dividing the log
+        probabilities and renormalizing. Values greater than 1 increase entropy,
+        values less than 1 decrease entropy. A value of 0 yields a deterministic
+        distribution that chooses the mode.
+    onehot: whether to one-hot encode the result.
+
+  Returns:
+    An array of samples. If `onehot` is False, the result is an array of integer
+    category indices, with the categorical axis removed. If `onehot` is True,
+    these indices are one-hot encoded, so that the categorical axis remains and
+    the result has the same shape and dtype as `p`.
+  """
   assert (p >= 0).all() # just making sure we don't put log probabilities in here
 
   if axis is None:
@@ -62,30 +101,51 @@ def sample(p, axis=None, temperature=1, onehot=False):
 
   return to_onehot(i, axis=axis, depth=p.shape[axis]) if onehot else i
 
-def to_onehot(i, depth, axis=None):
-  if axis is None:
-    axis = i.ndim
+def to_onehot(i, depth, axis=-1):
+  """Convert integer categorical indices to one-hot probability vectors.
+
+  Args:
+    i: an array of integer categorical indices.
+    depth: the number of categories.
+    axis: the axis on which to lay out the categories.
+
+  Returns:
+    An array of one-hot categorical indices, shaped like `i` but with a
+    categorical axis in the location specified by `axis`.
+  """
   x = np.eye(depth)[i]
-  if axis != i.ndim:
+  axis %= x.ndim
+  if axis != x.ndim - 1:
     # move new axis forward
-    axes = list(range(i.ndim))
-    axes.insert(axis, i.ndim)
+    axes = list(range(x.ndim - 1))
+    axes.insert(axis, x.ndim - 1)
     x = np.transpose(x, axes)
   assert np.allclose(x.sum(axis=axis), 1)
   return x
 
-def sample_onehot(p, axis=None, temperature=1):
-  return sample(p, axis=axis, temperature=temperature, onehot=True)
-
 def deepsubclasses(klass):
+  """Iterate over direct and indirect subclasses of `klass`."""
   for subklass in klass.__subclasses__():
     yield subklass
     for subsubklass in deepsubclasses(subklass):
       yield subsubklass
 
 class Factory(object):
+  """Factory mixin.
+
+  Provides a `make` method that searches for an appropriate subclass to
+  instantiate given a key. Subclasses inheriting from a class that has Factory
+  mixed in can expose themselves for instantiation through this method by
+  setting the class attribute named `key` to an appropriate value."""
+
   @classmethod
   def make(klass, key, *args, **kwargs):
+    """Instantiate a subclass of `klass`.
+
+    Args:
+      key: the key identifying the subclass.
+      *args, **kwargs: passed on to the subclass constructor.
+    """
     for subklass in deepsubclasses(klass):
       if subklass.key == key:
         return subklass(*args, **kwargs)
@@ -95,6 +155,7 @@ class Factory(object):
 
 @contextlib.contextmanager
 def timing(label, printon=True):
+  """Context manager that times and logs execution."""
   if printon:
     print("enter %s" % label)
   start_time = time.time()
@@ -135,6 +196,7 @@ def get_rng(rng=None):
 
 @contextlib.contextmanager
 def numpy_seed(seed):
+  """Context manager that temporarily sets the numpy.random seed."""
   if seed is not None:
     prev_rng_state = np.random.get_state()
     np.random.seed(seed)
@@ -221,9 +283,23 @@ def identity(x):
   return x
 
 def eqzip(*xss):
+  """Zip iterables of the same length.
+
+  Unlike the builtin `zip`, this fails on iterables of different lengths.
+  As a side-effect, it exhausts (and stores the elements of) all iterables
+  before starting iteration.
+
+  Args:
+    *xss: the iterables to zip.
+
+  Returns:
+    zip(*xss)
+
+  Raises:
+    ValueError if the iterables are of different lengths.
+  """
   xss = list(map(list, xss))
   lengths = list(map(len, xss))
   if not all(length == lengths[0] for length in lengths):
     raise ValueError("eqzip got iterables of unequal lengths %s" % lengths)
   return zip(*xss)
-

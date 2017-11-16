@@ -16,6 +16,13 @@ import lib.util
 
 class Dataset(lib.util.Factory):
   def __init__(self, basepath, hparams, fold):
+    """Initialize a `Dataset` instance.
+
+    Args:
+        basepath: path to directory containing dataset npz files.
+        hparams: Hyperparameters object.
+        fold: data subset, one of {train,valid,test}.
+    """
     self.basepath = basepath
     self.hparams = hparams
     self.fold = fold
@@ -45,14 +52,38 @@ class Dataset(lib.util.Factory):
     return self.max_pitch + 1 - self.min_pitch
 
   def get_sequences(self):
+    """Return the raw collection of examples."""
     return self.data
 
   def get_pianorolls(self, sequences=None):
+    """Turn sequences into pianorolls.
+
+    Args:
+      sequences: the collection of sequences to convert. If not given, the
+          entire dataset is converted.
+
+    Returns:
+      A list of multi-instrument pianorolls, each shaped
+          (duration, pitches, instruments)
+    """
     if sequences is None:
       sequences = self.get_sequences()
     return list(map(self.encoder.encode, sequences))
 
   def get_featuremaps(self, sequences=None):
+    """Turn sequences into features for training/evaluation.
+
+    Encodes sequences into randomly cropped and masked pianorolls, and returns
+    a padded Batch containing three channels: the pianorolls, the corresponding
+    masks and their lengths before padding (but after cropping).
+
+    Args:
+      sequences: the collection of sequences to convert. If not given, the
+          entire dataset is converted.
+
+    Returns:
+      A Batch containing pianorolls, masks and piece lengths.
+    """
     if sequences is None:
       sequences = self.get_sequences()
 
@@ -75,10 +106,12 @@ class Dataset(lib.util.Factory):
     return Batch(pianorolls=pianorolls, masks=masks, lengths=lengths)
 
   def update_hparams(self, hparams):
+    """Update subset of Hyperparameters pertaining to data."""
     for key in "num_instruments num_pitches min_pitch max_pitch qpm".split():
       setattr(hparams, key, getattr(self, key))
 
 def get_dataset(basepath, hparams, fold):
+  """Factory for Datasets."""
   return Dataset.make(hparams.dataset, basepath, hparams, fold)
 
 class Nottingham(Dataset):
@@ -111,18 +144,45 @@ class Jsb16thSeparated(Dataset):
   qpm = 60
 
 class Batch(object):
+  """A Batch of training/evaluation data."""
+
   keys = set("pianorolls masks lengths".split())
 
   def __init__(self, **kwargs):
+    """Initialize a Batch instance.
+
+    Args:
+      **kwargs: data dictionary. Must have three keys "pianorolls", "masks",
+          "lengths", each corresponding to a model placeholder. Each value
+          is a sequence (i.e. a batch) of examples.
+    """
     assert set(kwargs.keys()) == self.keys
+    assert all(len(value) == len(kwargs.values()[0]) for value in kwargs.values())
     self.features = kwargs
 
   def get_feed_dict(self, placeholders):
+    """Zip placeholders and batch data into a feed dict.
+
+    Args:
+      placeholders: placeholder dictionary. Must have three keys "pianorolls",
+          "masks" and "lengths".
+
+    Returns:
+      A feed dict mapping the given placeholders to the data in this batch.
+    """
     assert set(placeholders.keys()) == self.keys
     return dict((placeholders[key], self.features[key])
                 for key in self.keys)
 
   def batches(self, **batches_kwargs):
+    """Iterate over sub-batches of this batch.
+
+    Args:
+      **batches_kwargs: kwargs passed on to lib.util.batches.
+
+    Returns:
+      An iterator over sub-Batches.
+    """
     keys, values = list(zip(*list(self.features.items())))
     for batch in lib.util.batches(*values, **batches_kwargs):
       yield Batch(**dict(lib.util.eqzip(keys, batch)))

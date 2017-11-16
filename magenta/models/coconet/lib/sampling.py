@@ -38,8 +38,8 @@ class BaseSampler(lib.util.Factory):
   def sample_predictions(self, predictions, temperature=None):
     temperature = self.temperature if temperature is None else temperature
     if self.separate_instruments:
-      return lib.util.sample_onehot(predictions, axis=2,
-                                    temperature=temperature)
+      return lib.util.sample(predictions, axis=2, onehot=True,
+                             temperature=temperature)
     else:
       return lib.util.sample_bernoulli(0.5 * predictions,
                                        temperature=temperature)
@@ -55,7 +55,7 @@ class BaseSampler(lib.util.Factory):
 
   def run_nonverbose(self, pianorolls, masks):
     label = "%s_sampler" % self.key
-    with self.logger.scope(label):
+    with self.logger.section(label):
       return self.run(pianorolls, masks)
 
 class BachSampler(BaseSampler):
@@ -114,7 +114,7 @@ class AncestralSampler(BaseSampler):
     # determine how many model evaluations we need to make
     mask_size = np.max(_numbers_of_masked_variables(masks))
 
-    with self.logger.scope("sequence", subsample_factor=10):
+    with self.logger.section("sequence", subsample_factor=10):
       for _ in range(mask_size):
         predictions = self.predictor(pianorolls, masks)
         samples = self.sample_predictions(predictions)
@@ -146,7 +146,7 @@ class GibbsSampler(BaseSampler):
                  if self.num_steps is None else self.num_steps)
     print('num_steps', num_steps)
 
-    with self.logger.scope("sequence", subsample_factor=10):
+    with self.logger.section("sequence", subsample_factor=10):
       for s in range(num_steps):
         pm = self.schedule(s, num_steps)
         inner_masks = self.masker(pianorolls.shape, pm=pm, outer_masks=masks,
@@ -177,14 +177,14 @@ class UpsamplingSampler(BaseSampler):
     if not np.all(masks):
       raise NotImplementedError()
     masks = np.ones_like(pianorolls)
-    with self.logger.scope("sequence"):
+    with self.logger.section("sequence"):
       while pianorolls.shape[1] < self.desired_length:
         # upsample by zero-order hold and mask out every second time step
         pianorolls = np.repeat(pianorolls, 2, axis=1)
         masks = np.repeat(masks, 2, axis=1)
         masks[:, 1::2] = 1
 
-        with self.logger.scope("context"):
+        with self.logger.section("context"):
           context = np.array([lib.mask.apply_mask(pianoroll, mask)
                               for pianoroll, mask in zip(pianorolls, masks)])
           self.logger.log(pianorolls=context, masks=masks, predictions=context)
@@ -318,11 +318,11 @@ class OrderlessSelector(BaseSelector):
       # select one variable to sample. sample according to normalized mask;
       # is uniform as all masked out variables have equal positive weight.
       selection = masks.max(axis=2).reshape([B, T * I])
-      selection = lib.util.sample_onehot(selection, axis=1)
+      selection = lib.util.sample(selection, axis=1, onehot=True)
       selection = selection.reshape([B, T, 1, I])
     else:
       selection = masks.reshape([B, T * P])
-      selection = lib.util.sample_onehot(selection, axis=1)
+      selection = lib.util.sample(selection, axis=1, onehot=True)
       selection = selection.reshape([B, T, P, I])
     # Intersect with mask to avoid selecting outside of the mask, e.g. in case some masks[b] is zero
     # everywhere. This can happen inside blocked Gibbs, where different examples have different
