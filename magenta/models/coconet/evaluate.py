@@ -34,16 +34,21 @@ def main(argv):
   # this gives us no way to tell whether the leftovers were meant to be flags
   # or positional arguments, as tf.app.flags might have consumed a `--` arg.
   for arg in argv[1:]:
-    if arg.startswith("-"):
+    if arg.startswith("-") and "logtostderr" not in arg:
       raise ValueError("unknown flag: %s" % arg)
-
-  paths = argv[1:]
+      break
+    if "logtostderr" in arg:
+      script_arg_idx = 2
+    else:
+      script_arg_idx = 1
+  paths = argv[script_arg_idx:]
   if bool(paths) == bool(FLAGS.fold is not None):
     raise ValueError("Either --fold must be specified, or paths of npz files to load must be given, but not both.")
   if FLAGS.fold is not None:
     evaluate_fold(FLAGS.fold, evaluator, wmodel.hparams)
   if paths:
     evaluate_paths(paths, evaluator, wmodel.hparams)
+  print ('Done')
 
 def evaluate_fold(fold, evaluator, hparams):
   name = "eval_%s_%s%s_%s_ensemble%s_chrono%s" % (

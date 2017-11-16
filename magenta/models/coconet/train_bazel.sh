@@ -38,3 +38,4 @@ bazel run -c opt --config=cuda --copt="-mavx" :train \
   --num_filters=$num_filters \
   --use_residual \
   --batch_size=$batch_size \
+  --logtostderr
