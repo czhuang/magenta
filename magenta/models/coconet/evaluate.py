@@ -52,6 +52,20 @@ def evaluate_fold(fold, evaluator, hparams):
   save_path = "%s__%s" % (FLAGS.checkpoint, name)
 
   pianorolls = get_fold_pianorolls(fold, hparams)
+
+  if False: # inspect data
+    for pianoroll in pianorolls:
+      min_pitch = pianoroll.argmax(axis=1).min()
+      max_pitch = pianoroll.argmax(axis=1).max()
+      pianoroll = pianoroll[:, min_pitch:max_pitch+1]
+      T, P, I = pianoroll.shape
+      lines = [[" " for _ in range(T)] for _ in range(P)]
+      for t, p, i in np.transpose(np.nonzero(pianoroll)):
+        lines[p][t] = "SATB"[i]
+      print("yay:")
+      print("\n".join("".join(line) for line in reversed(lines)))
+      input()
+
   rval = lib.evaluation.evaluate(evaluator, pianorolls)
   np.savez_compressed("%s.npz" % save_path, **rval)
 
