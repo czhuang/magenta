@@ -99,9 +99,7 @@ class CoconetGraph(object):
     if self.hparams.use_softmax_loss:
       # don't use tf.nn.softmax_cross_entropy because we need the shape to
       # remain constant
-      # also, don't use logits because we want normalized log probabilities :-/
-      # FIXME normalize them here, bypassing logits/labels is unacceptable
-      return -tf.log(self.predictions) * self.pianorolls
+      return -tf.nn.log_softmax(logits, dim=2) * labels
     else:
       return tf.nn.sigmoid_cross_entropy_with_logits(logits=logits,
                                                      labels=labels)
