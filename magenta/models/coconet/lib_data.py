@@ -9,12 +9,12 @@ import os
 import numpy as np
 import tensorflow as tf
 
-import lib.mask
-import lib.pianoroll
-import lib.util
+import lib_mask
+import lib_pianoroll
+import lib_util
 
 
-class Dataset(lib.util.Factory):
+class Dataset(lib_util.Factory):
   def __init__(self, basepath, hparams, fold):
     """Initialize a `Dataset` instance.
 
@@ -36,7 +36,7 @@ class Dataset(lib.util.Factory):
     # Update the default pitch ranges in hparams to reflect that of dataset.
     hparams.pitch_ranges = [self.min_pitch, self.max_pitch]
     hparams.shortest_duration = self.shortest_duration
-    self.encoder = lib.pianoroll.get_pianoroll_encoder_decoder(hparams)
+    self.encoder = lib_pianoroll.get_pianoroll_encoder_decoder(hparams)
     self.data = np.load(os.path.join(self.basepath, "%s.npz" % self.name))[fold]
 
   @property
@@ -92,15 +92,15 @@ class Dataset(lib.util.Factory):
 
     for sequence in sequences:
       pianoroll = self.encoder.encode(sequence)
-      pianoroll = lib.util.random_crop(pianoroll, self.hparams.crop_piece_len)
-      mask = lib.mask.get_mask(
+      pianoroll = lib_util.random_crop(pianoroll, self.hparams.crop_piece_len)
+      mask = lib_mask.get_mask(
           self.hparams.maskout_method, pianoroll.shape,
           separate_instruments=self.hparams.separate_instruments,
           blankout_ratio=self.hparams.corrupt_ratio)
       pianorolls.append(pianoroll)
       masks.append(mask)
   
-    (pianorolls, masks), lengths = lib.util.pad_and_stack(pianorolls, masks)
+    (pianorolls, masks), lengths = lib_util.pad_and_stack(pianorolls, masks)
     assert pianorolls.ndim == 4 and masks.ndim == 4
     assert pianorolls.shape == masks.shape
     return Batch(pianorolls=pianorolls, masks=masks, lengths=lengths)
@@ -178,11 +178,11 @@ class Batch(object):
     """Iterate over sub-batches of this batch.
 
     Args:
-      **batches_kwargs: kwargs passed on to lib.util.batches.
+      **batches_kwargs: kwargs passed on to lib_util.batches.
 
     Returns:
       An iterator over sub-Batches.
     """
     keys, values = list(zip(*list(self.features.items())))
-    for batch in lib.util.batches(*values, **batches_kwargs):
-      yield Batch(**dict(lib.util.eqzip(keys, batch)))
+    for batch in lib_util.batches(*values, **batches_kwargs):
+      yield Batch(**dict(lib_util.eqzip(keys, batch)))

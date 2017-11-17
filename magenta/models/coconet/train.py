@@ -13,10 +13,10 @@ import yaml
 import numpy as np
 import tensorflow as tf
 
-import lib.data
-import lib.util
-import lib.graph
-import lib.hparams
+import lib_data
+import lib_util
+import lib_graph
+import lib_hparams
 
 
 FLAGS = tf.app.flags.FLAGS
@@ -94,7 +94,7 @@ def estimate_popstats(sv, sess, m, dataset, hparams):
   tfbatchstats, tfpopstats = list(zip(*m.popstats_by_batchstat.items()))
 
   nepochs = 3
-  nppopstats = [lib.util.AggregateMean("") for _ in tfpopstats]
+  nppopstats = [lib_util.AggregateMean("") for _ in tfpopstats]
   for _ in range(nepochs):
     batches = (dataset
                .get_featuremaps()
@@ -123,15 +123,15 @@ def run_epoch(supervisor,
   """Runs an epoch of training or evaluate the model on given data."""
   # reduce variance in validation loss by fixing the seed
   data_seed = 123 if experiment_type == "valid" else None
-  with lib.util.numpy_seed(data_seed):
+  with lib_util.numpy_seed(data_seed):
     batches = (dataset
                .get_featuremaps()
                .batches(size=m.batch_size, shuffle=True, shuffle_rng=data_seed))
 
-  losses = lib.util.AggregateMean('losses')
-  losses_total = lib.util.AggregateMean('losses_total')
-  losses_mask = lib.util.AggregateMean('losses_mask')
-  losses_unmask = lib.util.AggregateMean('losses_unmask')
+  losses = lib_util.AggregateMean('losses')
+  losses_total = lib_util.AggregateMean('losses_total')
+  losses_mask = lib_util.AggregateMean('losses_mask')
+  losses_unmask = lib_util.AggregateMean('losses_unmask')
 
   start_time = time.time()
   for step, batch in enumerate(batches):
@@ -201,8 +201,8 @@ def main(unused_argv):
   # Get data.
   print('dataset:', FLAGS.dataset, FLAGS.data_dir)
   print('current dir:', os.path.curdir)
-  train_data = lib.data.get_dataset(FLAGS.data_dir, hparams, "train")
-  valid_data = lib.data.get_dataset(FLAGS.data_dir, hparams, "valid")
+  train_data = lib_data.get_dataset(FLAGS.data_dir, hparams, "train")
+  valid_data = lib_data.get_dataset(FLAGS.data_dir, hparams, "valid")
   print('# of train_data:', train_data.num_examples)
   print('# of valid_data:', valid_data.num_examples)
   if train_data.num_examples < hparams.batch_size:
@@ -225,9 +225,9 @@ def main(unused_argv):
     no_op = tf.no_op()
 
     # Build placeholders and training graph, and validation graph with reuse.
-    m = lib.graph.build_graph(is_training=True, hparams=hparams)
+    m = lib_graph.build_graph(is_training=True, hparams=hparams)
     tf.get_variable_scope().reuse_variables()
-    mvalid = lib.graph.build_graph(is_training=False, hparams=hparams)
+    mvalid = lib_graph.build_graph(is_training=False, hparams=hparams)
 
     tracker = Tracker(label="validation loss",
                       patience=FLAGS.patience,
@@ -328,7 +328,7 @@ def _hparams_from_flags():
       batch_size maskout_method mask_indicates_context optimize_mask_only
       rescale_loss patience corrupt_ratio eval_freq run_id
       """.split())
-  hparams = lib.hparams.Hyperparameters(**dict((key, getattr(FLAGS, key))
+  hparams = lib_hparams.Hyperparameters(**dict((key, getattr(FLAGS, key))
                                                for key in keys))
   return hparams
 

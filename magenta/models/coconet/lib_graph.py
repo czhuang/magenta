@@ -7,8 +7,8 @@ from __future__ import print_function
 import tensorflow as tf, numpy as np
 from collections import OrderedDict
 
-import lib.tfutil
-import lib.util
+import lib_tfutil
+import lib_util
 
 
 class CoconetGraph(object):
@@ -289,11 +289,11 @@ def load_checkpoint(path):
   """Builds graph, loads checkpoint, and returns wrapped model.
 
   Returns:
-    wrapped_model: lib.tfutil.WrappedModel
+    wrapped_model: lib_tfutil.WrappedModel
   """
-  hparams = lib.util.load_hparams(path)
+  hparams = lib_util.load_hparams(path)
   model = build_graph(is_training=False, hparams=hparams)
-  wmodel = lib.tfutil.WrappedModel(model, model.loss.graph, hparams)
+  wmodel = lib_tfutil.WrappedModel(model, model.loss.graph, hparams)
   with wmodel.graph.as_default():
     wmodel.sess = tf.Session()
     saver = tf.train.Saver()
