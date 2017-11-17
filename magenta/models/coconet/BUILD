@@ -56,7 +56,7 @@ py_library(
   deps = [
       # tensorflow dep
       # numpy dep
-      # pretty_midi dep
+      "@pretty_midi//:pretty_midi",
   ]
 )
 

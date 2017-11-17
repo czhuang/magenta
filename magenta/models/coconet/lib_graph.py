@@ -291,6 +291,7 @@ def load_checkpoint(path):
   Returns:
     wrapped_model: lib_tfutil.WrappedModel
   """
+  path = os.path.join(tf.resource_loader.get_data_files_path(), path)
   hparams = lib_util.load_hparams(path)
   model = build_graph(is_training=False, hparams=hparams)
   wmodel = lib_tfutil.WrappedModel(model, model.loss.graph, hparams)
