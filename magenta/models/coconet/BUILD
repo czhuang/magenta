@@ -18,32 +18,32 @@
 licenses(["notice"])  # Apache 2.0
 
 py_library(
-  name = "data",
+  name = "lib_data",
   srcs = ["lib_data.py"],
   deps = [
-    ":mask",
-    ":pianoroll",
-    ":util",
+    ":lib_mask",
+    ":lib_pianoroll",
+    ":lib_util",
     # tensorflow dep
   ]
 )
 
 py_library(
-  name = "mask",
+  name = "lib_mask",
   srcs = ["lib_mask.py"],
   deps = [
-    ":util",
+    ":lib_util",
     # tensorflow dep
   ]
 )
 
 py_library(
-  name = "util",
+  name = "lib_util",
   srcs = ["lib_util.py"],
 )
 
 py_library(
-  name = "tfutil",
+  name = "lib_tfutil",
   srcs = ["lib_tfutil.py"],
   deps = [
       # tensorflow dep
@@ -51,7 +51,7 @@ py_library(
 )
 
 py_library(
-  name = "pianoroll",
+  name = "lib_pianoroll",
   srcs = ["lib_pianoroll.py"],
   deps = [
       # tensorflow dep
@@ -59,53 +59,53 @@ py_library(
 )
 
 py_library(
-  name = "graph",
+  name = "lib_graph",
   srcs = ["lib_graph.py"],
   deps = [
-    ":util",
-    ":tfutil",
+    ":lib_util",
+    ":lib_tfutil",
     # tensorflow dep
   ]
 )
 
 py_library(
-  name = "hparams",
+  name = "lib_hparams",
   srcs = ["lib_hparams.py"],
   deps = [
-    ":util",
+    ":lib_util",
     # tensorflow dep
   ]
 )
 
 
 py_library(
-    name = "logging",
+    name = "lib_logging",
     srcs = ["lib_logging.py"],
     # tensroflow dep
 )
 
 
 py_library(
-    name = "sampling",
+    name = "lib_sampling",
     srcs = ["lib_sampling.py"],
     deps = [
-        ":mask",
-        ":data",
-        ":util",
-        ":tfutil",
-        ":logging",
+        ":lib_mask",
+        ":lib_data",
+        ":lib_util",
+        ":lib_tfutil",
+        ":lib_logging",
         # tensorflow dep
     ]
 )
 
 
 py_library(
-    name = "evaluation",
+    name = "lib_evaluation",
     srcs = ["lib_evaluation.py"],
     deps = [
-        ":mask",
-        ":util",
-        ":tfutil",
+        ":lib_mask",
+        ":lib_util",
+        ":lib_tfutil",
         # tensorflow dep
     ]
 )
@@ -118,10 +118,10 @@ py_binary(
         "testdata/Jsb16thSeparated.npz",
     ],
     deps = [
-      ":data",
-      ":util",
-      ":graph",
-      ":hparams",
+      ":lib_data",
+      ":lib_util",
+      ":lib_graph",
+      ":lib_hparams",
         # tensorflow dep
     ],
 )
@@ -130,10 +130,10 @@ py_binary(
     name = "evaluate",
     srcs = ["evaluate.py"],
     deps = [
-        ":data",
-        ":evaluation",
-        ":graph",
-        ":util",
+        ":lib_data",
+        ":lib_evaluation",
+        ":lib_graph",
+        ":lib_util",
         # tensorflow dep
     ],
 )
@@ -142,13 +142,13 @@ py_binary(
     name = "sample",
     srcs = ["sample.py"],
     deps = [
-        ":data",
-        ":graph",
-        ":logging",
-        ":mask",
-        ":pianoroll",
-        ":sampling",
-        ":util",
+        ":lib_data",
+        ":lib_graph",
+        ":lib_logging",
+        ":lib_mask",
+        ":lib_pianoroll",
+        ":lib_sampling",
+        ":lib_util",
         # tensorflow dep
     ],
 )
