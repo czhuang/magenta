@@ -22,12 +22,12 @@ from magenta.models.coconet import lib_hparams
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('data_dir', None,
                            'Path to the base directory for different datasets.')
-tf.app.flags.DEFINE_string('log_dir', None,
+tf.app.flags.DEFINE_string('logdir', None,
                            'Path to the directory where checkpoints and '
                            'summary events will be saved during training and '
                            'evaluation. Multiple runs can be stored within the '
-                           'parent directory of `log_dir`. Point TensorBoard '
-                           'to the parent directory of `log_dir` to see all '
+                           'parent directory of `logdir`. Point TensorBoard '
+                           'to the parent directory of `logdir` to see all '
                            'your runs.')
 tf.app.flags.DEFINE_bool('log_progress', True,
                          'If False, do not log any checkpoints and summary'
@@ -212,7 +212,7 @@ def main(unused_argv):
   train_data.update_hparams(hparams)
 
   # Save hparam configs.
-  logdir = os.path.join(FLAGS.log_dir, hparams.log_subdir_str)
+  logdir = os.path.join(FLAGS.logdir, hparams.log_subdir_str)
   if not os.path.exists(logdir):
     os.makedirs(logdir)
   config_fpath = os.path.join(logdir, 'config')
@@ -232,7 +232,7 @@ def main(unused_argv):
     tracker = Tracker(label="validation loss",
                       patience=FLAGS.patience,
                       decay_op=m.decay_op,
-                      save_path=os.path.join(FLAGS.log_dir,
+                      save_path=os.path.join(FLAGS.logdir,
                                              hparams.log_subdir_str,
                                              'best_model.ckpt'))
 

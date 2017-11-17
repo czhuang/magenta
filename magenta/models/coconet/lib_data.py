@@ -37,7 +37,8 @@ class Dataset(lib_util.Factory):
     hparams.pitch_ranges = [self.min_pitch, self.max_pitch]
     hparams.shortest_duration = self.shortest_duration
     self.encoder = lib_pianoroll.get_pianoroll_encoder_decoder(hparams)
-    self.data = np.load(os.path.join(self.basepath, "%s.npz" % self.name))[fold]
+    self.data = np.load(os.path.join(tf.resource_loader.get_data_files_path(),
+                                     self.basepath, "%s.npz" % self.name))[fold]
 
   @property
   def name(self):

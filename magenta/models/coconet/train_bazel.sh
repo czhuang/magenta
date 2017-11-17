@@ -6,13 +6,11 @@ set -e
 # Assumes that this script is run from within the Coconet root directory.  Change the following line if this is not the case.
 code_dir=$(dirname $0)
 # Change this to dir for saving experiment logs. 
-log_dir="logs"
+logdir="logs"
 # Change this to where data is loaded from.
 #data_dir="$code_dir/testdata"
 #data_dir="$code_dir/data"
-data_dir="../testdata/"
 data_dir="testdata"
-data_dir="magenta/models/coconet/testdata/"
 
 dataset=Jsb16thSeparated
 
@@ -30,7 +28,7 @@ batch_size=10
 # Run command.
 bazel run -c opt --config=cuda --copt="-mavx" :train \
   -- \
-  --log_dir=$log_dir \
+  --logdir=$logdir \
   --log_process=True \
   --data_dir=$data_dir \
   --dataset=$dataset \
