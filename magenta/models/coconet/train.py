@@ -13,10 +13,11 @@ import yaml
 import numpy as np
 import tensorflow as tf
 
-import lib.data
-import lib.util
-import lib.graph
-import lib.hparams
+from magenta.models.coconet import lib
+#import lib.data
+#import lib.util
+#import lib.graph
+#import lib.hparams
 
 
 FLAGS = tf.app.flags.FLAGS
