@@ -12,7 +12,7 @@ log_dir="logs"
 #data_dir="$code_dir/data"
 data_dir="../testdata/"
 data_dir="testdata"
-data_dir="magenta/models/coconet/lib/testdata/"
+data_dir="magenta/models/coconet/testdata/"
 
 dataset=Jsb16thSeparated
 
