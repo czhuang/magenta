@@ -6,7 +6,7 @@ from __future__ import print_function
 
 import itertools as it
 
-import lib_util
+from magenta.models.coconet import lib_util
 
 class ModelMisspecificationError(Exception):
   """Exception for specifying a model that is not currently supported."""

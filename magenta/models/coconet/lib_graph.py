@@ -7,8 +7,8 @@ from __future__ import print_function
 import tensorflow as tf, numpy as np
 from collections import OrderedDict
 
-import lib_tfutil
-import lib_util
+from magenta.models.coconet import lib_tfutil
+from magenta.models.coconet import lib_util
 
 
 class CoconetGraph(object):

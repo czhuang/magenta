@@ -9,9 +9,9 @@ import numpy as np
 import tensorflow as tf
 from scipy.misc import logsumexp
 
-import lib_mask
-import lib_tfutil
-import lib_util
+from magenta.models.coconet import lib_mask
+from magenta.models.coconet import lib_tfutil
+from magenta.models.coconet import lib_util
 
 def evaluate(evaluator, pianorolls):
   example_losses = []

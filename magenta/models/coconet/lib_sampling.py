@@ -6,11 +6,11 @@ from __future__ import print_function
 
 import numpy as np
 
-import lib_mask
-import lib_data
-import lib_util
-import lib_tfutil
-import lib_logging
+from magenta.models.coconet import lib_mask
+from magenta.models.coconet import lib_data
+from magenta.models.coconet import lib_util
+from magenta.models.coconet import lib_tfutil
+from magenta.models.coconet import lib_logging
 
 
 ################

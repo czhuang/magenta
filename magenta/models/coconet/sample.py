@@ -11,13 +11,13 @@ import tensorflow as tf
 
 import pretty_midi
 
-import lib_mask
-import lib_graph
-import lib_data
-import lib_util
-import lib_logging
-import lib_sampling
-import lib_pianoroll
+from magenta.models.coconet import lib_mask
+from magenta.models.coconet import lib_graph
+from magenta.models.coconet import lib_data
+from magenta.models.coconet import lib_util
+from magenta.models.coconet import lib_logging
+from magenta.models.coconet import lib_sampling
+from magenta.models.coconet import lib_pianoroll
 
 
 FLAGS = tf.app.flags.FLAGS

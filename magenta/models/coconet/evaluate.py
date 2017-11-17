@@ -8,10 +8,10 @@ import os
 import numpy as np
 import tensorflow as tf
 
-import lib_evaluation
-import lib_graph
-import lib_data
-import lib_util
+from magenta.models.coconet import lib_evaluation
+from magenta.models.coconet import lib_graph
+from magenta.models.coconet import lib_data
+from magenta.models.coconet import lib_util
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('data_dir', None,
