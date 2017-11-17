@@ -55,6 +55,8 @@ py_library(
   srcs = ["lib_pianoroll.py"],
   deps = [
       # tensorflow dep
+      # numpy dep
+      # pretty_midi dep
   ]
 )
 
@@ -123,6 +125,8 @@ py_binary(
       ":lib_graph",
       ":lib_hparams",
         # tensorflow dep
+        # yaml dep
+        # numpy dep
     ],
 )
 
