@@ -13,7 +13,7 @@ import yaml
 import numpy as np
 import tensorflow as tf
 
-import lib_data
+from . import lib_data
 import lib_util
 import lib_graph
 import lib_hparams
