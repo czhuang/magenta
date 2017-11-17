@@ -9,7 +9,11 @@ code_dir=$(dirname $0)
 log_dir="logs"
 # Change this to where data is loaded from.
 #data_dir="$code_dir/testdata"
-data_dir="$code_dir/data"
+#data_dir="$code_dir/data"
+data_dir="../testdata/"
+data_dir="testdata"
+data_dir="magenta/models/coconet/lib/testdata/"
+
 dataset=Jsb16thSeparated
 
 # Data preprocessing.

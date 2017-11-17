@@ -17,98 +17,16 @@
 
 licenses(["notice"])  # Apache 2.0
 
-py_library(
-  name = "data",
-  srcs = ["lib/data.py"],
-  deps = [
-    ":mask",
-    ":pianoroll",
-    ":util",
-  ]
-)
-
-py_library(
-  name = "mask",
-  srcs = ["lib/mask.py"],
-  deps = [
-    ":util",
-  ]
-)
-
-py_library(
-  name = "util",
-  srcs = ["lib/util.py"],
-)
-
-py_library(
-  name = "tfutil",
-  srcs = ["lib/tfutil.py"],
-)
-
-py_library(
-  name = "pianoroll",
-  srcs = ["lib/pianoroll.py"],
-)
-
-py_library(
-  name = "graph",
-  srcs = ["lib/graph.py"],
-  deps = [
-    ":util",
-    ":tfutil",
-  ]
-)
-
-py_library(
-  name = "hparams",
-  srcs = ["lib/hparams.py"],
-  deps = [
-    ":util",
-  ]
-)
-
-
-py_library(
-    name = "logging",
-    srcs = ["lib/logging.py"],
-)
-
-
-py_library(
-    name = "sampling",
-    srcs = ["lib/sampling.py"],
-    deps = [
-        ":mask",
-        ":data",
-        ":util",
-        ":tfutil",
-        ":logging",
-    ]
-)
-
-
-py_library(
-    name = "evaluation",
-    srcs = ["lib/evaluation.py"],
-    deps = [
-        ":mask",
-        ":util",
-        ":tfutil",
-    ]
-)
-
 
 py_binary(
     name = "train",
     srcs = ["train.py"],
     data = [
-        "testdata/Jsb16thSeparated.npz",
+#        "testdata/Jsb16thSeparated.npz",
     ],
     deps = [
-      ":data",
-      ":util",
-      ":graph",
-      ":hparams",
+      "//magenta/models/coconet/lib",
+      # tensorflow dep
     ],
 )
 
@@ -116,10 +34,8 @@ py_binary(
     name = "evaluate",
     srcs = ["evaluate.py"],
     deps = [
-        ":data",
-        ":evaluation",
-        ":graph",
-        ":util",
+      "//magenta/models/coconet/lib",
+      # tensorflow dep
     ],
 )
 
@@ -127,12 +43,7 @@ py_binary(
     name = "sample",
     srcs = ["sample.py"],
     deps = [
-        ":data",
-        ":graph",
-        ":logging",
-        ":mask",
-        ":pianoroll",
-        ":sampling",
-        ":util",
+      "//magenta/models/coconet/lib",
+      # tensorflow dep
     ],
 )
