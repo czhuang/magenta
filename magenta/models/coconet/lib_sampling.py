@@ -6,11 +6,11 @@ from __future__ import print_function
 
 import numpy as np
 
-import lib.mask
-import lib.data
-import lib.util
-import lib.tfutil
-import lib.logging
+import lib_mask
+import lib_data
+import lib_util
+import lib_tfutil
+import lib_logging
 
 
 ################
@@ -18,18 +18,18 @@ import lib.logging
 ################
 # Composable strategies for filling in a masked-out block
 
-class BaseSampler(lib.util.Factory):
+class BaseSampler(lib_util.Factory):
   def __init__(self, wmodel, temperature=1, logger=None, **kwargs):
     self.wmodel = wmodel
     self.temperature = temperature
-    self.logger = logger if logger is not None else lib.logging.NoLogger()
+    self.logger = logger if logger is not None else lib_logging.NoLogger()
 
     def predictor(pianorolls, masks):
       predictions = self.wmodel.sess.run(self.wmodel.model.predictions,
                                          {self.wmodel.model.pianorolls: pianorolls,
                                           self.wmodel.model.masks: masks})
       return predictions
-    self.predictor = lib.tfutil.RobustPredictor(predictor)
+    self.predictor = lib_tfutil.RobustPredictor(predictor)
 
   @property
   def separate_instruments(self):
@@ -38,10 +38,10 @@ class BaseSampler(lib.util.Factory):
   def sample_predictions(self, predictions, temperature=None):
     temperature = self.temperature if temperature is None else temperature
     if self.separate_instruments:
-      return lib.util.sample(predictions, axis=2, onehot=True,
+      return lib_util.sample(predictions, axis=2, onehot=True,
                              temperature=temperature)
     else:
-      return lib.util.sample_bernoulli(0.5 * predictions,
+      return lib_util.sample_bernoulli(0.5 * predictions,
                                        temperature=temperature)
 
   @classmethod
@@ -50,7 +50,7 @@ class BaseSampler(lib.util.Factory):
 
   def __call__(self, pianorolls, masks):
     label = "%s_sampler" % self.key
-    with lib.util.timing(label):
+    with lib_util.timing(label):
       return self.run_nonverbose(pianorolls, masks)
 
   def run_nonverbose(self, pianorolls, masks):
@@ -63,7 +63,7 @@ class BachSampler(BaseSampler):
 
   def run(self, pianorolls, masks):
     print("Loading validation pieces from %s..." % self.wmodel.hparams.dataset)
-    dataset = lib.data.get_dataset(FLAGS.data_dir, self.wmodel.hparams, 'valid')
+    dataset = lib_data.get_dataset(FLAGS.data_dir, self.wmodel.hparams, 'valid')
     bach_pianorolls = dataset.get_pianorolls()
     shape = pianorolls.shape
     pianorolls = np.array([pianoroll[:shape[1]] for pianoroll in bach_pianorolls])[:shape[0]]
@@ -148,7 +148,7 @@ class GibbsSampler(BaseSampler):
 
     with self.logger.section("sequence", subsample_factor=10):
       for s in range(num_steps):
-        with lib.util.timing('gibbs step %d' %s):
+        with lib_util.timing('gibbs step %d' %s):
           pm = self.schedule(s, num_steps)
           inner_masks = self.masker(pianorolls.shape, pm=pm, outer_masks=masks,
                                     separate_instruments=self.separate_instruments)
@@ -186,7 +186,7 @@ class UpsamplingSampler(BaseSampler):
         masks[:, 1::2] = 1
 
         with self.logger.section("context"):
-          context = np.array([lib.mask.apply_mask(pianoroll, mask)
+          context = np.array([lib_mask.apply_mask(pianoroll, mask)
                               for pianoroll, mask in zip(pianorolls, masks)])
           self.logger.log(pianorolls=context, masks=masks, predictions=context)
 
@@ -200,7 +200,7 @@ class UpsamplingSampler(BaseSampler):
 ###############
 # Strategies for generating masks (possibly within masks).
 
-class BaseMasker(lib.util.Factory):
+class BaseMasker(lib_util.Factory):
   @classmethod
   def __repr__(cls, self):
     return "maskers.%s" % cls.key
@@ -288,7 +288,7 @@ class ConstantSchedule(object):
 ### Selectors ###
 #################
 # Used in ancestral sampling to determine which variable to sample next.
-class BaseSelector(lib.util.Factory):
+class BaseSelector(lib_util.Factory):
   pass
 
 class ChronologicalSelector(BaseSelector):
@@ -319,11 +319,11 @@ class OrderlessSelector(BaseSelector):
       # select one variable to sample. sample according to normalized mask;
       # is uniform as all masked out variables have equal positive weight.
       selection = masks.max(axis=2).reshape([B, T * I])
-      selection = lib.util.sample(selection, axis=1, onehot=True)
+      selection = lib_util.sample(selection, axis=1, onehot=True)
       selection = selection.reshape([B, T, 1, I])
     else:
       selection = masks.reshape([B, T * P])
-      selection = lib.util.sample(selection, axis=1, onehot=True)
+      selection = lib_util.sample(selection, axis=1, onehot=True)
       selection = selection.reshape([B, T, P, I])
     # Intersect with mask to avoid selecting outside of the mask, e.g. in case some masks[b] is zero
     # everywhere. This can happen inside blocked Gibbs, where different examples have different

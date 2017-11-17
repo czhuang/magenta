@@ -6,7 +6,7 @@ from __future__ import print_function
 
 import itertools as it
 
-import lib.util
+import lib_util
 
 class ModelMisspecificationError(Exception):
   """Exception for specifying a model that is not currently supported."""
@@ -144,7 +144,7 @@ class Hyperparameters(object):
       return self._conv_arch
 
 
-class Architecture(lib.util.Factory):
+class Architecture(lib_util.Factory):
   pass
 
 
@@ -167,7 +167,7 @@ class Straight(Architecture):
       _add(filters=[3, 3, num_filters, num_filters])
     _add(filters=[2, 2, num_filters, num_filters])
     _add(filters=[2, 2, num_filters, output_depth],
-         activation=lib.util.identity)
+         activation=lib_util.identity)
 
     print('num_layers=%d, num_filters=%d' % (len(self.layers), num_filters))
     self.name = '%s-%d-%d' % (self.key, len(self.layers), num_filters)

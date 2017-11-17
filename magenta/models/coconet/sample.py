@@ -11,13 +11,13 @@ import tensorflow as tf
 
 import pretty_midi
 
-import lib.mask
-import lib.graph
-import lib.data
-import lib.util
-import lib.logging
-import lib.sampling
-import lib.pianoroll
+import lib_mask
+import lib_graph
+import lib_data
+import lib_util
+import lib_logging
+import lib_sampling
+import lib_pianoroll
 
 
 FLAGS = tf.app.flags.FLAGS
@@ -35,9 +35,9 @@ tf.app.flags.DEFINE_string('checkpoint', None, 'path to checkpoint file')
 
 
 def main(unused_argv):
-  wmodel = lib.graph.load_checkpoint(FLAGS.checkpoint)
+  wmodel = lib_graph.load_checkpoint(FLAGS.checkpoint)
   hparams = wmodel.hparams
-  decoder = lib.pianoroll.get_pianoroll_encoder_decoder(hparams)
+  decoder = lib_pianoroll.get_pianoroll_encoder_decoder(hparams)
 
   B = FLAGS.gen_batch_size
   T, P, I = hparams.pianoroll_shape
@@ -48,7 +48,7 @@ def main(unused_argv):
   shape = [B, T, P, I]
 
   # Instantiates generation strategy.
-  logger = lib.logging.Logger()
+  logger = lib_logging.Logger()
   strategy = BaseStrategy.make(FLAGS.strategy, wmodel, logger)
 
   # Generates.
@@ -60,14 +60,14 @@ def main(unused_argv):
   logger.log(pianorolls=pianorolls)
 
   # Creates a folder for storing the process of the sampling.
-  label = "sample_%s_%s_%s_T%g_l%i_%.2fmin" % (lib.util.timestamp(), FLAGS.strategy, 
+  label = "sample_%s_%s_%s_T%g_l%i_%.2fmin" % (lib_util.timestamp(), FLAGS.strategy, 
     hparams.architecture, FLAGS.temperature, FLAGS.piece_length, time_taken)
   basepath = os.path.join(FLAGS.generation_output_dir, label)
   os.makedirs(basepath)
   
   # Stores all the (intermediate) steps.
   path = os.path.join(basepath, 'intermediate_steps.npz')
-  with lib.util.timing('writing_out_sample_npz'):
+  with lib_util.timing('writing_out_sample_npz'):
     print("Writing to", path)
     logger.dump(path)
   
@@ -82,7 +82,7 @@ def main(unused_argv):
   # Saves the results as midi and npy.    
   midi_path = os.path.join(basepath, "midi")
   os.makedirs(midi_path)
-  decoder = lib.pianoroll.get_pianoroll_encoder_decoder(hparams)
+  decoder = lib_pianoroll.get_pianoroll_encoder_decoder(hparams)
   save_midi_from_pianorolls(pianorolls, label, midi_path, decoder)
   np.save(os.path.join(basepath, "generated_result.npy"), pianorolls)
 
@@ -107,14 +107,14 @@ def main(unused_argv):
 ##################
 # Commonly used compositions of samplers, user-selectable through FLAGS.strategy
 
-class BaseStrategy(lib.util.Factory):
+class BaseStrategy(lib_util.Factory):
   def __init__(self, wmodel, logger):
     self.wmodel = wmodel
     self.logger = logger
 
   def __call__(self, shape):
     label = "%s_strategy" % self.key
-    with lib.util.timing(label):
+    with lib_util.timing(label):
       with self.logger.section(label):
         return self.run(shape)
 
@@ -125,7 +125,7 @@ class BaseStrategy(lib.util.Factory):
   # convenience function to avoid passing the same arguments over and over
   def make_sampler(self, key, **kwargs):
     kwargs.update(wmodel=self.wmodel, logger=self.logger)
-    return lib.sampling.BaseSampler.make(key, **kwargs)
+    return lib_sampling.BaseSampler.make(key, **kwargs)
 
 class HarmonizeMidiMelodyStrategy(BaseStrategy):
   key = "harmonizeMidiMelody"
@@ -179,13 +179,13 @@ class HarmonizeMidiMelodyStrategy(BaseStrategy):
     pianorolls = self.make_pianoroll_from_melody_roll(mroll, shape)
     masks = HarmonizationMasker()(shape)
     gibbs = self.make_sampler(
-        "gibbs", masker=lib.sampling.BernoulliMasker(),
+        "gibbs", masker=lib_sampling.BernoulliMasker(),
         sampler=self.make_sampler("independent",
                                   temperature=FLAGS.temperature),
-        schedule=lib.sampling.YaoSchedule())
+        schedule=lib_sampling.YaoSchedule())
 
     with self.logger.section("context"):
-      context = np.array([lib.mask.apply_mask(pianoroll, mask)
+      context = np.array([lib_mask.apply_mask(pianoroll, mask)
                           for pianoroll, mask in zip(pianorolls, masks)])
       self.logger.log(pianorolls=context, masks=masks, predictions=context)
     pianorolls = gibbs(pianorolls, masks)
@@ -209,10 +209,10 @@ class ScratchUpsamplingStrategy(BaseStrategy):
         desired_length=desired_length,
         sampler=self.make_sampler(
             "gibbs",
-            masker=lib.sampling.BernoulliMasker(),
+            masker=lib_sampling.BernoulliMasker(),
             sampler=self.make_sampler("independent",
                                       temperature=FLAGS.temperature),
-            schedule=lib.sampling.YaoSchedule()))
+            schedule=lib_sampling.YaoSchedule()))
 
     return sampler(pianorolls, masks)
 
@@ -230,10 +230,10 @@ class BachUpsamplingStrategy(BaseStrategy):
         desired_length=desired_length,
         sampler=self.make_sampler(
             "gibbs",
-            masker=lib.sampling.BernoulliMasker(),
+            masker=lib_sampling.BernoulliMasker(),
             sampler=self.make_sampler("independent",
                                       temperature=FLAGS.temperature),
-            schedule=lib.sampling.YaoSchedule()))
+            schedule=lib_sampling.YaoSchedule()))
     return sampler(pianorolls, masks)
 
 class RevoiceStrategy(BaseStrategy):
@@ -246,15 +246,15 @@ class RevoiceStrategy(BaseStrategy):
 
     sampler = self.make_sampler(
         "gibbs",
-        masker=lib.sampling.BernoulliMasker(),
+        masker=lib_sampling.BernoulliMasker(),
         sampler=self.make_sampler("independent",
                                   temperature=FLAGS.temperature),
-        schedule=lib.sampling.YaoSchedule())
+        schedule=lib_sampling.YaoSchedule())
 
     for i in range(shape[-1]):
-      masks = lib.sampling.InstrumentMasker(instrument=i)(shape)
+      masks = lib_sampling.InstrumentMasker(instrument=i)(shape)
       with self.logger.section("context"):
-        context = np.array([lib.mask.apply_mask(pianoroll, mask)
+        context = np.array([lib_mask.apply_mask(pianoroll, mask)
                             for pianoroll, mask in zip(pianorolls, masks)])
         self.logger.log(pianorolls=context, masks=masks, predictions=context)
       pianorolls = sampler(pianorolls, masks)
@@ -269,17 +269,17 @@ class HarmonizationStrategy(BaseStrategy):
     pianorolls, masks = self.blank_slate(shape)
     pianorolls = init_sampler(pianorolls, masks)
 
-    masks = lib.sampling.HarmonizationMasker()(shape)
+    masks = lib_sampling.HarmonizationMasker()(shape)
 
     gibbs = self.make_sampler(
         "gibbs",
-        masker=lib.sampling.BernoulliMasker(),
+        masker=lib_sampling.BernoulliMasker(),
         sampler=self.make_sampler("independent",
                                   temperature=FLAGS.temperature),
-        schedule=lib.sampling.YaoSchedule())
+        schedule=lib_sampling.YaoSchedule())
 
     with self.logger.section("context"):
-      context = np.array([lib.mask.apply_mask(pianoroll, mask)
+      context = np.array([lib_mask.apply_mask(pianoroll, mask)
                           for pianoroll, mask in zip(pianorolls, masks)])
       self.logger.log(pianorolls=context, masks=masks, predictions=context)
     pianorolls = gibbs(pianorolls, masks)
@@ -292,7 +292,7 @@ class TransitionStrategy(BaseStrategy):
   key = "transition"
 
   def run(self, shape):
-    init_sampler = lib.sampling.BachSampler(
+    init_sampler = lib_sampling.BachSampler(
         wmodel=self.wmodel, temperature=FLAGS.temperature)
     pianorolls, masks = self.blank_slate(shape)
     pianorolls = init_sampler(pianorolls, masks)
@@ -300,13 +300,13 @@ class TransitionStrategy(BaseStrategy):
     masks = TransitionMasker()(shape)
     gibbs = self.make_sampler(
         "gibbs",
-        masker=lib.sampling.BernoulliMasker(),
+        masker=lib_sampling.BernoulliMasker(),
         sampler=self.make_sampler("independent",
                                   temperature=FLAGS.temperature),
-        schedule=lib.sampling.YaoSchedule())
+        schedule=lib_sampling.YaoSchedule())
 
     with self.logger.section("context"):
-      context = np.array([lib.mask.apply_mask(pianoroll, mask)
+      context = np.array([lib_mask.apply_mask(pianoroll, mask)
                           for pianoroll, mask in zip(pianorolls, masks)])
       self.logger.log(pianorolls=context, masks=masks, predictions=context)
     pianorolls = gibbs(pianorolls, masks)
@@ -319,7 +319,7 @@ class ChronologicalStrategy(BaseStrategy):
     sampler = self.make_sampler(
         "ancestral",
         temperature=FLAGS.temperature,
-        selector=lib.sampling.ChronologicalSelector())
+        selector=lib_sampling.ChronologicalSelector())
     pianorolls, masks = self.blank_slate(shape)
     pianorolls = sampler(pianorolls, masks)
     return pianorolls
@@ -331,7 +331,7 @@ class OrderlessStrategy(BaseStrategy):
     sampler = self.make_sampler(
         "ancestral",
         temperature=FLAGS.temperature,
-        selector=lib.sampling.OrderlessSelector())
+        selector=lib_sampling.OrderlessSelector())
     pianorolls, masks = self.blank_slate(shape)
     pianorolls = sampler(pianorolls, masks)
     return pianorolls
@@ -343,10 +343,10 @@ class IgibbsStrategy(BaseStrategy):
     pianorolls, masks = self.blank_slate(shape)
     sampler = self.make_sampler(
         "gibbs",
-        masker=lib.sampling.BernoulliMasker(),
+        masker=lib_sampling.BernoulliMasker(),
         sampler=self.make_sampler("independent",
                                   temperature=FLAGS.temperature),
-        schedule=lib.sampling.YaoSchedule())
+        schedule=lib_sampling.YaoSchedule())
     pianorolls = sampler(pianorolls, masks)
     return pianorolls
 
@@ -357,11 +357,11 @@ class AgibbsStrategy(BaseStrategy):
     pianorolls, masks = self.blank_slate(shape)
     sampler = self.make_sampler(
         "gibbs",
-        masker=lib.sampling.BernoulliMasker(),
+        masker=lib_sampling.BernoulliMasker(),
         sampler=self.make_sampler("ancestral",
-                                  selector=lib.sampling.OrderlessSelector(),
+                                  selector=lib_sampling.OrderlessSelector(),
                                   temperature=FLAGS.temperature),
-        schedule=lib.sampling.YaoSchedule())
+        schedule=lib_sampling.YaoSchedule())
     pianorolls = sampler(pianorolls, masks)
     return pianorolls
 
@@ -379,12 +379,12 @@ def _generate_convergence_strategies():
         pm = self._maskout_percentage / 100.
         sampler = self.make_sampler(
             "gibbs",
-            masker=lib.sampling.BernoulliMasker(),
+            masker=lib_sampling.BernoulliMasker(),
             sampler=self.make_sampler(
                 "ancestral",
-                selector=lib.sampling.OrderlessSelector(),
+                selector=lib_sampling.OrderlessSelector(),
                 temperature=FLAGS.temperature),
-            schedule=lib.sampling.ConstantSchedule(pm))
+            schedule=lib_sampling.ConstantSchedule(pm))
         pianorolls = sampler(pianorolls, masks)
         return pianorolls
     # keep a reference to the class so it stays alive

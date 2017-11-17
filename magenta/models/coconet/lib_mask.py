@@ -4,7 +4,7 @@ from __future__ import division
 from __future__ import print_function
  
 import numpy as np
-import lib.util
+import lib_util
 
 
 class MaskUseError(Exception):
@@ -38,7 +38,7 @@ def print_mask(mask):
   print("\n".join("".join(str({True: 1, False: 0}[z]) for z in y) for y in mask))
 
 
-class MaskoutMethod(lib.util.Factory):
+class MaskoutMethod(lib_util.Factory):
   pass
 
 

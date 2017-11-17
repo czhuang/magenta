@@ -9,9 +9,9 @@ import numpy as np
 import tensorflow as tf
 from scipy.misc import logsumexp
 
-import lib.mask
-import lib.tfutil
-import lib.util
+import lib_mask
+import lib_tfutil
+import lib_util
 
 def evaluate(evaluator, pianorolls):
   example_losses = []
@@ -56,7 +56,7 @@ def statstr(x):
 def flatcat(xs):
   return np.concatenate([x.flatten() for x in xs])
 
-class BaseEvaluator(lib.util.Factory):
+class BaseEvaluator(lib_util.Factory):
   def __init__(self, wmodel, chronological):
     self.wmodel = wmodel
     self.chronological = chronological
@@ -66,7 +66,7 @@ class BaseEvaluator(lib.util.Factory):
                                feed_dict={self.wmodel.model.pianorolls: pianorolls,
                                           self.wmodel.model.masks: masks})
       return p
-    self.predictor = lib.tfutil.RobustPredictor(predictor)
+    self.predictor = lib_tfutil.RobustPredictor(predictor)
 
   @property
   def hparams(self):
